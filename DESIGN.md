@@ -2,22 +2,22 @@
 version: alpha
 name: "Riff — Design System"
 colors:
-  # Backgrounds (dark studio canvas)
-  background: "#09090b"      # zinc-950, app shell
-  surface: "#18181b"         # zinc-900, panels/messages
-  surfaceElevated: "#27272a" # zinc-800, borders/dividers
+  # Backgrounds (light studio canvas)
+  background: "#f4f4f5"      # zinc-100, app shell / canvas ground
+  surface: "#ffffff"         # white, panels/message surfaces
+  surfaceElevated: "#e4e4e7" # zinc-200, borders/dividers
   # Text
-  textPrimary: "#fafafa"     # zinc-50
-  textSecondary: "#a1a1aa"   # zinc-400
-  textTertiary: "#71717a"    # zinc-500
-  textInverse: "#09090b"
+  textPrimary: "#18181b"     # zinc-900
+  textSecondary: "#71717a"   # zinc-500
+  textTertiary: "#a1a1aa"    # zinc-400 (decorative/quiet only, not for body text)
+  textInverse: "#fafafa"
   # Brand
-  accent: "#ff6b4a"          # coral — the one accent color, used sparingly
+  accent: "#ff6b4a"          # coral — the one accent color, used sparingly, unchanged
   accentSubtle: "rgba(255, 107, 80, 0.12)"
-  # Borders (dark shell)
-  border: "#27272a"          # zinc-800
-  borderSubtle: "#3f3f46"    # zinc-700
-  # Wireframe kit (light "paper" frames rendered on the dark canvas)
+  # Borders (light shell)
+  border: "#e4e4e7"          # zinc-200
+  borderSubtle: "#d4d4d8"    # zinc-300
+  # Wireframe kit (pure white artboards on the light gray canvas)
   wireframeBg: "#ffffff"
   wireframePlaceholder: "#e4e4e7" # zinc-200, image/skeleton fill
   wireframeBorder: "#d4d4d8"      # zinc-300
@@ -44,23 +44,22 @@ rounded:
 
 ## 1. Visual Theme & Atmosphere
 
-A dark "studio" workspace that gets out of the way, with wireframe artifacts rendered as bright, crisp objects floating on the dark canvas — like paper mockups on a lightbox. Grayscale everywhere except one warm accent (coral, `#ff6b4a`) reserved for primary actions and focal points: the mic button, primary wireframe buttons, the active tab, flow start/decision nodes.
+A light "studio" workspace — a light gray canvas that reads well projected in a bright room — with wireframe artifacts rendered as pure white objects sitting on top of it, like paper mockups on a light table. Grayscale everywhere except one warm accent (coral, `#ff6b4a`) reserved for primary actions and focal points: the mic button, primary wireframe buttons, the active tab, flow start/decision nodes.
 
 ## 2. Color Palette & Roles
 
-### App Shell (dark)
-- **Background:** `#09090b` (zinc-950)
-- **Panels / message bubbles:** `#18181b` (zinc-900)
-- **Borders / dividers:** `#27272a` (zinc-800)
-- **Primary text:** `#fafafa`
-- **Secondary text:** `#a1a1aa`
-- **Tertiary text:** `#71717a`
+### App Shell (light)
+- **Background / canvas ground:** `#f4f4f5` (zinc-100) — NOT white; this is what keeps white artifacts legible on top of it
+- **Panels / rails / message surfaces:** `#ffffff` (white)
+- **Borders / dividers:** `#e4e4e7` (zinc-200)
+- **Primary text:** `#18181b` (zinc-900)
+- **Secondary / muted text:** `#71717a` (zinc-500)
 
 ### Accent
-- **Coral:** `#ff6b4a` — the single accent color. Used for: mic button, primary wireframe buttons, active tab label, flow start node, decision node outline, user message bubbles.
+- **Coral:** `#ff6b4a` — the single accent color, unchanged from the dark-shell version. Used for: mic button, primary wireframe buttons, active tab label, flow start node, decision node outline, user message bubbles.
 
-### Wireframe Kit (light frames on dark canvas)
-- **Frame background:** `#ffffff`
+### Wireframe Kit (pure white artboards on the light gray canvas)
+- **Frame background:** `#ffffff`, with a `#d4d4d8` (zinc-300) border and a subtle drop shadow — this is what keeps phone frames and flow nodes reading as objects sitting *on* the canvas rather than dissolving into it
 - **Placeholder fill (images/skeletons):** `#e4e4e7` (zinc-200)
 - **Placeholder border:** `#d4d4d8` (zinc-300)
 - **Heading / primary text:** `#18181b` (zinc-900)
@@ -107,18 +106,19 @@ A dark "studio" workspace that gets out of the way, with wireframe artifacts ren
 
 ### Do
 - Keep the accent (`#ff6b4a`) reserved for focal/primary elements only — everything else stays grayscale
-- Keep wireframe frames white/light regardless of the dark shell — the contrast is the point
+- Keep wireframe frames pure white with a zinc-300 border, regardless of the light shell — the border + shadow is what keeps the figure/ground contrast the design depends on
 - Match button/input radii to `rounded-md` throughout the wireframe kit
 
 ### Don't
 - Don't introduce a second accent color
-- Don't tint the dark shell chrome with the accent (it's for artifacts and the mic button only)
+- Don't tint the shell chrome with the accent (it's for artifacts and the mic button only)
+- Don't let panels/artboards go the same flat gray as the shell — white-on-white-bordered is the pattern, not white-on-white-unbordered
 - Don't add gradients or decorative shadows beyond the single phone-frame drop shadow
 
 ## 8. Agent Prompt Guide
 
 When generating or editing UI for this project:
 - Read this file first for exact values — don't guess colors
-- Dark shell = zinc-950/900/800 scale; wireframe artifacts = white/zinc-200/zinc-300 scale
+- Light shell = zinc-100 canvas / white panels / zinc-200 borders; wireframe artifacts = pure white with a zinc-300 border and shadow — never let artifacts sit borderless on the canvas or they disappear
 - One accent only: `#ff6b4a` (coral)
 - Artifact schema and its renderers are the contract for next wave (voice + AI generation) — see `src/lib/artifact.ts`

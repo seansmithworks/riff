@@ -21,7 +21,7 @@ function PhoneFrameNode({ data }: NodeProps) {
   const screen = data.screen as Screen;
   return (
     <div className="flex shrink-0 flex-col items-center gap-3">
-      <span className="text-xs font-medium tracking-wide text-zinc-400">
+      <span className="text-xs font-medium tracking-wide text-zinc-500">
         {screen.name}
       </span>
       <div className="flex h-[640px] w-[340px] flex-col overflow-hidden rounded-[28px] border border-zinc-300 bg-white shadow-[0_20px_50px_-15px_rgba(0,0,0,0.6)]">
@@ -73,7 +73,7 @@ function WireframeCanvasInner({ screens }: { screens: Screen[] }) {
         maxZoom={1.5}
         proOptions={{ hideAttribution: true }}
       >
-        <Background color="#27272a" gap={20} />
+        <Background color="#d4d4d8" gap={20} />
         <Controls />
       </ReactFlow>
     </div>

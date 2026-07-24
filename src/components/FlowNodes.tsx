@@ -38,7 +38,7 @@ export function DecisionNode({ data }: NodeProps) {
     >
       {handles}
       <div className="absolute inset-0 rotate-45 rounded-md border border-[#ff6b4a]/60 bg-[#ff6b4a]/10" />
-      <span className="relative max-w-[62%] px-1 text-center text-xs font-semibold leading-tight text-zinc-50">
+      <span className="relative max-w-[62%] px-1 text-center text-xs font-semibold leading-tight text-zinc-900">
         {label}
       </span>
     </div>

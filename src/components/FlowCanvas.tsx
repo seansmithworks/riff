@@ -68,7 +68,7 @@ function FlowCanvasInner({
         maxZoom={2.5}
         proOptions={{ hideAttribution: true }}
       >
-        <Background color="#27272a" gap={20} />
+        <Background color="#d4d4d8" gap={20} />
         <Controls />
       </ReactFlow>
     </div>

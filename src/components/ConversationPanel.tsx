@@ -32,7 +32,7 @@ function JobRow({ job }: { job: Job }) {
           >
             <path
               d="M5 13l4 4L19 7"
-              stroke="#a1a1aa"
+              stroke="#71717a"
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -62,10 +62,10 @@ function JobRow({ job }: { job: Job }) {
       <span
         className={`truncate ${
           job.status === "superseded"
-            ? "text-zinc-600 line-through"
+            ? "text-zinc-500 line-through"
             : job.status === "failed"
-              ? "text-red-400"
-              : "text-zinc-400"
+              ? "text-red-500"
+              : "text-zinc-500"
         }`}
       >
         {job.label}
@@ -99,9 +99,9 @@ function ConversationPanelInner() {
   const visibleJobs = jobs.slice(-4);
 
   return (
-    <div className="flex h-full w-full flex-col border-t border-zinc-800 bg-zinc-950 md:w-[340px] md:border-t-0 md:border-l">
+    <div className="flex h-full w-full flex-col border-t border-zinc-200 bg-white md:w-[340px] md:border-t-0 md:border-l">
       {visibleJobs.length > 0 && (
-        <div className="flex flex-col gap-0.5 border-b border-zinc-800 px-3 py-2">
+        <div className="flex flex-col gap-0.5 border-b border-zinc-200 px-3 py-2">
           {visibleJobs.map((job) => (
             <JobRow key={job.id} job={job} />
           ))}
@@ -109,7 +109,7 @@ function ConversationPanelInner() {
       )}
       <div className="flex-1 overflow-y-auto px-5 py-5">
         {messages.length === 0 ? (
-          <p className="mt-8 text-center text-sm text-zinc-600">
+          <p className="mt-8 text-center text-sm text-zinc-500">
             Your conversation will show up here.
           </p>
         ) : (
@@ -120,7 +120,7 @@ function ConversationPanelInner() {
                 className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                   message.role === "user"
                     ? "ml-auto bg-[#ff6b4a] text-white"
-                    : "bg-zinc-900 text-zinc-200"
+                    : "bg-zinc-100 text-zinc-800"
                 }`}
               >
                 {message.text}
@@ -130,7 +130,7 @@ function ConversationPanelInner() {
         )}
       </div>
 
-      <div className="flex flex-col items-center gap-3 border-t border-zinc-800 px-5 py-8">
+      <div className="flex flex-col items-center gap-3 border-t border-zinc-200 px-5 py-8">
         <button
           type="button"
           onClick={handleMicClick}

@@ -5,7 +5,7 @@ import { CopilotPanel } from "@/components/CopilotPanel";
 
 export default function Home() {
   return (
-    <div className="flex h-screen w-screen flex-col bg-zinc-950">
+    <div className="flex h-screen w-screen flex-col bg-[#f4f4f5]">
       <Header />
       <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
         <main className="flex-1 overflow-hidden">

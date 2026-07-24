@@ -62,8 +62,8 @@ function ShareButton() {
         disabled={!artifact || shareState === "loading"}
         className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
           !artifact
-            ? "cursor-not-allowed border-zinc-800 text-zinc-600"
-            : "border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white"
+            ? "cursor-not-allowed border-zinc-200 text-zinc-400"
+            : "border-zinc-300 text-zinc-600 hover:border-zinc-400 hover:text-zinc-900"
         }`}
       >
         {shareState === "loading" ? (
@@ -77,19 +77,19 @@ function ShareButton() {
       </button>
 
       {shareState === "success" && shareUrl && (
-        <div className="absolute top-full right-0 z-20 mt-2 flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 shadow-lg">
+        <div className="absolute top-full right-0 z-20 mt-2 flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 shadow-lg">
           <a
             href={shareUrl}
             target="_blank"
             rel="noreferrer"
-            className="max-w-[220px] truncate text-xs text-zinc-200 underline decoration-zinc-600 underline-offset-2 hover:text-white"
+            className="max-w-[220px] truncate text-xs text-zinc-700 underline decoration-zinc-300 underline-offset-2 hover:text-zinc-900"
           >
             {shareUrl}
           </a>
           <button
             type="button"
             onClick={handleCopy}
-            className="shrink-0 rounded-md border border-zinc-700 px-2 py-1 text-[10px] font-medium text-zinc-300 hover:border-zinc-500 hover:text-white"
+            className="shrink-0 rounded-md border border-zinc-300 px-2 py-1 text-[10px] font-medium text-zinc-600 hover:border-zinc-400 hover:text-zinc-900"
           >
             {copied ? "Copied" : "Copy"}
           </button>
@@ -97,7 +97,7 @@ function ShareButton() {
             type="button"
             onClick={handleDismiss}
             aria-label="Dismiss"
-            className="shrink-0 text-zinc-500 hover:text-white"
+            className="shrink-0 text-zinc-400 hover:text-zinc-900"
           >
             &times;
           </button>
@@ -105,15 +105,15 @@ function ShareButton() {
       )}
 
       {shareState === "error" && (
-        <div className="absolute top-full right-0 z-20 mt-2 flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 shadow-lg">
-          <span className="max-w-[220px] text-xs text-red-400">
+        <div className="absolute top-full right-0 z-20 mt-2 flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 shadow-lg">
+          <span className="max-w-[220px] text-xs text-red-500">
             {shareError}
           </span>
           <button
             type="button"
             onClick={handleDismiss}
             aria-label="Dismiss"
-            className="shrink-0 text-zinc-500 hover:text-white"
+            className="shrink-0 text-zinc-400 hover:text-zinc-900"
           >
             &times;
           </button>
@@ -129,36 +129,36 @@ export function Header() {
   const setArtifact = useStore((s) => s.setArtifact);
 
   return (
-    <header className="flex items-center justify-between border-b border-zinc-800 px-6 py-4">
+    <header className="flex items-center justify-between border-b border-zinc-200 px-6 py-4">
       <div className="flex items-baseline gap-3">
-        <h1 className="text-lg font-semibold tracking-tight text-zinc-50">
+        <h1 className="text-lg font-semibold tracking-tight text-zinc-900">
           {APP_NAME}
         </h1>
         <span className="text-sm text-zinc-500">{TAGLINE}</span>
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="mr-1 text-[10px] font-medium uppercase tracking-wide text-zinc-600">
+        <span className="mr-1 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
           Dev preview
         </span>
         <button
           type="button"
           onClick={() => setArtifact(SAMPLE_WIREFRAME)}
-          className="rounded-full border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:border-zinc-500 hover:text-white"
+          className="rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:border-zinc-400 hover:text-zinc-900"
         >
           Wireframe
         </button>
         <button
           type="button"
           onClick={() => setArtifact(SAMPLE_FLOW)}
-          className="rounded-full border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:border-zinc-500 hover:text-white"
+          className="rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:border-zinc-400 hover:text-zinc-900"
         >
           Flow
         </button>
         <button
           type="button"
           onClick={() => setArtifact(null)}
-          className="rounded-full border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:border-zinc-500 hover:text-white"
+          className="rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:border-zinc-400 hover:text-zinc-900"
         >
           Empty
         </button>
