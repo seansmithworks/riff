@@ -9,8 +9,10 @@
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",
+    "@daytona/sdk": "^0.200.1",
     "@elevenlabs/react": "^1.10.2",
     "@xyflow/react": "^12.11.2",
+    "braintrust": "^3.24.0",
     "next": "16.2.11",
     "react": "19.2.4",
     "react-dom": "19.2.4",
