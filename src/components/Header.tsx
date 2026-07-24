@@ -186,7 +186,15 @@ export function RiffLogo() {
 // Floating icon toolbar — the only chrome over the full-canvas artifact
 // surface. Every control is icon-only with an aria-label + title tooltip so
 // the demo doesn't depend on remembering positions.
-export function Header({ onOpenChat }: { onOpenChat: () => void }) {
+export function Header({
+  onOpenChat,
+  presentation,
+  onToggleConversation,
+}: {
+  onOpenChat: () => void;
+  presentation: boolean;
+  onToggleConversation: () => void;
+}) {
   const setArtifact = useStore((s) => s.setArtifact);
 
   return (
@@ -269,7 +277,11 @@ export function Header({ onOpenChat }: { onOpenChat: () => void }) {
 
       <div className="mx-0.5 h-5 w-px bg-zinc-200" aria-hidden="true" />
 
-      <IconButton label="Open text rail" onClick={onOpenChat}>
+      <IconButton
+        label={presentation ? "Show conversation" : "Hide conversation"}
+        active={!presentation}
+        onClick={onToggleConversation}
+      >
         <svg
           width="18"
           height="18"
@@ -282,6 +294,38 @@ export function Header({ onOpenChat }: { onOpenChat: () => void }) {
             stroke="currentColor"
             strokeWidth="1.8"
             strokeLinejoin="round"
+          />
+        </svg>
+      </IconButton>
+
+      <IconButton label="Open text rail" onClick={onOpenChat}>
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden="true"
+        >
+          <rect
+            x="3"
+            y="6"
+            width="18"
+            height="12"
+            rx="2"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          />
+          <path
+            d="M6.5 10h.01M9.5 10h.01M12.5 10h.01M15.5 10h.01M17.5 10h.01"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+          <path
+            d="M7 15h10"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
           />
         </svg>
       </IconButton>

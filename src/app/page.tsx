@@ -31,7 +31,11 @@ export default function Home() {
   return (
     <div className="flex h-screen w-screen flex-col bg-[#f4f4f5]">
       <RiffLogo />
-      <Header onOpenChat={() => setChatOpen(true)} />
+      <Header
+        onOpenChat={() => setChatOpen(true)}
+        presentation={presentation}
+        onToggleConversation={() => setPresentation((p) => !p)}
+      />
       <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
         <main className="flex-1 overflow-hidden">
           <ArtifactCanvas />
