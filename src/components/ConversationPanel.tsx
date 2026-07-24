@@ -1,8 +1,9 @@
 "use client";
 
 import { ConversationProvider } from "@elevenlabs/react";
-import { useStore, type Job } from "@/lib/store";
+import { useStore, type Job, type Status } from "@/lib/store";
 import { useVoice } from "@/hooks/useVoice";
+import { PresentationOverlay } from "@/components/PresentationOverlay";
 
 const STATUS_LABEL: Record<string, string> = {
   idle: "Tap to speak",
@@ -10,6 +11,47 @@ const STATUS_LABEL: Record<string, string> = {
   thinking: "Thinking…",
   speaking: "Speaking…",
 };
+
+// Shared mic control — same button/label in both normal and presentation
+// layouts. Extracted so there is exactly one render of it per mode, backed
+// by the single useVoice() call site in ConversationPanelInner.
+function MicButton({
+  status,
+  isConnected,
+  onClick,
+}: {
+  status: Status;
+  isConnected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Toggle microphone"
+      aria-pressed={isConnected}
+      className={`flex h-20 w-20 items-center justify-center rounded-full bg-[#ff6b4a] text-white shadow-[0_0_0_6px_rgba(255,107,74,0.12)] transition-transform hover:scale-105 active:scale-95 ${
+        status === "listening" ? "animate-pulse" : ""
+      }`}
+    >
+      <svg
+        width="26"
+        height="26"
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true"
+      >
+        <rect x="9" y="2" width="6" height="12" rx="3" fill="currentColor" />
+        <path
+          d="M5 11a7 7 0 0 0 14 0M12 18v3"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+      </svg>
+    </button>
+  );
+}
 
 function JobRow({ job }: { job: Job }) {
   return (
@@ -74,15 +116,19 @@ function JobRow({ job }: { job: Job }) {
   );
 }
 
-export function ConversationPanel() {
+export function ConversationPanel({
+  presentation = false,
+}: {
+  presentation?: boolean;
+}) {
   return (
     <ConversationProvider>
-      <ConversationPanelInner />
+      <ConversationPanelInner presentation={presentation} />
     </ConversationProvider>
   );
 }
 
-function ConversationPanelInner() {
+function ConversationPanelInner({ presentation }: { presentation: boolean }) {
   const messages = useStore((s) => s.messages);
   const status = useStore((s) => s.status);
   const jobs = useStore((s) => s.jobs);
@@ -97,6 +143,21 @@ function ConversationPanelInner() {
   };
 
   const visibleJobs = jobs.slice(-4);
+
+  if (presentation) {
+    return (
+      <PresentationOverlay messages={messages} status={status}>
+        <MicButton
+          status={status}
+          isConnected={isConnected}
+          onClick={handleMicClick}
+        />
+        <span className="text-xs font-medium tracking-wide text-zinc-500">
+          {STATUS_LABEL[status] ?? STATUS_LABEL.idle}
+        </span>
+      </PresentationOverlay>
+    );
+  }
 
   return (
     <div className="flex h-full w-full flex-col border-t border-zinc-200 bg-white md:w-[340px] md:border-t-0 md:border-l">
@@ -131,38 +192,11 @@ function ConversationPanelInner() {
       </div>
 
       <div className="flex flex-col items-center gap-3 border-t border-zinc-200 px-5 py-8">
-        <button
-          type="button"
+        <MicButton
+          status={status}
+          isConnected={isConnected}
           onClick={handleMicClick}
-          aria-label="Toggle microphone"
-          aria-pressed={isConnected}
-          className={`flex h-20 w-20 items-center justify-center rounded-full bg-[#ff6b4a] text-white shadow-[0_0_0_6px_rgba(255,107,74,0.12)] transition-transform hover:scale-105 active:scale-95 ${
-            status === "listening" ? "animate-pulse" : ""
-          }`}
-        >
-          <svg
-            width="26"
-            height="26"
-            viewBox="0 0 24 24"
-            fill="none"
-            aria-hidden="true"
-          >
-            <rect
-              x="9"
-              y="2"
-              width="6"
-              height="12"
-              rx="3"
-              fill="currentColor"
-            />
-            <path
-              d="M5 11a7 7 0 0 0 14 0M12 18v3"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
+        />
         <span className="text-xs font-medium tracking-wide text-zinc-500">
           {STATUS_LABEL[status] ?? STATUS_LABEL.idle}
         </span>

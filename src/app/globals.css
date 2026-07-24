@@ -24,3 +24,61 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Presentation-mode voice glow — see src/components/PresentationOverlay.tsx */
+@keyframes riff-glow-listening {
+  0%,
+  100% {
+    opacity: 0.14;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.22;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes riff-glow-thinking {
+  0%,
+  100% {
+    opacity: 0.16;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.24;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes riff-glow-speaking {
+  0%,
+  100% {
+    opacity: 0.22;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.38;
+    transform: scale(1.1);
+  }
+}
+
+.riff-glow-listening {
+  animation: riff-glow-listening 3.2s ease-in-out infinite;
+}
+
+.riff-glow-thinking {
+  animation: riff-glow-thinking 4.5s ease-in-out infinite;
+}
+
+.riff-glow-speaking {
+  animation: riff-glow-speaking 1.1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .riff-glow-listening,
+  .riff-glow-thinking,
+  .riff-glow-speaking {
+    animation: none;
+    opacity: 0.18;
+  }
+}

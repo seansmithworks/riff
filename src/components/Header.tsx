@@ -125,7 +125,13 @@ function ShareButton() {
 
 // Dev-only toggle buttons so the renderers can be demoed before voice/AI
 // wiring lands next wave. Safe to delete once generation is live.
-export function Header() {
+export function Header({
+  presentation,
+  onTogglePresentation,
+}: {
+  presentation: boolean;
+  onTogglePresentation: () => void;
+}) {
   const setArtifact = useStore((s) => s.setArtifact);
 
   return (
@@ -134,13 +140,17 @@ export function Header() {
         <h1 className="text-lg font-semibold tracking-tight text-zinc-900">
           {APP_NAME}
         </h1>
-        <span className="text-sm text-zinc-500">{TAGLINE}</span>
+        {!presentation && (
+          <span className="text-sm text-zinc-500">{TAGLINE}</span>
+        )}
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="mr-1 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
-          Dev preview
-        </span>
+        {!presentation && (
+          <span className="mr-1 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+            Dev preview
+          </span>
+        )}
         <button
           type="button"
           onClick={() => setArtifact(SAMPLE_WIREFRAME)}
@@ -163,6 +173,18 @@ export function Header() {
           Empty
         </button>
         <ShareButton />
+        <button
+          type="button"
+          onClick={onTogglePresentation}
+          aria-pressed={presentation}
+          className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
+            presentation
+              ? "border-[#ff6b4a] text-[#ff6b4a]"
+              : "border-zinc-300 text-zinc-600 hover:border-zinc-400 hover:text-zinc-900"
+          }`}
+        >
+          {presentation ? "Exit" : "Present"}
+        </button>
       </div>
     </header>
   );
