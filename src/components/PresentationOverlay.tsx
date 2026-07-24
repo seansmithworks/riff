@@ -35,7 +35,7 @@ export function PresentationOverlay({
         }`}
         style={{
           background:
-            "radial-gradient(ellipse 55% 60% at 50% 100%, rgba(255,107,74,0.55), transparent 72%)",
+            "radial-gradient(ellipse 55% 60% at 50% 100%, rgba(0,245,241,0.35), transparent 55%), radial-gradient(ellipse 45% 50% at 60% 100%, rgba(183,255,0,0.28), transparent 60%)",
         }}
       />
 

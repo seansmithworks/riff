@@ -1,15 +1,47 @@
 "use client";
 
 import { useState } from "react";
-import { APP_NAME, TAGLINE } from "@/lib/config";
 import { useStore } from "@/lib/store";
 import { SAMPLE_WIREFRAME, SAMPLE_FLOW } from "@/lib/samples";
 
 type ShareState = "idle" | "loading" | "success" | "error";
 
-// Turns the current artifact into a live Daytona URL, on demand. Additive to
-// the voice/generation path — reads the artifact from the store, never
-// writes to it.
+function IconButton({
+  label,
+  active,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  active?: boolean;
+  disabled?: boolean;
+  onClick?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
+        disabled
+          ? "cursor-not-allowed text-zinc-300"
+          : active
+            ? "text-[#3FBA6A] hover:bg-zinc-100"
+            : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+// Hands the current artifact off to a live Daytona sandbox, on demand.
+// Additive to the voice/generation path — reads the artifact from the
+// store, never writes to it.
 function ShareButton() {
   const artifact = useStore((s) => s.artifact);
   const messages = useStore((s) => s.messages);
@@ -56,25 +88,37 @@ function ShareButton() {
 
   return (
     <div className="relative">
-      <button
-        type="button"
-        onClick={handleShare}
+      <IconButton
+        label={shareState === "loading" ? "Sharing…" : "Hand off to build"}
         disabled={!artifact || shareState === "loading"}
-        className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
-          !artifact
-            ? "cursor-not-allowed border-zinc-200 text-zinc-400"
-            : "border-zinc-300 text-zinc-600 hover:border-zinc-400 hover:text-zinc-900"
-        }`}
+        onClick={handleShare}
       >
-        {shareState === "loading" ? (
-          <span className="flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#ff6b4a] motion-safe:animate-pulse" />
-            Sharing&hellip;
-          </span>
-        ) : (
-          "Hand off to build"
-        )}
-      </button>
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden="true"
+          className={
+            shareState === "loading" ? "motion-safe:animate-pulse" : ""
+          }
+        >
+          <path
+            d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </IconButton>
 
       {shareState === "success" && shareUrl && (
         <div className="absolute top-full right-0 z-20 mt-2 flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 shadow-lg">
@@ -123,8 +167,25 @@ function ShareButton() {
   );
 }
 
-// Dev-only toggle buttons so the renderers can be demoed before voice/AI
-// wiring lands next wave. Safe to delete once generation is live.
+// Riff logo, floating top-left over the canvas. The source SVG has a pale
+// mint background baked in; multiply-blending it against the light canvas
+// removes the visible rectangle without needing a separate asset.
+export function RiffLogo() {
+  return (
+    <div className="pointer-events-none fixed top-6 left-6 z-30">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/riff-logo.svg"
+        alt="Riff"
+        style={{ width: 160, height: "auto" }}
+      />
+    </div>
+  );
+}
+
+// Floating icon toolbar — the only chrome over the full-canvas artifact
+// surface. Every control is icon-only with an aria-label + title tooltip so
+// the demo doesn't depend on remembering positions.
 export function Header({
   presentation,
   onTogglePresentation,
@@ -135,57 +196,101 @@ export function Header({
   const setArtifact = useStore((s) => s.setArtifact);
 
   return (
-    <header className="flex items-center justify-between border-b border-zinc-200 px-6 py-4">
-      <div className="flex items-baseline gap-3">
-        <h1 className="text-lg font-semibold tracking-tight text-zinc-900">
-          {APP_NAME}
-        </h1>
-        {!presentation && (
-          <span className="text-sm text-zinc-500">{TAGLINE}</span>
-        )}
-      </div>
+    <div className="fixed top-6 right-6 z-30 flex items-center gap-0.5 rounded-full border border-zinc-200 bg-white/95 p-1.5 shadow-lg backdrop-blur-sm">
+      <IconButton
+        label="Wireframe"
+        onClick={() => setArtifact(SAMPLE_WIREFRAME)}
+      >
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden="true"
+        >
+          <rect
+            x="3"
+            y="4"
+            width="8"
+            height="16"
+            rx="1.5"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          />
+          <rect
+            x="13"
+            y="4"
+            width="8"
+            height="10"
+            rx="1.5"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          />
+        </svg>
+      </IconButton>
 
-      <div className="flex items-center gap-2">
-        {!presentation && (
-          <span className="mr-1 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
-            Dev preview
-          </span>
-        )}
-        <button
-          type="button"
-          onClick={() => setArtifact(SAMPLE_WIREFRAME)}
-          className="rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:border-zinc-400 hover:text-zinc-900"
+      <IconButton label="Flow" onClick={() => setArtifact(SAMPLE_FLOW)}>
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden="true"
         >
-          Wireframe
-        </button>
-        <button
-          type="button"
-          onClick={() => setArtifact(SAMPLE_FLOW)}
-          className="rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:border-zinc-400 hover:text-zinc-900"
+          <circle
+            cx="5"
+            cy="6"
+            r="2.3"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          />
+          <circle
+            cx="19"
+            cy="6"
+            r="2.3"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          />
+          <circle
+            cx="19"
+            cy="18"
+            r="2.3"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          />
+          <path
+            d="M7.3 6h9.4M17 8.3v7.4a2 2 0 0 1-2 2H9"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+          />
+        </svg>
+      </IconButton>
+
+      <ShareButton />
+
+      <div className="mx-0.5 h-5 w-px bg-zinc-200" aria-hidden="true" />
+
+      <IconButton
+        label={presentation ? "Show conversation" : "Enter presentation mode"}
+        active={presentation}
+        onClick={onTogglePresentation}
+      >
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden="true"
         >
-          Flow
-        </button>
-        <button
-          type="button"
-          onClick={() => setArtifact(null)}
-          className="rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:border-zinc-400 hover:text-zinc-900"
-        >
-          Empty
-        </button>
-        <ShareButton />
-        <button
-          type="button"
-          onClick={onTogglePresentation}
-          aria-pressed={presentation}
-          className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
-            presentation
-              ? "border-[#ff6b4a] text-[#ff6b4a]"
-              : "border-zinc-300 text-zinc-600 hover:border-zinc-400 hover:text-zinc-900"
-          }`}
-        >
-          {presentation ? "Exit" : "Present"}
-        </button>
-      </div>
-    </header>
+          <path
+            d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4H6.5A2.5 2.5 0 0 1 4 12.5v-7Z"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </IconButton>
+    </div>
   );
 }

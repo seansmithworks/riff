@@ -97,7 +97,7 @@ export function CopilotPanel() {
   });
 
   const themeVars: CopilotKitCSSProperties = {
-    "--copilot-kit-primary-color": "#ff6b4a",
+    "--copilot-kit-primary-color": "#1F7A4D",
     "--copilot-kit-contrast-color": "#fafafa",
     "--copilot-kit-background-color": "#18181b",
     "--copilot-kit-input-background-color": "#09090b",

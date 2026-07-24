@@ -37,7 +37,7 @@ export function DecisionNode({ data }: NodeProps) {
       style={{ width, height }}
     >
       {handles}
-      <div className="absolute inset-0 rotate-45 rounded-md border border-[#ff6b4a]/60 bg-[#ff6b4a]/10" />
+      <div className="absolute inset-0 rotate-45 rounded-md border border-[#3FBA6A]/60 bg-[#3FBA6A]/10" />
       <span className="relative max-w-[62%] px-1 text-center text-xs font-semibold leading-tight text-zinc-900">
         {label}
       </span>
@@ -50,7 +50,7 @@ export function TerminalNode({ data }: NodeProps) {
   return (
     <div
       className={`flex min-w-[110px] items-center justify-center rounded-full px-5 py-2.5 text-center text-sm font-semibold shadow-sm ${
-        isStart ? "bg-[#ff6b4a] text-white" : "bg-zinc-900 text-white"
+        isStart ? "bg-[#1F7A4D] text-white" : "bg-zinc-900 text-white"
       }`}
     >
       {handles}

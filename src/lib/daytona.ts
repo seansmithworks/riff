@@ -135,17 +135,17 @@ const STYLES = `
   /* -- Design brief document chrome --------------------------------- */
   .doc-header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
   .doc-header h1 { font-size: 22px; margin: 0; }
-  .doc-label { display: inline-block; background: #ff6b4a; color: #fff; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; border-radius: 9999px; padding: 3px 10px; }
+  .doc-label { display: inline-block; background: #1F7A4D; color: #fff; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; border-radius: 9999px; padding: 3px 10px; }
   .doc-date { color: #71717a; font-size: 12px; }
   .doc-section { margin-top: 40px; }
   .doc-section h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #71717a; margin: 0 0 12px; }
-  .brief-text { background: #fff; border: 1px solid #e4e4e7; border-left: 3px solid #ff6b4a; border-radius: 8px; padding: 16px; font-size: 15px; line-height: 1.5; white-space: pre-wrap; }
+  .brief-text { background: #fff; border: 1px solid #e4e4e7; border-left: 3px solid #3FBA6A; border-radius: 8px; padding: 16px; font-size: 15px; line-height: 1.5; white-space: pre-wrap; }
   .direction { background: #fff; border: 1px solid #e4e4e7; border-radius: 8px; padding: 16px; font-size: 14px; line-height: 1.6; }
   .direction .order { color: #71717a; }
   .transcript { display: flex; flex-direction: column; gap: 8px; max-width: 640px; }
   .msg { border-radius: 10px; padding: 10px 14px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
   .msg .role { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; opacity: 0.6; }
-  .msg.user { align-self: flex-end; background: #ff6b4a; color: #fff; }
+  .msg.user { align-self: flex-end; background: #1F7A4D; color: #fff; }
   .msg.assistant { align-self: flex-start; background: #fff; border: 1px solid #e4e4e7; color: #18181b; }
   .download-btn { position: fixed; top: 24px; right: 24px; background: #18181b; color: #fff; border: none; border-radius: 9999px; padding: 10px 18px; font-size: 13px; font-weight: 500; cursor: pointer; }
   .download-btn:hover { background: #27272a; }

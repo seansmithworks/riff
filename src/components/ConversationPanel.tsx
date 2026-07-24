@@ -30,7 +30,7 @@ function MicButton({
       onClick={onClick}
       aria-label="Toggle microphone"
       aria-pressed={isConnected}
-      className={`flex h-20 w-20 items-center justify-center rounded-full bg-[#ff6b4a] text-white shadow-[0_0_0_6px_rgba(255,107,74,0.12)] transition-transform hover:scale-105 active:scale-95 ${
+      className={`flex h-20 w-20 items-center justify-center rounded-full bg-[#3FBA6A] text-white shadow-[0_0_0_6px_rgba(63,186,106,0.18)] transition-transform hover:scale-105 active:scale-95 ${
         status === "listening" ? "animate-pulse" : ""
       }`}
     >
@@ -62,7 +62,7 @@ function JobRow({ job }: { job: Job }) {
     >
       <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
         {job.status === "sketching" && (
-          <span className="h-2 w-2 animate-pulse rounded-full bg-[#ff6b4a]" />
+          <span className="h-2 w-2 animate-pulse rounded-full bg-[#3FBA6A]" />
         )}
         {job.status === "done" && (
           <svg
@@ -180,7 +180,7 @@ function ConversationPanelInner({ presentation }: { presentation: boolean }) {
                 key={i}
                 className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                   message.role === "user"
-                    ? "ml-auto bg-[#ff6b4a] text-white"
+                    ? "ml-auto bg-[#1F7A4D] text-white"
                     : "bg-zinc-100 text-zinc-800"
                 }`}
               >

@@ -56,7 +56,13 @@ function FlowCanvasInner({
   }, [nodeIds, fitView]);
 
   return (
-    <div className="h-full w-full">
+    <div
+      className="h-full w-full"
+      style={{
+        background:
+          "radial-gradient(ellipse 60% 50% at 12% 15%, rgba(0,245,241,0.08), transparent 60%), radial-gradient(ellipse 55% 45% at 88% 85%, rgba(183,255,0,0.07), transparent 60%)",
+      }}
+    >
       <ReactFlow
         key={nodes.map((n) => n.id).join("-")}
         nodes={layoutedNodes}
@@ -67,6 +73,7 @@ function FlowCanvasInner({
         minZoom={0.2}
         maxZoom={2.5}
         proOptions={{ hideAttribution: true }}
+        style={{ background: "transparent" }}
       >
         <Background color="#d4d4d8" gap={20} />
         <Controls />

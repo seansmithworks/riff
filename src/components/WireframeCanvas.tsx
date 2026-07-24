@@ -60,7 +60,13 @@ function WireframeCanvasInner({ screens }: { screens: Screen[] }) {
   }, [nodeIds, fitView]);
 
   return (
-    <div className="h-full w-full">
+    <div
+      className="h-full w-full"
+      style={{
+        background:
+          "radial-gradient(ellipse 60% 50% at 12% 15%, rgba(0,245,241,0.08), transparent 60%), radial-gradient(ellipse 55% 45% at 88% 85%, rgba(183,255,0,0.07), transparent 60%)",
+      }}
+    >
       <ReactFlow
         key={screens.map((s) => s.id).join("-")}
         nodes={nodes}
@@ -72,6 +78,7 @@ function WireframeCanvasInner({ screens }: { screens: Screen[] }) {
         minZoom={0.15}
         maxZoom={1.5}
         proOptions={{ hideAttribution: true }}
+        style={{ background: "transparent" }}
       >
         <Background color="#d4d4d8" gap={20} />
         <Controls />

@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Header } from "@/components/Header";
+import { Header, RiffLogo } from "@/components/Header";
 import { ArtifactCanvas } from "@/components/ArtifactCanvas";
 import { ConversationPanel } from "@/components/ConversationPanel";
 import { CopilotPanel } from "@/components/CopilotPanel";
 import { useStore } from "@/lib/store";
 
 export default function Home() {
-  const [presentation, setPresentation] = useState(false);
+  const [presentation, setPresentation] = useState(true);
 
   useEffect(() => {
     if (!presentation) return;
@@ -29,6 +29,7 @@ export default function Home() {
 
   return (
     <div className="flex h-screen w-screen flex-col bg-[#f4f4f5]">
+      <RiffLogo />
       <Header
         presentation={presentation}
         onTogglePresentation={() => setPresentation((p) => !p)}

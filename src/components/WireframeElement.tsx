@@ -64,7 +64,7 @@ function Button({
   return (
     <button
       type="button"
-      className="w-full rounded-full bg-[#ff6b4a] px-4 py-2 text-center text-sm font-semibold text-white"
+      className="w-full rounded-full bg-[#1F7A4D] px-4 py-2 text-center text-sm font-semibold text-white"
     >
       {label}
     </button>
@@ -199,7 +199,7 @@ export function WireframeElement({ element }: { element: Element }) {
             <span
               key={tab}
               className={`text-[10px] font-medium ${
-                i === element.active ? "text-[#ff6b4a]" : "text-zinc-400"
+                i === element.active ? "text-[#1F7A4D]" : "text-zinc-400"
               }`}
             >
               {tab}

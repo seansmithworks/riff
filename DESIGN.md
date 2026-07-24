@@ -11,9 +11,11 @@ colors:
   textSecondary: "#71717a"   # zinc-500
   textTertiary: "#a1a1aa"    # zinc-400 (decorative/quiet only, not for body text)
   textInverse: "#fafafa"
-  # Brand
-  accent: "#ff6b4a"          # coral — the one accent color, used sparingly, unchanged
-  accentSubtle: "rgba(255, 107, 80, 0.12)"
+  # Brand — two-tier accent (contrast-driven), plus ambient-only hints
+  accentText: "#1F7A4D"      # deep green — text/button-fill accent (5.32:1 on white, passes AA)
+  accentDecorative: "#3FBA6A" # mid green — decorative-only (icons, borders, mic fill, dots; not for text)
+  ambientCyan: "#00F5F1"      # ambient only — voice glow / background hints, never text or fills
+  ambientLime: "#B7FF00"      # ambient only — voice glow / background hints, never text or fills
   # Borders (light shell)
   border: "#e4e4e7"          # zinc-200
   borderSubtle: "#d4d4d8"    # zinc-300
@@ -44,7 +46,7 @@ rounded:
 
 ## 1. Visual Theme & Atmosphere
 
-A light "studio" workspace — a light gray canvas that reads well projected in a bright room — with wireframe artifacts rendered as pure white objects sitting on top of it, like paper mockups on a light table. Grayscale everywhere except one warm accent (coral, `#ff6b4a`) reserved for primary actions and focal points: the mic button, primary wireframe buttons, the active tab, flow start/decision nodes.
+A light "studio" workspace — a light gray canvas that reads well projected in a bright room — with wireframe artifacts rendered as pure white objects sitting on top of it, like paper mockups on a light table, now as a full-canvas surface with a floating icon toolbar and logo. Grayscale everywhere except the brand greens, split by legibility role: deep green (`#1F7A4D`) for anything with text on it, mid green (`#3FBA6A`) for decorative-only marks, and cyan/lime (`#00F5F1` / `#B7FF00`) reserved strictly for ambient glow and background hints.
 
 ## 2. Color Palette & Roles
 
@@ -55,8 +57,10 @@ A light "studio" workspace — a light gray canvas that reads well projected in 
 - **Primary text:** `#18181b` (zinc-900)
 - **Secondary / muted text:** `#71717a` (zinc-500)
 
-### Accent
-- **Coral:** `#ff6b4a` — the single accent color, unchanged from the dark-shell version. Used for: mic button, primary wireframe buttons, active tab label, flow start node, decision node outline, user message bubbles.
+### Accent — two-tier, contrast-driven
+- **Text/button accent — `#1F7A4D` (deep green):** white text on it = 5.32:1, passes AA. Use for anything a person must READ on top of it: primary wireframe buttons, active tab label text, flow start-node pill (white text), user message bubbles, links, accent-colored text.
+- **Decorative accent — `#3FBA6A` (mid green):** contrast on white is too low for text (2.49:1) — use ONLY where no text sits on the fill: the mic button (carries an icon, not text), focus rings, borders, small status/active-state dots, decision-node outline/tint.
+- **Ambient only — `#00F5F1` (cyan) / `#B7FF00` (lime):** the bottom-center voice glow and a very low-opacity background wash behind the canvas dot grid. Never text, never a button fill — lime especially is close to illegible on light backgrounds (1.21:1).
 
 ### Wireframe Kit (pure white artboards on the light gray canvas)
 - **Frame background:** `#ffffff`, with a `#d4d4d8` (zinc-300) border and a subtle drop shadow — this is what keeps phone frames and flow nodes reading as objects sitting *on* the canvas rather than dissolving into it
@@ -73,7 +77,7 @@ A light "studio" workspace — a light gray canvas that reads well projected in 
 ## 4. Component Stylings
 
 ### Wireframe Elements (`src/components/WireframeElement.tsx`)
-- **Primary button:** filled `#ff6b4a`, white text, pill (`rounded-full`)
+- **Primary button:** filled `#1F7A4D`, white text, pill (`rounded-full`)
 - **Secondary button:** outline `#d4d4d8` border, `#3f3f46`-ish gray text, pill
 - **Image placeholder:** `#e4e4e7` fill, `#d4d4d8` border, diagonal cross (SVG), `rounded-md`
 - **Input:** white bg, `#d4d4d8` border, `rounded-md`, label above in uppercase caption style
@@ -82,14 +86,14 @@ A light "studio" workspace — a light gray canvas that reads well projected in 
 ### Flow Nodes (`src/components/FlowNodes.tsx`)
 - **Screen:** solid rectangle, white bg, `#d4d4d8` border
 - **Action:** dashed rectangle, `#f4f4f5` bg (distinguishes from screen)
-- **Decision:** diamond (rotated square), accent-tinted (`rgba(255,107,80,0.1)` fill, `#ff6b4a` border at 60% opacity)
-- **Start:** filled coral pill
+- **Decision:** diamond (rotated square), decorative-accent-tinted (`#3FBA6A` at 10% fill, `#3FBA6A` border at 60% opacity — no text sits on the fill itself)
+- **Start:** filled `#1F7A4D` pill (text accent — carries white text)
 - **End:** filled dark (zinc-900) pill
 - **Edges:** animated, `#71717a` stroke
 
 ## 5. Layout Principles
 
-- Full-viewport app shell: header (fixed height) → canvas (flex-1) + conversation panel (340px, collapses to full-width stacked below canvas under `md` breakpoint).
+- Full-canvas app shell: no fixed header bar — the Riff logo (`~160px`, top-left) and a floating icon toolbar (top-right, white pill, zinc-200 border, soft shadow) float over the canvas via fixed positioning. Canvas (flex-1) + conversation panel (340px, collapses to full-width stacked below canvas under `md` breakpoint) fill the remaining viewport. Presentation mode is the default state; the toggle and `Escape` return to normal mode.
 - Wireframe canvas: horizontal scroll, screens laid out left to right with 32px gaps.
 - Flow canvas: React Flow + dagre, left-to-right rank direction, `fitView` on data change.
 
@@ -105,20 +109,21 @@ A light "studio" workspace — a light gray canvas that reads well projected in 
 ## 7. Do's and Don'ts
 
 ### Do
-- Keep the accent (`#ff6b4a`) reserved for focal/primary elements only — everything else stays grayscale
+- Use `#1F7A4D` for anything with text on it; use `#3FBA6A` only where no text sits on the fill (icons, borders, dots)
+- Keep `#00F5F1` / `#B7FF00` strictly ambient — voice glow and a low-opacity background wash, never text or a button fill
 - Keep wireframe frames pure white with a zinc-300 border, regardless of the light shell — the border + shadow is what keeps the figure/ground contrast the design depends on
 - Match button/input radii to `rounded-md` throughout the wireframe kit
 
 ### Don't
-- Don't introduce a second accent color
-- Don't tint the shell chrome with the accent (it's for artifacts and the mic button only)
+- Don't put text or a text-bearing button fill on `#3FBA6A`, `#00F5F1`, or `#B7FF00` — none pass AA contrast on white
+- Don't let the ambient background wash compete with the artifacts — keep it low-opacity and clearly subordinate
 - Don't let panels/artboards go the same flat gray as the shell — white-on-white-bordered is the pattern, not white-on-white-unbordered
-- Don't add gradients or decorative shadows beyond the single phone-frame drop shadow
+- Don't add gradients or decorative shadows beyond the single phone-frame drop shadow and the ambient canvas wash
 
 ## 8. Agent Prompt Guide
 
 When generating or editing UI for this project:
 - Read this file first for exact values — don't guess colors
 - Light shell = zinc-100 canvas / white panels / zinc-200 borders; wireframe artifacts = pure white with a zinc-300 border and shadow — never let artifacts sit borderless on the canvas or they disappear
-- One accent only: `#ff6b4a` (coral)
+- Two-tier accent: `#1F7A4D` for text/button fills, `#3FBA6A` for decorative-only marks; `#00F5F1` / `#B7FF00` are ambient-only, never for text or fills
 - Artifact schema and its renderers are the contract for next wave (voice + AI generation) — see `src/lib/artifact.ts`
