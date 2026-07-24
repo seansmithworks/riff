@@ -1,6 +1,8 @@
 "use client";
 
+import { ConversationProvider } from "@elevenlabs/react";
 import { useStore } from "@/lib/store";
+import { useVoice } from "@/hooks/useVoice";
 
 const STATUS_LABEL: Record<string, string> = {
   idle: "Tap to speak",
@@ -10,8 +12,25 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export function ConversationPanel() {
+  return (
+    <ConversationProvider>
+      <ConversationPanelInner />
+    </ConversationProvider>
+  );
+}
+
+function ConversationPanelInner() {
   const messages = useStore((s) => s.messages);
   const status = useStore((s) => s.status);
+  const { start, stop, isConnected } = useVoice();
+
+  const handleMicClick = () => {
+    if (isConnected) {
+      stop();
+    } else {
+      start();
+    }
+  };
 
   return (
     <div className="flex h-full w-full flex-col border-t border-zinc-800 bg-zinc-950 md:w-[340px] md:border-t-0 md:border-l">
@@ -41,8 +60,12 @@ export function ConversationPanel() {
       <div className="flex flex-col items-center gap-3 border-t border-zinc-800 px-5 py-8">
         <button
           type="button"
+          onClick={handleMicClick}
           aria-label="Toggle microphone"
-          className="flex h-20 w-20 items-center justify-center rounded-full bg-[#ff6b4a] text-white shadow-[0_0_0_6px_rgba(255,107,74,0.12)] transition-transform hover:scale-105 active:scale-95"
+          aria-pressed={isConnected}
+          className={`flex h-20 w-20 items-center justify-center rounded-full bg-[#ff6b4a] text-white shadow-[0_0_0_6px_rgba(255,107,74,0.12)] transition-transform hover:scale-105 active:scale-95 ${
+            status === "listening" ? "animate-pulse" : ""
+          }`}
         >
           <svg
             width="26"
