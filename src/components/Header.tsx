@@ -186,96 +186,90 @@ export function RiffLogo() {
 // Floating icon toolbar — the only chrome over the full-canvas artifact
 // surface. Every control is icon-only with an aria-label + title tooltip so
 // the demo doesn't depend on remembering positions.
-export function Header({
-  presentation,
-  onTogglePresentation,
-}: {
-  presentation: boolean;
-  onTogglePresentation: () => void;
-}) {
+export function Header({ onOpenChat }: { onOpenChat: () => void }) {
   const setArtifact = useStore((s) => s.setArtifact);
 
   return (
-    <div className="fixed top-6 right-6 z-30 flex items-center gap-0.5 rounded-full border border-zinc-200 bg-white/95 p-1.5 shadow-lg backdrop-blur-sm">
-      <IconButton
-        label="Wireframe"
-        onClick={() => setArtifact(SAMPLE_WIREFRAME)}
-      >
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          aria-hidden="true"
+    <div className="fixed top-6 right-6 z-30 flex items-center gap-1 rounded-full border border-zinc-200 bg-white/95 p-1.5 shadow-lg backdrop-blur-sm">
+      <div className="flex items-center gap-0.5">
+        <IconButton
+          label="Wireframe"
+          onClick={() => setArtifact(SAMPLE_WIREFRAME)}
         >
-          <rect
-            x="3"
-            y="4"
-            width="8"
-            height="16"
-            rx="1.5"
-            stroke="currentColor"
-            strokeWidth="1.8"
-          />
-          <rect
-            x="13"
-            y="4"
-            width="8"
-            height="10"
-            rx="1.5"
-            stroke="currentColor"
-            strokeWidth="1.8"
-          />
-        </svg>
-      </IconButton>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
+            <rect
+              x="3"
+              y="4"
+              width="8"
+              height="16"
+              rx="1.5"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            />
+            <rect
+              x="13"
+              y="4"
+              width="8"
+              height="10"
+              rx="1.5"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            />
+          </svg>
+        </IconButton>
 
-      <IconButton label="Flow" onClick={() => setArtifact(SAMPLE_FLOW)}>
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          aria-hidden="true"
-        >
-          <circle
-            cx="5"
-            cy="6"
-            r="2.3"
-            stroke="currentColor"
-            strokeWidth="1.8"
-          />
-          <circle
-            cx="19"
-            cy="6"
-            r="2.3"
-            stroke="currentColor"
-            strokeWidth="1.8"
-          />
-          <circle
-            cx="19"
-            cy="18"
-            r="2.3"
-            stroke="currentColor"
-            strokeWidth="1.8"
-          />
-          <path
-            d="M7.3 6h9.4M17 8.3v7.4a2 2 0 0 1-2 2H9"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-          />
-        </svg>
-      </IconButton>
+        <IconButton label="Flow" onClick={() => setArtifact(SAMPLE_FLOW)}>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
+            <circle
+              cx="5"
+              cy="6"
+              r="2.3"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            />
+            <circle
+              cx="19"
+              cy="6"
+              r="2.3"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            />
+            <circle
+              cx="19"
+              cy="18"
+              r="2.3"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            />
+            <path
+              d="M7.3 6h9.4M17 8.3v7.4a2 2 0 0 1-2 2H9"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+            />
+          </svg>
+        </IconButton>
+      </div>
+
+      <div className="mx-0.5 h-5 w-px bg-zinc-200" aria-hidden="true" />
 
       <ShareButton />
 
       <div className="mx-0.5 h-5 w-px bg-zinc-200" aria-hidden="true" />
 
-      <IconButton
-        label={presentation ? "Show conversation" : "Enter presentation mode"}
-        active={presentation}
-        onClick={onTogglePresentation}
-      >
+      <IconButton label="Open text rail" onClick={onOpenChat}>
         <svg
           width="18"
           height="18"

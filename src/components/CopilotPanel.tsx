@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect } from "react";
 import "@copilotkit/react-ui/styles.css";
 import {
   CopilotSidebar,
+  useChatContext,
   type CopilotKitCSSProperties,
 } from "@copilotkit/react-ui";
 import { useCopilotAction, useCopilotReadable } from "@copilotkit/react-core";
@@ -28,10 +30,27 @@ function artifactSummary(artifact: Artifact): string {
   }`;
 }
 
+// Bridges the sidebar's internal open state to Header's pill icon. Rendered
+// as a child of CopilotSidebar so it can reach useChatContext(); pushes our
+// externally-controlled `open` boolean into CopilotKit whenever it changes.
+function ChatOpenSync({ open }: { open: boolean }) {
+  const { setOpen } = useChatContext();
+  useEffect(() => {
+    setOpen(open);
+  }, [open, setOpen]);
+  return null;
+}
+
 // Demo-insurance text rail: drives the exact same artifact loop as voice
 // (POST /api/generate -> setArtifact) via a CopilotKit action, in case room
 // noise stomps speech recognition during the live demo.
-export function CopilotPanel() {
+export function CopilotPanel({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const setArtifact = useStore((s) => s.setArtifact);
   const artifact = useStore((s) => s.artifact);
   const addJob = useStore((s) => s.addJob);
@@ -124,13 +143,17 @@ export function CopilotPanel() {
       <CopilotSidebar
         defaultOpen={false}
         clickOutsideToClose={false}
+        onSetOpen={onOpenChange}
+        Button={() => null}
         labels={{
           title: "Riff — text rail",
           initial:
             "Describe an app, feature, or screen and I'll render it on the canvas. This works even if voice can't hear you.",
         }}
         instructions="You are Riff, a senior design partner. When the user describes an app, feature, or screen, call render_artifact with a clear brief and the right artifact_kind (wireframe or flow). If an artifact is already on screen, evolve it rather than starting over. Ask at most one sharp clarifying question at a time; otherwise make a reasonable call and render."
-      />
+      >
+        <ChatOpenSync open={open} />
+      </CopilotSidebar>
     </div>
   );
 }

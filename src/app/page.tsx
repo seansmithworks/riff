@@ -9,6 +9,7 @@ import { useStore } from "@/lib/store";
 
 export default function Home() {
   const [presentation, setPresentation] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
 
   useEffect(() => {
     if (!presentation) return;
@@ -30,17 +31,14 @@ export default function Home() {
   return (
     <div className="flex h-screen w-screen flex-col bg-[#f4f4f5]">
       <RiffLogo />
-      <Header
-        presentation={presentation}
-        onTogglePresentation={() => setPresentation((p) => !p)}
-      />
+      <Header onOpenChat={() => setChatOpen(true)} />
       <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
         <main className="flex-1 overflow-hidden">
           <ArtifactCanvas />
         </main>
         <ConversationPanel presentation={presentation} />
       </div>
-      <CopilotPanel />
+      <CopilotPanel open={chatOpen} onOpenChange={setChatOpen} />
     </div>
   );
 }
