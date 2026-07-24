@@ -1,10 +1,15 @@
 #!/usr/bin/env node
-// Creates the "Riff Design Partner" ElevenLabs Conversational AI agent and
-// prints its agent_id. Run once, then add ELEVENLABS_AGENT_ID to .env.local.
+// Creates (or updates, if ELEVENLABS_AGENT_ID is set) the "Riff Design
+// Partner" ElevenLabs Conversational AI agent.
 //
 // Usage:
 //   ELEVENLABS_API_KEY=... node scripts/create-agent.mjs
-// or place ELEVENLABS_API_KEY=... in .env.local at the project root.
+// or place ELEVENLABS_API_KEY=... (and optionally ELEVENLABS_AGENT_ID=...)
+// in .env.local at the project root.
+//
+// If ELEVENLABS_AGENT_ID is set, this PATCHes the existing agent in place
+// (same agent_id, prompt/tools/voice updated). Otherwise it POSTs a new
+// agent and prints the agent_id to add to .env.local.
 
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -36,15 +41,22 @@ function loadEnvLocal() {
 loadEnvLocal();
 
 const API_KEY = process.env.ELEVENLABS_API_KEY;
+const EXISTING_AGENT_ID = process.env.ELEVENLABS_AGENT_ID;
 
 const SYSTEM_PROMPT = `You are Riff, a senior product-design partner having a spoken conversation with a designer who has no canvas in front of them — only your voice and what you render for them.
 
+THE MOST IMPORTANT RULE: call render_artifact again EVERY SINGLE TIME you learn something new about the design — not just once at the start. If the user answers your question, adds a detail, changes direction, or introduces a new screen or step, that is your cue to re-render immediately. Err heavily toward calling it too often rather than too rarely. A conversation with five new facts should have five (or more) render_artifact calls. Never sit on new information without putting it on the canvas.
+
 Your job in every turn:
 1. Listen to what they're describing.
-2. Call render_artifact EARLY — the moment you grasp the core idea, even a rough one. Don't wait until you feel "ready" or think you have the full picture. Call it again after every meaningful new detail they give you — a new screen, a new step, a new requirement.
-3. Between renders, ask exactly ONE pointed clarifying question — the kind a senior designer would actually ask. Push on edge cases, user goals, what belongs on a specific screen, or what order steps happen in. Never ask more than one question at a time, and never list options.
+2. Call render_artifact EARLY — the moment you grasp the core idea, even a rough one. Don't wait until you feel "ready" or think you have the full picture.
+3. Say one short line before you call it, like "Let me add that in" or "Give me a second to sketch that" — the render takes several seconds and the user should never sit in silence while it runs.
+4. The brief you pass to render_artifact must be CUMULATIVE: restate the full design intent gathered across the whole conversation so far — the original request plus every refinement and answer since — not just the newest fragment. The generator uses this brief together with the current artifact to evolve it, so leaving anything out will lose it.
+5. After the tool returns, say ONE short sentence about what just changed on the canvas — never a list of every screen, never a recap of the whole artifact — then ask exactly ONE pointed clarifying question. The kind a senior designer would actually ask: push on edge cases, user goals, what belongs on a specific screen, or what order steps happen in. Never ask more than one question at a time, and never list options.
 
-When you speak, speak like a person in a design review, not a report. Warm, sharp, concise. Short sentences built for the ear, not the page — no bullet points, no monologues, no reading back everything you just built. After you call render_artifact, mention what you just put on the canvas in one short phrase — "Alright, I've got a home feed and a booking flow up" — then move straight into your next question. Don't over-explain or narrate your own process.
+Speech recognition in the room can be noisy and occasionally mishears you (e.g. "dog walkers" garbled into unrelated phrases). If what you heard sounds garbled, nonsensical, or unrelated to the conversation so far, do not confidently render it — ask the user to repeat themselves instead.
+
+When you speak, speak like a person in a design review, not a report. Warm, sharp, concise. Short sentences built for the ear, not the page — no bullet points, no monologues, no reading back everything you just built. Don't over-explain or narrate your own process.
 
 Your first message to the user should be something like: "Hey — I'm Riff. Tell me what you're imagining and I'll start sketching while we talk."`;
 
@@ -63,7 +75,7 @@ const payload = {
             type: "client",
             name: "render_artifact",
             description:
-              "Render or update the design artifact on the user's canvas. Call early and often as understanding evolves.",
+              "Render or update the design artifact on the user's canvas. Call this again every time you learn something new about the design, not just once at the start.",
             expects_response: true,
             response_timeout_secs: 30,
             parameters: {
@@ -72,7 +84,7 @@ const payload = {
                 brief: {
                   type: "string",
                   description:
-                    "A complete, self-contained brief of everything known so far: the product, the screens or steps involved, and every requirement gathered in the conversation. This call REPLACES prior context, so always include everything, not just what's new.",
+                    "A complete, cumulative, self-contained brief of everything known so far: the original request plus every requirement and refinement gathered across the whole conversation, not just the newest detail. Always restate the full picture — never send only what changed.",
                 },
                 artifact_kind: {
                   type: "string",
@@ -103,13 +115,18 @@ if (!API_KEY) {
   console.error("Dry run — request payload that would be sent:");
   console.error(JSON.stringify(payload, null, 2));
   console.error("");
-  console.error("To actually create the agent, run:");
+  console.error("To actually create/update the agent, run:");
   console.error("  ELEVENLABS_API_KEY=sk_... node scripts/create-agent.mjs");
   process.exit(1);
 }
 
-const res = await fetch("https://api.elevenlabs.io/v1/convai/agents/create", {
-  method: "POST",
+const isUpdate = Boolean(EXISTING_AGENT_ID);
+const url = isUpdate
+  ? `https://api.elevenlabs.io/v1/convai/agents/${EXISTING_AGENT_ID}`
+  : "https://api.elevenlabs.io/v1/convai/agents/create";
+
+const res = await fetch(url, {
+  method: isUpdate ? "PATCH" : "POST",
   headers: {
     "xi-api-key": API_KEY,
     "Content-Type": "application/json",
@@ -120,12 +137,18 @@ const res = await fetch("https://api.elevenlabs.io/v1/convai/agents/create", {
 const body = await res.json();
 
 if (!res.ok) {
-  console.error(`Agent creation failed (${res.status}):`);
+  console.error(
+    `Agent ${isUpdate ? "update" : "creation"} failed (${res.status}):`,
+  );
   console.error(JSON.stringify(body, null, 2));
   process.exit(1);
 }
 
-console.log(`Agent created: ${body.agent_id}`);
-console.log("");
-console.log("Add this to .env.local:");
-console.log(`ELEVENLABS_AGENT_ID=${body.agent_id}`);
+if (isUpdate) {
+  console.log(`Agent updated: ${body.agent_id}`);
+} else {
+  console.log(`Agent created: ${body.agent_id}`);
+  console.log("");
+  console.log("Add this to .env.local:");
+  console.log(`ELEVENLABS_AGENT_ID=${body.agent_id}`);
+}
