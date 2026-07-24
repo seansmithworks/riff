@@ -69,7 +69,8 @@ const payload = {
       language: "en",
       prompt: {
         prompt: SYSTEM_PROMPT,
-        llm: "gemini-2.0-flash",
+        llm: "claude-sonnet-5",
+        temperature: 0.3,
         tools: [
           {
             type: "client",
