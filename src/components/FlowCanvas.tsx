@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import {
   ReactFlow,
+  ReactFlowProvider,
   Background,
   Controls,
+  useReactFlow,
   type Node,
   type Edge,
 } from "@xyflow/react";
@@ -18,13 +20,15 @@ function toReactFlowType(type: FlowNode["type"]) {
   return type;
 }
 
-export function FlowCanvas({
+function FlowCanvasInner({
   nodes,
   edges,
 }: {
   nodes: FlowNode[];
   edges: FlowEdge[];
 }) {
+  const { fitView } = useReactFlow();
+
   const { layoutedNodes, flowEdges } = useMemo(() => {
     const rfNodes: Node[] = nodes.map((n) => ({
       id: n.id,
@@ -45,6 +49,12 @@ export function FlowCanvas({
     return { layoutedNodes: layoutNodes(rfNodes, rfEdges), flowEdges: rfEdges };
   }, [nodes, edges]);
 
+  const nodeIds = layoutedNodes.map((n) => n.id).join("-");
+
+  useEffect(() => {
+    fitView({ padding: 0.15, minZoom: 0.5, maxZoom: 2.5, duration: 400 });
+  }, [nodeIds, fitView]);
+
   return (
     <div className="h-full w-full">
       <ReactFlow
@@ -62,5 +72,19 @@ export function FlowCanvas({
         <Controls />
       </ReactFlow>
     </div>
+  );
+}
+
+export function FlowCanvas({
+  nodes,
+  edges,
+}: {
+  nodes: FlowNode[];
+  edges: FlowEdge[];
+}) {
+  return (
+    <ReactFlowProvider>
+      <FlowCanvasInner nodes={nodes} edges={edges} />
+    </ReactFlowProvider>
   );
 }

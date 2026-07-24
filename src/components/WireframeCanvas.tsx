@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import {
   ReactFlow,
+  ReactFlowProvider,
   Background,
   Controls,
+  useReactFlow,
   type Node,
   type NodeProps,
 } from "@xyflow/react";
@@ -35,7 +37,9 @@ function PhoneFrameNode({ data }: NodeProps) {
 
 const nodeTypes = { screenFrame: PhoneFrameNode };
 
-export function WireframeCanvas({ screens }: { screens: Screen[] }) {
+function WireframeCanvasInner({ screens }: { screens: Screen[] }) {
+  const { fitView } = useReactFlow();
+
   const nodes: Node[] = useMemo(
     () =>
       screens.map((screen, i) => ({
@@ -49,6 +53,12 @@ export function WireframeCanvas({ screens }: { screens: Screen[] }) {
     [screens],
   );
 
+  const nodeIds = nodes.map((n) => n.id).join("-");
+
+  useEffect(() => {
+    fitView({ padding: 0.15, minZoom: 0.15, maxZoom: 1.5, duration: 400 });
+  }, [nodeIds, fitView]);
+
   return (
     <div className="h-full w-full">
       <ReactFlow
@@ -59,7 +69,7 @@ export function WireframeCanvas({ screens }: { screens: Screen[] }) {
         nodesConnectable={false}
         fitView
         fitViewOptions={{ padding: 0.15, minZoom: 0.4, maxZoom: 1.5 }}
-        minZoom={0.2}
+        minZoom={0.15}
         maxZoom={1.5}
         proOptions={{ hideAttribution: true }}
       >
@@ -67,5 +77,13 @@ export function WireframeCanvas({ screens }: { screens: Screen[] }) {
         <Controls />
       </ReactFlow>
     </div>
+  );
+}
+
+export function WireframeCanvas({ screens }: { screens: Screen[] }) {
+  return (
+    <ReactFlowProvider>
+      <WireframeCanvasInner screens={screens} />
+    </ReactFlowProvider>
   );
 }
