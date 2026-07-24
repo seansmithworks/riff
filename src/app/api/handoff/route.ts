@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHandoffPreview } from "@/lib/daytona";
 import type { Artifact } from "@/lib/artifact";
+import type { Message } from "@/lib/store";
 
 export async function POST(req: NextRequest) {
-  let body: { artifact?: Artifact };
+  let body: { artifact?: Artifact; messages?: Message[] };
   try {
     body = await req.json();
   } catch {
@@ -13,7 +14,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { artifact } = body;
+  const { artifact, messages } = body;
 
   if (!artifact || typeof artifact !== "object") {
     return NextResponse.json(
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
 
   const start = Date.now();
   try {
-    const { url, sandboxId } = await createHandoffPreview(artifact);
+    const { url, sandboxId } = await createHandoffPreview(artifact, messages);
     const durationMs = Date.now() - start;
     console.log(`[api/handoff] sandbox ready in ${durationMs}ms`);
     return NextResponse.json({ url, sandboxId }, { status: 200 });

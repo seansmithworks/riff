@@ -3,6 +3,7 @@
 
 import { Daytona } from "@daytona/sdk";
 import type { Artifact, Screen, Element } from "./artifact";
+import type { Message } from "./store";
 
 const PREVIEW_PORT = 8080;
 const APP_DIR = "/home/daytona/app";
@@ -14,6 +15,7 @@ export interface HandoffResult {
 
 export async function createHandoffPreview(
   artifact: Artifact,
+  messages?: Message[],
 ): Promise<HandoffResult> {
   const apiKey = process.env.DAYTONA_API_KEY;
   if (!apiKey) {
@@ -23,7 +25,7 @@ export async function createHandoffPreview(
   const daytona = new Daytona({ apiKey });
   const sandbox = await daytona.create({ public: true });
 
-  const html = renderArtifactHtml(artifact);
+  const html = renderHandoffHtml(artifact, messages ?? []);
   await sandbox.fs.uploadFile(Buffer.from(html), `${APP_DIR}/index.html`);
 
   const sessionId = `handoff-${Date.now()}`;
@@ -129,23 +131,100 @@ const STYLES = `
   .flow-list { list-style: none; padding: 0; }
   .flow-list li { background: #fff; border: 1px solid #e4e4e7; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
   .flow-edges { color: #71717a; font-size: 13px; margin-top: 24px; }
+
+  /* -- Design brief document chrome --------------------------------- */
+  .doc-header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  .doc-header h1 { font-size: 22px; margin: 0; }
+  .doc-label { display: inline-block; background: #ff6b4a; color: #fff; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; border-radius: 9999px; padding: 3px 10px; }
+  .doc-date { color: #71717a; font-size: 12px; }
+  .doc-section { margin-top: 40px; }
+  .doc-section h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #71717a; margin: 0 0 12px; }
+  .brief-text { background: #fff; border: 1px solid #e4e4e7; border-left: 3px solid #ff6b4a; border-radius: 8px; padding: 16px; font-size: 15px; line-height: 1.5; white-space: pre-wrap; }
+  .direction { background: #fff; border: 1px solid #e4e4e7; border-radius: 8px; padding: 16px; font-size: 14px; line-height: 1.6; }
+  .direction .order { color: #71717a; }
+  .transcript { display: flex; flex-direction: column; gap: 8px; max-width: 640px; }
+  .msg { border-radius: 10px; padding: 10px 14px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
+  .msg .role { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; opacity: 0.6; }
+  .msg.user { align-self: flex-end; background: #ff6b4a; color: #fff; }
+  .msg.assistant { align-self: flex-start; background: #fff; border: 1px solid #e4e4e7; color: #18181b; }
+  .download-btn { position: fixed; top: 24px; right: 24px; background: #18181b; color: #fff; border: none; border-radius: 9999px; padding: 10px 18px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .download-btn:hover { background: #27272a; }
 `;
 
-function renderArtifactHtml(artifact: Artifact): string {
-  const body =
-    artifact.kind === "wireframe"
-      ? `<div class="screens">${artifact.screens.map(renderScreen).join("")}</div>`
-      : `<ul class="flow-list">${artifact.nodes
-          .map(
-            (node) =>
-              `<li><strong>${escapeHtml(node.label)}</strong> <span class="muted">(${escapeHtml(node.type)})</span></li>`,
-          )
-          .join("")}</ul><div class="flow-edges">${artifact.edges
-          .map(
-            (edge) =>
-              `${escapeHtml(edge.from)} → ${escapeHtml(edge.to)}${edge.label ? ` (${escapeHtml(edge.label)})` : ""}`,
-          )
-          .join("<br />")}</div>`;
+function renderArtifactBody(artifact: Artifact): string {
+  return artifact.kind === "wireframe"
+    ? `<div class="screens">${artifact.screens.map(renderScreen).join("")}</div>`
+    : `<ul class="flow-list">${artifact.nodes
+        .map(
+          (node) =>
+            `<li><strong>${escapeHtml(node.label)}</strong> <span class="muted">(${escapeHtml(node.type)})</span></li>`,
+        )
+        .join("")}</ul><div class="flow-edges">${artifact.edges
+        .map(
+          (edge) =>
+            `${escapeHtml(edge.from)} → ${escapeHtml(edge.to)}${edge.label ? ` (${escapeHtml(edge.label)})` : ""}`,
+        )
+        .join("<br />")}</div>`;
+}
+
+// --- Design brief document ----------------------------------------------
+
+function renderDirection(artifact: Artifact): string {
+  if (artifact.kind === "wireframe") {
+    const names = artifact.screens.map((s) => s.name);
+    return `<div class="direction">Wireframe · ${artifact.screens.length} screen${artifact.screens.length === 1 ? "" : "s"}<br />
+      <span class="order">${names.map(escapeHtml).join(" → ") || "No screens generated."}</span></div>`;
+  }
+  const names = artifact.nodes.map((n) => n.label);
+  return `<div class="direction">Flow · ${artifact.nodes.length} node${artifact.nodes.length === 1 ? "" : "s"}<br />
+    <span class="order">${names.map(escapeHtml).join(" → ") || "No nodes generated."}</span></div>`;
+}
+
+function renderBrief(messages: Message[]): string {
+  const firstUserMessage = messages.find((m) => m.role === "user")?.text;
+  const text = firstUserMessage?.trim()
+    ? escapeHtml(firstUserMessage)
+    : "No conversation recorded for this artifact.";
+  return `<div class="brief-text">${text}</div>`;
+}
+
+function renderTranscript(messages: Message[]): string {
+  if (messages.length === 0) {
+    return `<div class="muted">No transcript available.</div>`;
+  }
+  return `<div class="transcript">${messages
+    .map(
+      (m) =>
+        `<div class="msg ${m.role}"><span class="role">${m.role}</span>${escapeHtml(m.text)}</div>`,
+    )
+    .join("")}</div>`;
+}
+
+const DOWNLOAD_BUTTON_HTML = `<button type="button" id="riff-download" class="download-btn">Download brief</button>
+<script>
+  document.getElementById('riff-download').addEventListener('click', function () {
+    var clone = document.documentElement.cloneNode(true);
+    var btn = clone.querySelector('#riff-download');
+    if (btn) btn.remove();
+    var html = '<!doctype html>\\n' + clone.outerHTML;
+    var blob = new Blob([html], { type: 'text/html' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = (document.title || 'design-brief').replace(/[^a-z0-9-_]+/gi, '-') + '.html';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  });
+</script>`;
+
+function renderHandoffHtml(artifact: Artifact, messages: Message[]): string {
+  const generatedAt = new Date().toLocaleString("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+  const kindLabel = artifact.kind === "wireframe" ? "Screens" : "Flow";
 
   return `<!doctype html>
 <html>
@@ -155,8 +234,33 @@ function renderArtifactHtml(artifact: Artifact): string {
   <style>${STYLES}</style>
 </head>
 <body>
-  <h1>${escapeHtml(artifact.title)}</h1>
-  ${body}
+  <div class="doc-header">
+    <h1>${escapeHtml(artifact.title)}</h1>
+    <span class="doc-label">Design brief</span>
+    <span class="doc-date">${escapeHtml(generatedAt)}</span>
+  </div>
+
+  <div class="doc-section">
+    <h3>The brief</h3>
+    ${renderBrief(messages)}
+  </div>
+
+  <div class="doc-section">
+    <h3>Direction</h3>
+    ${renderDirection(artifact)}
+  </div>
+
+  <div class="doc-section">
+    <h3>${kindLabel}</h3>
+    ${renderArtifactBody(artifact)}
+  </div>
+
+  <div class="doc-section">
+    <h3>Transcript</h3>
+    ${renderTranscript(messages)}
+  </div>
+
+  ${DOWNLOAD_BUTTON_HTML}
 </body>
 </html>`;
 }

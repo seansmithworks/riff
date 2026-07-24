@@ -12,6 +12,7 @@ type ShareState = "idle" | "loading" | "success" | "error";
 // writes to it.
 function ShareButton() {
   const artifact = useStore((s) => s.artifact);
+  const messages = useStore((s) => s.messages);
   const [shareState, setShareState] = useState<ShareState>("idle");
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
@@ -26,7 +27,7 @@ function ShareButton() {
       const res = await fetch("/api/handoff", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ artifact }),
+        body: JSON.stringify({ artifact, messages }),
       });
       const data = await res.json();
       if (!res.ok) {
