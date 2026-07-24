@@ -53,6 +53,9 @@ export function FlowCanvas({
         edges={flowEdges}
         nodeTypes={nodeTypes}
         fitView
+        fitViewOptions={{ padding: 0.15, minZoom: 0.5, maxZoom: 2.5 }}
+        minZoom={0.2}
+        maxZoom={2.5}
         proOptions={{ hideAttribution: true }}
       >
         <Background color="#27272a" gap={20} />

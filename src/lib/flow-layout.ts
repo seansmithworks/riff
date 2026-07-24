@@ -1,14 +1,14 @@
 import dagre from "@dagrejs/dagre";
 import type { Node, Edge } from "@xyflow/react";
 
-const NODE_WIDTH = 180;
+const NODE_WIDTH = 170;
 const NODE_HEIGHT = 56;
 
 // Left-to-right auto-layout via dagre. Mutates positions on a copy of nodes.
 export function layoutNodes(nodes: Node[], edges: Edge[]): Node[] {
   const graph = new dagre.graphlib.Graph();
   graph.setDefaultEdgeLabel(() => ({}));
-  graph.setGraph({ rankdir: "LR", nodesep: 48, ranksep: 96 });
+  graph.setGraph({ rankdir: "LR", nodesep: 36, ranksep: 64 });
 
   nodes.forEach((node) => {
     graph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });

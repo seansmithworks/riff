@@ -26,12 +26,20 @@ export function ActionNode({ data }: NodeProps) {
 }
 
 export function DecisionNode({ data }: NodeProps) {
+  const label = String(data.label);
+  // Scale the diamond to the label so longer text doesn't clip the rotated
+  // shape's readable center; clamp so short labels still read as a diamond.
+  const width = Math.min(260, Math.max(160, label.length * 9 + 90));
+  const height = Math.round(width * 0.65);
   return (
-    <div className="relative flex h-[90px] w-[160px] items-center justify-center">
+    <div
+      className="relative flex items-center justify-center"
+      style={{ width, height }}
+    >
       {handles}
       <div className="absolute inset-0 rotate-45 rounded-md border border-[#ff6b4a]/60 bg-[#ff6b4a]/10" />
-      <span className="relative px-6 text-center text-xs font-medium text-zinc-800">
-        {String(data.label)}
+      <span className="relative max-w-[62%] px-1 text-center text-xs font-semibold leading-tight text-zinc-50">
+        {label}
       </span>
     </div>
   );
