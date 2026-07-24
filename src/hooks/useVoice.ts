@@ -5,6 +5,11 @@ import { useConversation } from "@elevenlabs/react";
 import { useStore } from "@/lib/store";
 import type { Artifact } from "@/lib/artifact";
 
+function jobLabel(brief: string): string {
+  const words = brief.trim().split(/\s+/).slice(0, 6).join(" ");
+  return brief.trim().split(/\s+/).length > 6 ? `${words}…` : words;
+}
+
 function artifactSummary(artifact: Artifact): string {
   if (artifact.kind === "wireframe") {
     const names = artifact.screens.map((s) => s.name).join(", ");
@@ -31,6 +36,8 @@ export function useVoice() {
   const setArtifact = useStore((s) => s.setArtifact);
   const addMessage = useStore((s) => s.addMessage);
   const setStatus = useStore((s) => s.setStatus);
+  const addJob = useStore((s) => s.addJob);
+  const updateJobStatus = useStore((s) => s.updateJobStatus);
 
   const conversation = useConversation({
     onConnect: () => setStatus("listening"),
@@ -67,6 +74,7 @@ export function useVoice() {
         const requestId = ++requestCounter;
         inFlightRequests += 1;
         setStatus("thinking");
+        addJob({ id: requestId, label: jobLabel(brief), status: "sketching" });
 
         const currentArtifact = useStore.getState().artifact;
 
@@ -91,9 +99,13 @@ export function useVoice() {
                 role: "assistant",
                 text: artifactSummary(artifact),
               });
+              updateJobStatus(requestId, "done");
+            } else {
+              updateJobStatus(requestId, "superseded");
             }
           })
           .catch(() => {
+            updateJobStatus(requestId, "failed");
             if (requestId === requestCounter) {
               addMessage({
                 role: "assistant",

@@ -1,7 +1,7 @@
 "use client";
 
 import { ConversationProvider } from "@elevenlabs/react";
-import { useStore } from "@/lib/store";
+import { useStore, type Job } from "@/lib/store";
 import { useVoice } from "@/hooks/useVoice";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -10,6 +10,69 @@ const STATUS_LABEL: Record<string, string> = {
   thinking: "Thinking…",
   speaking: "Speaking…",
 };
+
+function JobRow({ job }: { job: Job }) {
+  return (
+    <div
+      className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs ${
+        job.status === "superseded" ? "opacity-40" : ""
+      }`}
+    >
+      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+        {job.status === "sketching" && (
+          <span className="h-2 w-2 animate-pulse rounded-full bg-[#ff6b4a]" />
+        )}
+        {job.status === "done" && (
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M5 13l4 4L19 7"
+              stroke="#a1a1aa"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
+        {job.status === "superseded" && (
+          <span className="h-2 w-2 rounded-full bg-zinc-600" />
+        )}
+        {job.status === "failed" && (
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M6 6l12 12M18 6L6 18"
+              stroke="#ef4444"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+            />
+          </svg>
+        )}
+      </span>
+      <span
+        className={`truncate ${
+          job.status === "superseded"
+            ? "text-zinc-600 line-through"
+            : job.status === "failed"
+              ? "text-red-400"
+              : "text-zinc-400"
+        }`}
+      >
+        {job.label}
+      </span>
+    </div>
+  );
+}
 
 export function ConversationPanel() {
   return (
@@ -22,6 +85,7 @@ export function ConversationPanel() {
 function ConversationPanelInner() {
   const messages = useStore((s) => s.messages);
   const status = useStore((s) => s.status);
+  const jobs = useStore((s) => s.jobs);
   const { start, stop, isConnected } = useVoice();
 
   const handleMicClick = () => {
@@ -32,8 +96,17 @@ function ConversationPanelInner() {
     }
   };
 
+  const visibleJobs = jobs.slice(-4);
+
   return (
     <div className="flex h-full w-full flex-col border-t border-zinc-800 bg-zinc-950 md:w-[340px] md:border-t-0 md:border-l">
+      {visibleJobs.length > 0 && (
+        <div className="flex flex-col gap-0.5 border-b border-zinc-800 px-3 py-2">
+          {visibleJobs.map((job) => (
+            <JobRow key={job.id} job={job} />
+          ))}
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto px-5 py-5">
         {messages.length === 0 ? (
           <p className="mt-8 text-center text-sm text-zinc-600">
