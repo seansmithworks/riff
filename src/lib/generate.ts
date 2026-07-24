@@ -87,7 +87,7 @@ function validateArtifact(value: unknown): value is Artifact {
 
 // A single attempt cannot run longer than this — a live demo can't afford a
 // hung connection (one earlier call hung ~70s before failing).
-const REQUEST_TIMEOUT_MS = 25_000;
+const REQUEST_TIMEOUT_MS = 40_000;
 
 // 1 initial attempt + 2 retries, short backoff between them so a transient
 // blip (dead venue wifi, Fireworks overload) doesn't cost real demo time.
