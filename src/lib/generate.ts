@@ -133,7 +133,14 @@ async function callFireworksOnce(
   return content;
 }
 
-async function callFireworks(messages: ChatMessage[]): Promise<string> {
+// Thrown/rethrown errors carry the model id of the attempt that produced
+// them, so callers can attribute latency/logging to the right model even
+// when the final attempt fell back to FALLBACK_MODEL_ID.
+export type ModelTaggedError = Error & { modelId?: string };
+
+async function callFireworks(
+  messages: ChatMessage[],
+): Promise<{ content: string; model: string }> {
   const apiKey = process.env.FIREWORKS_API_KEY;
   if (!apiKey) {
     throw new Error("FIREWORKS_API_KEY is not set");
@@ -144,7 +151,8 @@ async function callFireworks(messages: ChatMessage[]): Promise<string> {
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const modelId = attempt === MAX_ATTEMPTS ? FALLBACK_MODEL_ID : MODEL_ID;
     try {
-      return await callFireworksOnce(messages, apiKey, modelId);
+      const content = await callFireworksOnce(messages, apiKey, modelId);
+      return { content, model: modelId };
     } catch (err) {
       lastError = err;
 
@@ -157,6 +165,9 @@ async function callFireworks(messages: ChatMessage[]): Promise<string> {
         status === undefined || status === 429 || status === 503;
 
       if (!retryable || attempt === MAX_ATTEMPTS) {
+        if (err instanceof Error) {
+          (err as ModelTaggedError).modelId = modelId;
+        }
         throw err;
       }
 
@@ -191,39 +202,41 @@ export async function generateArtifact({
 }: {
   brief: string;
   currentArtifact?: Artifact;
-}): Promise<Artifact> {
+}): Promise<{ artifact: Artifact; model: string }> {
   const messages: ChatMessage[] = [
     { role: "system", content: buildSystemPrompt(Boolean(currentArtifact)) },
     { role: "user", content: buildUserMessage(brief, currentArtifact) },
   ];
 
-  const firstContent = await callFireworks(messages);
+  const first = await callFireworks(messages);
 
   try {
-    const parsed = JSON.parse(firstContent);
+    const parsed = JSON.parse(first.content);
     if (!validateArtifact(parsed)) {
       throw new Error(
         "Artifact failed validation: missing/empty kind-specific arrays",
       );
     }
-    return parsed;
+    return { artifact: parsed, model: first.model };
   } catch (err) {
     // One retry: append the failed response + error, ask the model to fix it.
     const errorMessage = err instanceof Error ? err.message : String(err);
-    messages.push({ role: "assistant", content: firstContent });
+    messages.push({ role: "assistant", content: first.content });
     messages.push({
       role: "user",
       content: `That response was invalid: ${errorMessage}. Respond again with ONLY valid JSON strictly matching the schema.`,
     });
 
-    const retryContent = await callFireworks(messages);
-    const parsed = JSON.parse(retryContent);
+    const retry = await callFireworks(messages);
+    const parsed = JSON.parse(retry.content);
     if (!validateArtifact(parsed)) {
-      throw new Error(
+      const validationError: ModelTaggedError = new Error(
         "Artifact failed validation on retry: missing/empty kind-specific arrays",
       );
+      validationError.modelId = retry.model;
+      throw validationError;
     }
-    return parsed;
+    return { artifact: parsed, model: retry.model };
   }
 }
 
