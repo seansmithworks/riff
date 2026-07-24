@@ -1,0 +1,306 @@
+{
+  "kind": "wireframe",
+  "title": "Dog Walker Booking App",
+  "screens": [
+    {
+      "id": "s1",
+      "name": "Browse Walkers",
+      "elements": [
+        {
+          "type": "navbar",
+          "title": "PawWalk",
+          "actions": [
+            "filter"
+          ]
+        },
+        {
+          "type": "searchbar",
+          "placeholder": "Search by name or neighborhood"
+        },
+        {
+          "type": "heading",
+          "text": "Walkers Near You"
+        },
+        {
+          "type": "list",
+          "items": [
+            {
+              "title": "Sarah Mitchell",
+              "subtitle": "0.8 mi away \u00b7 4.9\u2605 \u00b7 $25/walk",
+              "hasImage": true
+            },
+            {
+              "title": "James Rivera",
+              "subtitle": "1.2 mi away \u00b7 4.7\u2605 \u00b7 $22/walk",
+              "hasImage": true
+            },
+            {
+              "title": "Emily Chen",
+              "subtitle": "1.5 mi away \u00b7 4.8\u2605 \u00b7 $28/walk",
+              "hasImage": true
+            },
+            {
+              "title": "Marcus Thompson",
+              "subtitle": "2.0 mi away \u00b7 4.6\u2605 \u00b7 $20/walk",
+              "hasImage": true
+            },
+            {
+              "title": "Olivia Patel",
+              "subtitle": "2.3 mi away \u00b7 5.0\u2605 \u00b7 $30/walk",
+              "hasImage": true
+            }
+          ]
+        },
+        {
+          "type": "tabbar",
+          "tabs": [
+            "Home",
+            "Walkers",
+            "Bookings",
+            "Profile"
+          ],
+          "active": 1
+        }
+      ]
+    },
+    {
+      "id": "s2",
+      "name": "Walker Profile",
+      "elements": [
+        {
+          "type": "navbar",
+          "title": "Walker Profile",
+          "actions": [
+            "share",
+            "favorite"
+          ]
+        },
+        {
+          "type": "image",
+          "label": "Sarah Mitchell",
+          "aspect": "wide"
+        },
+        {
+          "type": "heading",
+          "text": "Sarah Mitchell"
+        },
+        {
+          "type": "text",
+          "text": "0.8 mi away \u00b7 4.9\u2605 (127 reviews) \u00b7 3 yrs experience"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "heading",
+          "text": "About"
+        },
+        {
+          "type": "text",
+          "text": "Certified dog walker and pet first-aid trained. Comfortable with all breeds and temperaments. Your pup is in safe hands!"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "heading",
+          "text": "Services & Pricing"
+        },
+        {
+          "type": "list",
+          "items": [
+            {
+              "title": "30-Min Neighborhood Walk",
+              "subtitle": "$25"
+            },
+            {
+              "title": "60-Min Park Walk",
+              "subtitle": "$40"
+            },
+            {
+              "title": "Drop-In Visit (30 min)",
+              "subtitle": "$22"
+            }
+          ]
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "heading",
+          "text": "Reviews"
+        },
+        {
+          "type": "list",
+          "items": [
+            {
+              "title": "Dan K.",
+              "subtitle": "\"Sarah was amazing with my golden retriever. Will definitely book again!\"",
+              "hasImage": false
+            },
+            {
+              "title": "Mia L.",
+              "subtitle": "\"Super reliable and sent photo updates throughout the walk.\"",
+              "hasImage": false
+            }
+          ]
+        },
+        {
+          "type": "row",
+          "children": [
+            {
+              "type": "button",
+              "label": "Message",
+              "variant": "secondary"
+            },
+            {
+              "type": "button",
+              "label": "Book a Walk",
+              "variant": "primary"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "s3",
+      "name": "Booking Details",
+      "elements": [
+        {
+          "type": "navbar",
+          "title": "Booking Details",
+          "actions": []
+        },
+        {
+          "type": "heading",
+          "text": "Booking Summary"
+        },
+        {
+          "type": "card",
+          "title": "Sarah Mitchell",
+          "body": "60-Min Park Walk \u00b7 $40",
+          "hasImage": true
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "input",
+          "label": "Dog Name",
+          "placeholder": "Your dog's name"
+        },
+        {
+          "type": "input",
+          "label": "Breed & Size",
+          "placeholder": "e.g. Labrador, 65 lbs"
+        },
+        {
+          "type": "input",
+          "label": "Special Instructions",
+          "placeholder": "Allergies, behavior notes, route preferences\u2026"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "button",
+          "label": "Choose Time Slot & Pay",
+          "variant": "primary"
+        }
+      ]
+    },
+    {
+      "id": "s4",
+      "name": "Select Time Slot & Pay",
+      "elements": [
+        {
+          "type": "navbar",
+          "title": "Select Time Slot",
+          "actions": []
+        },
+        {
+          "type": "heading",
+          "text": "Pick a Date"
+        },
+        {
+          "type": "list",
+          "items": [
+            {
+              "title": "Today, Jun 12",
+              "subtitle": "3 slots available"
+            },
+            {
+              "title": "Tomorrow, Jun 13",
+              "subtitle": "5 slots available"
+            },
+            {
+              "title": "Sat, Jun 14",
+              "subtitle": "4 slots available"
+            },
+            {
+              "title": "Sun, Jun 15",
+              "subtitle": "2 slots available"
+            }
+          ]
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "heading",
+          "text": "Available Time Slots"
+        },
+        {
+          "type": "list",
+          "items": [
+            {
+              "title": "9:00 AM",
+              "subtitle": "Morning walk \u00b7 Available"
+            },
+            {
+              "title": "10:30 AM",
+              "subtitle": "Mid-morning walk \u00b7 Available"
+            },
+            {
+              "title": "1:00 PM",
+              "subtitle": "Afternoon walk \u00b7 Available"
+            },
+            {
+              "title": "4:00 PM",
+              "subtitle": "Late afternoon walk \u00b7 Available"
+            },
+            {
+              "title": "6:30 PM",
+              "subtitle": "Evening walk \u00b7 1 spot left"
+            }
+          ]
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "heading",
+          "text": "Payment Method"
+        },
+        {
+          "type": "card",
+          "title": "Visa ending in 4821",
+          "body": "Tap to change payment method",
+          "hasImage": false
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "text",
+          "text": "Total: $40.00"
+        },
+        {
+          "type": "button",
+          "label": "Pay & Confirm Booking",
+          "variant": "primary"
+        }
+      ]
+    }
+  ]
+}

@@ -41,3 +41,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .playwright-mcp/
+
+# raw screen recordings (too large for git; compressed mp4 is committed)
+docs/media/*.mov
