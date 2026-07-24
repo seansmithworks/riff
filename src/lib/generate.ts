@@ -49,9 +49,9 @@ function buildUserMessage(brief: string, currentArtifact?: Artifact): string {
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
-function buildRequestBody(messages: ChatMessage[]) {
+function buildRequestBody(messages: ChatMessage[], modelId: string = MODEL_ID) {
   return {
-    model: MODEL_ID,
+    model: modelId,
     messages,
     temperature: 0.4,
     max_tokens: 4000,
@@ -85,24 +85,42 @@ function validateArtifact(value: unknown): value is Artifact {
   return false;
 }
 
-async function callFireworks(messages: ChatMessage[]): Promise<string> {
-  const apiKey = process.env.FIREWORKS_API_KEY;
-  if (!apiKey) {
-    throw new Error("FIREWORKS_API_KEY is not set");
-  }
+// A single attempt cannot run longer than this — a live demo can't afford a
+// hung connection (one earlier call hung ~70s before failing).
+const REQUEST_TIMEOUT_MS = 25_000;
 
+// 1 initial attempt + 2 retries, short backoff between them so a transient
+// blip (dead venue wifi, Fireworks overload) doesn't cost real demo time.
+const MAX_ATTEMPTS = 3;
+const RETRY_BACKOFFS_MS = [400, 1000];
+
+class FireworksHttpError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+async function callFireworksOnce(
+  messages: ChatMessage[],
+  apiKey: string,
+  modelId: string,
+): Promise<string> {
   const res = await fetch(FIREWORKS_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(buildRequestBody(messages)),
+    body: JSON.stringify(buildRequestBody(messages, modelId)),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(
+    throw new FireworksHttpError(
+      res.status,
       `Fireworks API error ${res.status}: ${text || res.statusText}`,
     );
   }
@@ -113,6 +131,58 @@ async function callFireworks(messages: ChatMessage[]): Promise<string> {
     throw new Error("Fireworks API returned no content");
   }
   return content;
+}
+
+async function callFireworks(messages: ChatMessage[]): Promise<string> {
+  const apiKey = process.env.FIREWORKS_API_KEY;
+  if (!apiKey) {
+    throw new Error("FIREWORKS_API_KEY is not set");
+  }
+
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const modelId = attempt === MAX_ATTEMPTS ? FALLBACK_MODEL_ID : MODEL_ID;
+    try {
+      return await callFireworksOnce(messages, apiKey, modelId);
+    } catch (err) {
+      lastError = err;
+
+      // Retryable: thrown network errors (incl. timeout/abort, e.g. the
+      // IPv6-related "fetch failed" seen on this machine) have no HTTP
+      // status; 429/503 are Fireworks' own overload signals. Any other
+      // 4xx is our bug — retrying just burns demo seconds.
+      const status = err instanceof FireworksHttpError ? err.status : undefined;
+      const retryable =
+        status === undefined || status === 429 || status === 503;
+
+      if (!retryable || attempt === MAX_ATTEMPTS) {
+        throw err;
+      }
+
+      const nextAttempt = attempt + 1;
+      const reason =
+        status === 429
+          ? "HTTP 429"
+          : status === 503
+            ? "HTTP 503"
+            : "network error";
+      const fallbackNote =
+        nextAttempt === MAX_ATTEMPTS
+          ? ` (falling back to ${FALLBACK_MODEL_ID})`
+          : "";
+      console.error(
+        `[api/generate] attempt ${nextAttempt} after ${reason}${fallbackNote}`,
+      );
+
+      const backoff =
+        RETRY_BACKOFFS_MS[attempt - 1] ??
+        RETRY_BACKOFFS_MS[RETRY_BACKOFFS_MS.length - 1];
+      await new Promise((resolve) => setTimeout(resolve, backoff));
+    }
+  }
+
+  throw lastError;
 }
 
 export async function generateArtifact({
