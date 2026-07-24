@@ -12,10 +12,20 @@ export const FALLBACK_MODEL_ID = "accounts/fireworks/models/gpt-oss-120b";
 
 const SCHEMA_STRING = JSON.stringify(ARTIFACT_JSON_SCHEMA);
 
-const SYSTEM_PROMPT = `You are a senior product designer producing low-fidelity design artifacts as JSON for a live wireframing tool.
+const WIREFRAME_SCREEN_COUNT_RULE_INITIAL =
+  "For wireframes: produce EXACTLY 3 screens. Only include the screens the brief actually supports — never invent screens the brief doesn't call for.";
+const WIREFRAME_SCREEN_COUNT_RULE_EVOLVE =
+  "For wireframes: only include the screens the brief actually supports — never invent screens the brief doesn't call for.";
+
+function buildSystemPrompt(isEvolve: boolean): string {
+  const wireframeRule = isEvolve
+    ? WIREFRAME_SCREEN_COUNT_RULE_EVOLVE
+    : WIREFRAME_SCREEN_COUNT_RULE_INITIAL;
+
+  return `You are a senior product designer producing low-fidelity design artifacts as JSON for a live wireframing tool.
 
 Rules:
-- For wireframes: produce 2-4 screens. Only include the screens the brief actually supports — never invent screens the brief doesn't call for.
+- ${wireframeRule}
 - Use realistic, specific copy in labels/headings/list items/card text. Never use lorem ipsum or placeholders like "Label here" or "Item 1".
 - Design mobile-first: each screen's elements form a single vertical stack, top to bottom.
 - Use the element vocabulary deliberately: "searchbar" + "list" for browsing content, "card" for summaries, "row" for paired buttons (e.g. secondary + primary action), "tabbar" when the app has 3+ top-level sections.
@@ -26,6 +36,7 @@ Rules:
 ${SCHEMA_STRING}
 
 Respond with ONLY the JSON artifact — no prose, no markdown fences.`;
+}
 
 function buildUserMessage(brief: string, currentArtifact?: Artifact): string {
   if (!currentArtifact) {
@@ -112,7 +123,7 @@ export async function generateArtifact({
   currentArtifact?: Artifact;
 }): Promise<Artifact> {
   const messages: ChatMessage[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: buildSystemPrompt(Boolean(currentArtifact)) },
     { role: "user", content: buildUserMessage(brief, currentArtifact) },
   ];
 
@@ -152,7 +163,7 @@ export function buildRequestBodyForBrief(
   currentArtifact?: Artifact,
 ) {
   return buildRequestBody([
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: buildSystemPrompt(Boolean(currentArtifact)) },
     { role: "user", content: buildUserMessage(brief, currentArtifact) },
   ]);
 }
