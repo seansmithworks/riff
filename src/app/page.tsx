@@ -1,6 +1,7 @@
 import { Header } from "@/components/Header";
 import { ArtifactCanvas } from "@/components/ArtifactCanvas";
 import { ConversationPanel } from "@/components/ConversationPanel";
+import { CopilotPanel } from "@/components/CopilotPanel";
 
 export default function Home() {
   return (
@@ -12,6 +13,7 @@ export default function Home() {
         </main>
         <ConversationPanel />
       </div>
+      <CopilotPanel />
     </div>
   );
 }
