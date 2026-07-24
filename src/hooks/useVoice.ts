@@ -17,6 +17,13 @@ function artifactSummary(artifact: Artifact): string {
   }`;
 }
 
+// Module-level so state survives across re-renders of the hook (the
+// clientTools object below is recreated every render).
+// requestCounter is a monotonically increasing id for each render_artifact
+// call; inFlightRequests tracks how many generations are still pending.
+let requestCounter = 0;
+let inFlightRequests = 0;
+
 // Wraps ElevenLabs' useConversation with the render_artifact client tool and
 // keeps the zustand store (messages, status) in sync with the session.
 // Must be rendered inside a <ConversationProvider>.
@@ -45,38 +52,65 @@ export function useVoice() {
       setStatus(mode === "speaking" ? "speaking" : "listening");
     },
     clientTools: {
-      render_artifact: async ({
+      // Fires the generation request in the background and returns to the
+      // agent immediately. Generation takes 11-19s, and ElevenLabs abandons
+      // an in-flight client tool the moment the user speaks again — so this
+      // tool must never await the fetch. The artifact (and status) update
+      // later, out-of-band, when the fetch settles.
+      render_artifact: ({
         brief,
         artifact_kind,
       }: {
         brief: string;
         artifact_kind: "wireframe" | "flow";
       }) => {
+        const requestId = ++requestCounter;
+        inFlightRequests += 1;
         setStatus("thinking");
-        try {
-          const currentArtifact = useStore.getState().artifact;
-          const res = await fetch("/api/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              brief: `${brief}\n\nRender this as a ${artifact_kind}.`,
-              currentArtifact,
-            }),
+
+        const currentArtifact = useStore.getState().artifact;
+
+        fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            brief: `${brief}\n\nRender this as a ${artifact_kind}.`,
+            currentArtifact,
+          }),
+        })
+          .then(async (res) => {
+            if (!res.ok) {
+              throw new Error("generate request failed");
+            }
+            const { artifact } = (await res.json()) as { artifact: Artifact };
+            // Ignore this result if a newer render_artifact call has been
+            // issued since — the newest request always wins the canvas.
+            if (requestId === requestCounter) {
+              setArtifact(artifact);
+              addMessage({
+                role: "assistant",
+                text: artifactSummary(artifact),
+              });
+            }
+          })
+          .catch(() => {
+            if (requestId === requestCounter) {
+              addMessage({
+                role: "assistant",
+                text: "The canvas failed to update — continue the conversation and try again after the next answer.",
+              });
+            }
+          })
+          .finally(() => {
+            inFlightRequests = Math.max(0, inFlightRequests - 1);
+            if (inFlightRequests === 0) {
+              setStatus("listening");
+            }
           });
 
-          if (!res.ok) {
-            setStatus("listening");
-            return "The canvas failed to update — continue the conversation and try again after the next answer.";
-          }
-
-          const { artifact } = (await res.json()) as { artifact: Artifact };
-          setArtifact(artifact);
-          setStatus("listening");
-          return artifactSummary(artifact);
-        } catch {
-          setStatus("listening");
-          return "The canvas failed to update — continue the conversation and try again after the next answer.";
-        }
+        return Promise.resolve(
+          "Sketching that now — it'll appear on the canvas in a few seconds.",
+        );
       },
     },
   });
