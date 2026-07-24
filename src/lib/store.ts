@@ -6,6 +6,14 @@ export type Status = "idle" | "listening" | "thinking" | "speaking";
 export type JobStatus = "sketching" | "done" | "superseded" | "failed";
 export type Job = { id: number; label: string; status: JobStatus };
 
+// Shared across the voice (useVoice.ts) and text (CopilotPanel.tsx)
+// render_artifact paths so their job ids never collide in the queue strip.
+let jobIdCounter = 0;
+export function nextJobId(): number {
+  jobIdCounter += 1;
+  return jobIdCounter;
+}
+
 interface StoreState {
   artifact: Artifact | null;
   messages: Message[];

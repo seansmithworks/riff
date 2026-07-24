@@ -2,7 +2,7 @@
 
 import { useCallback } from "react";
 import { useConversation } from "@elevenlabs/react";
-import { useStore } from "@/lib/store";
+import { useStore, nextJobId } from "@/lib/store";
 import type { Artifact } from "@/lib/artifact";
 
 function jobLabel(brief: string): string {
@@ -24,9 +24,13 @@ function artifactSummary(artifact: Artifact): string {
 
 // Module-level so state survives across re-renders of the hook (the
 // clientTools object below is recreated every render).
-// requestCounter is a monotonically increasing id for each render_artifact
-// call; inFlightRequests tracks how many generations are still pending.
-let requestCounter = 0;
+// voiceGeneration is a monotonically increasing counter local to the voice
+// path, used only to detect whether a newer voice render_artifact call has
+// superseded this one by the time its fetch resolves. It's separate from the
+// job id (see nextJobId in store.ts, shared with the text path) so that the
+// text rail issuing a job id never falsely marks an in-flight voice response
+// as stale. inFlightRequests tracks how many generations are still pending.
+let voiceGeneration = 0;
 let inFlightRequests = 0;
 
 // Wraps ElevenLabs' useConversation with the render_artifact client tool and
@@ -71,7 +75,8 @@ export function useVoice() {
         brief: string;
         artifact_kind: "wireframe" | "flow";
       }) => {
-        const requestId = ++requestCounter;
+        const generation = ++voiceGeneration;
+        const requestId = nextJobId();
         inFlightRequests += 1;
         setStatus("thinking");
         addJob({ id: requestId, label: jobLabel(brief), status: "sketching" });
@@ -91,9 +96,9 @@ export function useVoice() {
               throw new Error("generate request failed");
             }
             const { artifact } = (await res.json()) as { artifact: Artifact };
-            // Ignore this result if a newer render_artifact call has been
-            // issued since — the newest request always wins the canvas.
-            if (requestId === requestCounter) {
+            // Ignore this result if a newer voice render_artifact call has
+            // been issued since — the newest request always wins the canvas.
+            if (generation === voiceGeneration) {
               setArtifact(artifact);
               addMessage({
                 role: "assistant",
@@ -106,7 +111,7 @@ export function useVoice() {
           })
           .catch(() => {
             updateJobStatus(requestId, "failed");
-            if (requestId === requestCounter) {
+            if (generation === voiceGeneration) {
               addMessage({
                 role: "assistant",
                 text: "The canvas failed to update — continue the conversation and try again after the next answer.",

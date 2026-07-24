@@ -6,8 +6,15 @@ import {
   type CopilotKitCSSProperties,
 } from "@copilotkit/react-ui";
 import { useCopilotAction, useCopilotReadable } from "@copilotkit/react-core";
-import { useStore } from "@/lib/store";
+import { useStore, nextJobId } from "@/lib/store";
 import type { Artifact } from "@/lib/artifact";
+
+// Matches the treatment in useVoice.ts so both paths look identical in the
+// render-queue status strip.
+function jobLabel(brief: string): string {
+  const words = brief.trim().split(/\s+/).slice(0, 6).join(" ");
+  return brief.trim().split(/\s+/).length > 6 ? `${words}…` : words;
+}
 
 function artifactSummary(artifact: Artifact): string {
   if (artifact.kind === "wireframe") {
@@ -27,6 +34,8 @@ function artifactSummary(artifact: Artifact): string {
 export function CopilotPanel() {
   const setArtifact = useStore((s) => s.setArtifact);
   const artifact = useStore((s) => s.artifact);
+  const addJob = useStore((s) => s.addJob);
+  const updateJobStatus = useStore((s) => s.updateJobStatus);
 
   useCopilotReadable({
     description:
@@ -56,24 +65,34 @@ export function CopilotPanel() {
     ],
     handler: async ({ brief, artifact_kind }) => {
       const currentArtifact = useStore.getState().artifact;
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          brief: `${brief}\n\nRender this as a ${artifact_kind}.`,
-          currentArtifact,
-        }),
-      });
+      const jobId = nextJobId();
+      addJob({ id: jobId, label: jobLabel(brief), status: "sketching" });
 
-      if (!res.ok) {
+      try {
+        const res = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            brief: `${brief}\n\nRender this as a ${artifact_kind}.`,
+            currentArtifact,
+          }),
+        });
+
+        if (!res.ok) {
+          updateJobStatus(jobId, "failed");
+          return "The canvas failed to update — try rephrasing and asking again.";
+        }
+
+        const { artifact: newArtifact } = (await res.json()) as {
+          artifact: Artifact;
+        };
+        setArtifact(newArtifact);
+        updateJobStatus(jobId, "done");
+        return artifactSummary(newArtifact);
+      } catch {
+        updateJobStatus(jobId, "failed");
         return "The canvas failed to update — try rephrasing and asking again.";
       }
-
-      const { artifact: newArtifact } = (await res.json()) as {
-        artifact: Artifact;
-      };
-      setArtifact(newArtifact);
-      return artifactSummary(newArtifact);
     },
   });
 
