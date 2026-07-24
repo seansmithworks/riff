@@ -6,9 +6,9 @@ import { ARTIFACT_JSON_SCHEMA, type Artifact } from "./artifact";
 const FIREWORKS_URL = "https://api.fireworks.ai/inference/v1/chat/completions";
 
 // Primary model per Fireworks' current fast-structured-output list.
-// Fallback (e.g. if the primary is unavailable): "accounts/fireworks/models/gpt-oss-20b".
-export const MODEL_ID = "accounts/fireworks/models/kimi-k2p5";
-export const FALLBACK_MODEL_ID = "accounts/fireworks/models/gpt-oss-20b";
+// Fallback (e.g. if the primary is unavailable): "accounts/fireworks/models/gpt-oss-120b".
+export const MODEL_ID = "accounts/fireworks/models/glm-5p1";
+export const FALLBACK_MODEL_ID = "accounts/fireworks/models/gpt-oss-120b";
 
 const SCHEMA_STRING = JSON.stringify(ARTIFACT_JSON_SCHEMA);
 
@@ -48,7 +48,10 @@ function buildRequestBody(messages: ChatMessage[]) {
       type: "json_schema",
       json_schema: {
         name: "Artifact",
-        schema: ARTIFACT_JSON_SCHEMA,
+        // Fireworks requires a top-level "type" field on the schema; the
+        // canonical ARTIFACT_JSON_SCHEMA (artifact.ts) is a bare `anyOf` of
+        // two object schemas, so add it here without altering the contract.
+        schema: { ...ARTIFACT_JSON_SCHEMA, type: "object" },
       },
     },
   };
