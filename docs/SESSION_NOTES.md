@@ -46,3 +46,14 @@ This would have silently eaten the best moment of the demo — the artifact woul
 Repeated advisory nudges to submit early did not change the outcome. Captured as a durable rule in memory: on hard external deadlines, a submitted draft is a **blocking gate that precedes polish**, not a task competing with it — and the orchestrator should enforce it as a gate. See `feedback_deadline-submit-draft-first.md`.
 
 Open items: `BACKLOG.md`.
+
+### Post-event capture (same session, ~3:40–3:55 PM)
+
+After the event closed, captured the assets that would be expensive to reconstruct later. Commits `fc4d861`, `435bc3d`.
+
+- **The evolve moment, on the record.** Re-ran it against prod: "book a dog walker" → 3 screens (12.8s), then one sentence — "add a screen where they pick a time slot and pay" → 4 screens (35.1s). Two screens preserved untouched, the new screen inserted at the correct flow position, and the third screen **renamed itself** from "Confirm Booking" to "Booking Details" while its button changed from *"Confirm Booking"* to *"Choose Time Slot & Pay"* — because it stopped being the last step. Nobody asked for that. Written up in `docs/evidence/EVOLVE-MOMENT.md` with both artifact JSONs.
+- **Cost, dashboard-verified.** ElevenLabs $2.76 (26 min, 332 billable requests, 12.5K of 400K credits, 197ms avg TTFB). Daytona $0.12 (7 sandboxes). Fireworks cents; Braintrust and Vercel free tier. **Total ~$2.88.** In `docs/evidence/COST.md`.
+- **Scaling finding:** each Daytona sandbox burned ~915 CPU-seconds (~15 min) to serve a static page for ~3 seconds — they idle until auto-stop. Irrelevant at $0.12; dominant at user scale. Logged in `BACKLOG.md`.
+- **Demo video** at `docs/media/riff-demo.mp4` (3:27, 3MB, compressed from a 169MB raw `.mov` which is gitignored).
+
+Correction to the earlier process note: the proximate cause of the missed deadline was **a video upload** — Sean was trying to get a demo recording onto YouTube at the wire, having forgotten he'd already supplied a link. Scope creep set up the situation; the upload is what actually consumed the last minutes. The rule in `feedback_deadline-submit-draft-first.md` still holds and arguably gets sharper: get the submittable draft in *first*, then attach media.
