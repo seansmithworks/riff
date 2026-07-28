@@ -37,7 +37,9 @@ export default function Home() {
         onToggleConversation={() => setPresentation((p) => !p)}
       />
       <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
-        <main className="flex-1 overflow-hidden">
+        <main
+          className={`flex-1 overflow-hidden ${presentation ? "pb-40" : ""}`}
+        >
           <ArtifactCanvas />
         </main>
         <ConversationPanel presentation={presentation} />
