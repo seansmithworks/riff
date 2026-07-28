@@ -1,24 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Header, RiffLogo } from "@/components/Header";
+import { Header, RiffLogo, ChatButton } from "@/components/Header";
 import { ArtifactCanvas } from "@/components/ArtifactCanvas";
 import { ConversationPanel } from "@/components/ConversationPanel";
 import { CopilotPanel } from "@/components/CopilotPanel";
 import { useStore } from "@/lib/store";
 
 export default function Home() {
-  const [presentation, setPresentation] = useState(true);
   const [chatOpen, setChatOpen] = useState(false);
-
-  useEffect(() => {
-    if (!presentation) return;
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setPresentation(false);
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [presentation]);
 
   // Dev-only hook so Playwright/E2E scripts can seed store.messages without
   // a live voice session. No-op in production builds.
@@ -31,19 +21,12 @@ export default function Home() {
   return (
     <div className="flex h-screen w-screen flex-col bg-[#f4f4f5]">
       <RiffLogo />
-      <Header
-        onOpenChat={() => setChatOpen(true)}
-        presentation={presentation}
-        onToggleConversation={() => setPresentation((p) => !p)}
-      />
-      <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
-        <main
-          className={`flex-1 overflow-hidden ${presentation ? "pb-40" : ""}`}
-        >
-          <ArtifactCanvas />
-        </main>
-        <ConversationPanel presentation={presentation} />
-      </div>
+      <Header />
+      <ChatButton open={chatOpen} onClick={() => setChatOpen((o) => !o)} />
+      <main className="flex-1 overflow-hidden">
+        <ArtifactCanvas />
+      </main>
+      <ConversationPanel />
       <CopilotPanel open={chatOpen} onOpenChange={setChatOpen} />
     </div>
   );

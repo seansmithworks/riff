@@ -1,13 +1,18 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import "@copilotkit/react-ui/styles.css";
 import {
   CopilotSidebar,
   useChatContext,
   type CopilotKitCSSProperties,
 } from "@copilotkit/react-ui";
-import { useCopilotAction, useCopilotReadable } from "@copilotkit/react-core";
+import {
+  useCopilotAction,
+  useCopilotChat,
+  useCopilotReadable,
+} from "@copilotkit/react-core";
+import { TextMessage, Role } from "@copilotkit/runtime-client-gql";
 import { useStore, nextJobId } from "@/lib/store";
 import type { Artifact } from "@/lib/artifact";
 
@@ -41,9 +46,40 @@ function ChatOpenSync({ open }: { open: boolean }) {
   return null;
 }
 
-// Demo-insurance text rail: drives the exact same artifact loop as voice
-// (POST /api/generate -> setArtifact) via a CopilotKit action, in case room
-// noise stomps speech recognition during the live demo.
+// Mirrors voice-originated turns (from useVoice.ts / ElevenLabs, tracked in
+// the zustand store) into CopilotKit's own message list, so this sidebar is
+// the single surface showing both voice and typed turns in one thread.
+// appendMessage(..., { followUp: false }) adds the message to the visible
+// thread without triggering a chat completion — voice turns never go through
+// the CopilotKit runtime. Only appends messages not yet synced, so a user's
+// typed conversation is never clobbered.
+function VoiceTranscriptSync() {
+  const storeMessages = useStore((s) => s.messages);
+  const { appendMessage } = useCopilotChat();
+  const syncedCount = useRef(0);
+
+  useEffect(() => {
+    if (storeMessages.length <= syncedCount.current) return;
+    const newMessages = storeMessages.slice(syncedCount.current);
+    syncedCount.current = storeMessages.length;
+    newMessages.forEach((message) => {
+      appendMessage(
+        new TextMessage({
+          role: message.role === "user" ? Role.User : Role.Assistant,
+          content: message.text,
+        }),
+        { followUp: false },
+      );
+    });
+  }, [storeMessages, appendMessage]);
+
+  return null;
+}
+
+// The single chat surface: transcript (voice + typed, via VoiceTranscriptSync
+// above) and text input in one thread. Drives the same artifact loop as
+// voice (POST /api/generate -> setArtifact) via a CopilotKit action, so
+// typing works identically to speaking.
 export function CopilotPanel({
   open,
   onOpenChange,
@@ -152,13 +188,14 @@ export function CopilotPanel({
         onSetOpen={onOpenChange}
         Button={() => null}
         labels={{
-          title: "Riff — text rail",
+          title: "Riff",
           initial:
-            "Describe an app, feature, or screen and I'll render it on the canvas. This works even if voice can't hear you.",
+            "Describe an app, feature, or screen and I'll render it on the canvas — by voice or by typing here. Your voice conversation shows up in this thread too.",
         }}
         instructions="You are Riff, a senior design partner. When the user describes an app, feature, or screen, call render_artifact with a clear brief and the right artifact_kind (wireframe or flow). If an artifact is already on screen, evolve it rather than starting over. Ask at most one sharp clarifying question at a time; otherwise make a reasonable call and render."
       >
         <ChatOpenSync open={open} />
+        <VoiceTranscriptSync />
       </CopilotSidebar>
     </div>
   );

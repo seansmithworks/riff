@@ -51,8 +51,17 @@ function FlowCanvasInner({
 
   const nodeIds = layoutedNodes.map((n) => n.id).join("-");
 
+  // Bottom padding keeps artifacts clear of the always-on mic overlay
+  // (~160px tall) without shrinking the ReactFlow container itself — that
+  // shrinking is what used to detach <Controls /> from the true viewport
+  // corner (see page.tsx main, which no longer carries pb-40).
   useEffect(() => {
-    fitView({ padding: 0.15, minZoom: 0.5, maxZoom: 2.5, duration: 400 });
+    fitView({
+      padding: { top: 0.15, right: 0.15, bottom: "180px", left: 0.15 },
+      minZoom: 0.5,
+      maxZoom: 2.5,
+      duration: 400,
+    });
   }, [nodeIds, fitView]);
 
   return (
@@ -69,7 +78,11 @@ function FlowCanvasInner({
         edges={flowEdges}
         nodeTypes={nodeTypes}
         fitView
-        fitViewOptions={{ padding: 0.15, minZoom: 0.5, maxZoom: 2.5 }}
+        fitViewOptions={{
+          padding: { top: 0.15, right: 0.15, bottom: "180px", left: 0.15 },
+          minZoom: 0.5,
+          maxZoom: 2.5,
+        }}
         minZoom={0.2}
         maxZoom={2.5}
         proOptions={{ hideAttribution: true }}
