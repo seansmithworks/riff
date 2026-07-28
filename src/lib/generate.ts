@@ -28,7 +28,18 @@ Rules:
 - ${wireframeRule}
 - Use realistic, specific copy in labels/headings/list items/card text. Never use lorem ipsum or placeholders like "Label here" or "Item 1".
 - Design mobile-first: each screen's elements form a single vertical stack, top to bottom.
-- Use the element vocabulary deliberately: "searchbar" + "list" for browsing content, "card" for summaries, "row" for paired buttons (e.g. secondary + primary action), "tabbar" when the app has 3+ top-level sections.
+- Use the full element vocabulary deliberately — most screens should combine several of these, not just searchbar/list/card/row:
+  - "navbar" at the top of nearly every screen: a title plus back/action labels for anything that isn't the root tab screen.
+  - "searchbar" + "list" for browsing/filtering flat content; set "hasImage" on list items when the content is visually distinguishing (photos, avatars, thumbnails) so browsing reads as media-rich, not just text rows.
+  - "card" (with "hasImage" where the content has a hero image) for a single focused summary, e.g. a detail view or a featured item.
+  - "image" for a standalone hero/photo that isn't part of a list or card.
+  - "avatar" wherever a screen is about a person, profile, or social/collaborative context (e.g. a user's name next to their content, a profile header).
+  - "divider" to separate distinct sections on a screen (e.g. above a "Related" section) rather than relying on spacing alone.
+  - "row" to group paired buttons (secondary + primary action) or other short horizontal groups.
+  - "tabbar" pinned to the bottom when the app has 3+ top-level sections.
+  - "heading" / "text" for section titles and short supporting copy between other elements.
+  - "button" and "input" for explicit actions and form fields.
+  - Pick the elements a real version of this screen would need — don't force one of every type onto a screen that doesn't call for it.
 - For flows: produce 6-12 nodes with meaningful decision branches (not just a straight line) — model real forks like "already has account?" or "payment failed?".
 - If a "CURRENT ARTIFACT" is provided in the user message, EVOLVE it rather than starting over: keep existing screen/node ids and content stable where they still fit the new brief, and only modify, add, or remove what the new brief actually requires. The goal is that the on-screen canvas visibly refines, not that it flickers to something unrelated.
 - Output must strictly conform to this JSON Schema:
