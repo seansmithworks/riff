@@ -118,11 +118,11 @@ export function CopilotPanel({
   const themeVars: CopilotKitCSSProperties = {
     "--copilot-kit-primary-color": "#1F7A4D",
     "--copilot-kit-contrast-color": "#fafafa",
-    "--copilot-kit-background-color": "#18181b",
-    "--copilot-kit-input-background-color": "#09090b",
-    "--copilot-kit-secondary-color": "#27272a",
-    "--copilot-kit-secondary-contrast-color": "#a1a1aa",
-    "--copilot-kit-separator-color": "#27272a",
+    "--copilot-kit-background-color": "#ffffff",
+    "--copilot-kit-input-background-color": "#ffffff",
+    "--copilot-kit-secondary-color": "#e4e4e7",
+    "--copilot-kit-secondary-contrast-color": "#18181b",
+    "--copilot-kit-separator-color": "#e4e4e7",
     "--copilot-kit-muted-color": "#71717a",
   };
 
@@ -131,13 +131,13 @@ export function CopilotPanel({
       {/* CopilotKit reuses --copilot-kit-contrast-color for both the header
           background and text-on-accent (e.g. the toggle button icon), so the
           header can't be retinted via CSS vars alone without also breaking
-          contrast elsewhere. Scope a small override to match the dark shell. */}
+          contrast elsewhere. Scope a small override to match the light shell. */}
       <style jsx global>{`
         .copilotKitHeader {
-          background-color: #18181b;
+          background-color: #ffffff;
         }
         .copilotKitHeader > button {
-          color: #a1a1aa;
+          color: #71717a;
         }
       `}</style>
       <CopilotSidebar
