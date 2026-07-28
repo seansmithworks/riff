@@ -139,6 +139,12 @@ export function CopilotPanel({
         .copilotKitHeader > button {
           color: #71717a;
         }
+        .copilotKitInput > textarea::placeholder {
+          color: #71717a;
+        }
+        .copilotKitSidebar .copilotKitWindow {
+          border-left: 1px solid #e4e4e7;
+        }
       `}</style>
       <CopilotSidebar
         defaultOpen={false}
