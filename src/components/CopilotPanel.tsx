@@ -53,15 +53,21 @@ function ChatOpenSync({ open }: { open: boolean }) {
 // thread without triggering a chat completion — voice turns never go through
 // the CopilotKit runtime. Only appends messages not yet synced, so a user's
 // typed conversation is never clobbered.
+//
+// Gated on isAvailable and only advances syncedCount AFTER a successful
+// append: appendMessage no-ops if the underlying agent hasn't connected yet
+// (useCopilotChatInternal's sendMessage early-returns `if (!agent) return`),
+// so a turn arriving before connectAgent() resolves must stay unsynced and
+// retried on the next store update rather than being marked synced and lost.
 function VoiceTranscriptSync() {
   const storeMessages = useStore((s) => s.messages);
-  const { appendMessage } = useCopilotChat();
+  const { appendMessage, isAvailable } = useCopilotChat();
   const syncedCount = useRef(0);
 
   useEffect(() => {
+    if (!isAvailable) return;
     if (storeMessages.length <= syncedCount.current) return;
     const newMessages = storeMessages.slice(syncedCount.current);
-    syncedCount.current = storeMessages.length;
     newMessages.forEach((message) => {
       appendMessage(
         new TextMessage({
@@ -71,7 +77,8 @@ function VoiceTranscriptSync() {
         { followUp: false },
       );
     });
-  }, [storeMessages, appendMessage]);
+    syncedCount.current = storeMessages.length;
+  }, [storeMessages, appendMessage, isAvailable]);
 
   return null;
 }

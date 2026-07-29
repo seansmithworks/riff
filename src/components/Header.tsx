@@ -206,10 +206,11 @@ function SampleLoaderButton({
   );
 }
 
-// Floating toolbar — view controls + hand-off, top-right. Every icon control
-// has an aria-label + title tooltip so the demo doesn't depend on
-// remembering positions. The chat entry point is a separate floating button
-// (see ChatButton below), not part of this pill.
+// Floating toolbar, top-right — hand-off in production; sample loaders too
+// in non-production builds (see SampleLoaderButton). Every icon control has
+// an aria-label + title tooltip so the demo doesn't depend on remembering
+// positions. The chat entry point is a separate floating button (see
+// ChatButton below), not part of this pill.
 export function Header() {
   const setArtifact = useStore((s) => s.setArtifact);
 
@@ -239,6 +240,15 @@ export function Header() {
 // Single chat entry point — independently floating (not part of the pill)
 // so it reads as its own surface. Bottom-right keeps it clear of the
 // top-right pill, the top-left logo, and the bottom-center mic.
+//
+// Renders nothing while the sidebar is open: CopilotKit's sidebar window is
+// `fixed`/`width:28rem` inside `.copilotKitSidebar { z-index: 30 }`, and
+// <CopilotPanel> mounts after this button in page.tsx, so at equal z-index
+// the sidebar always paints on top and this button becomes unreachable
+// underneath it. The sidebar's own header X already closes it, so hiding
+// this button when open costs nothing. (A z-40 + right-offset fix was
+// considered and rejected — it doesn't survive the <640px breakpoint where
+// the sidebar goes `inset:0` and covers the whole viewport anyway.)
 export function ChatButton({
   open,
   onClick,
@@ -246,6 +256,8 @@ export function ChatButton({
   open: boolean;
   onClick: () => void;
 }) {
+  if (open) return null;
+
   return (
     <button
       type="button"
