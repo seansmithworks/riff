@@ -11,11 +11,38 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { BatteryFull, SignalHigh, Wifi } from "lucide-react";
 import type { Screen } from "@/lib/artifact";
 import { WireframeElement } from "./WireframeElement";
 
 const FRAME_WIDTH = 340;
 const GUTTER = 96;
+
+// Static iOS status bar — time left, connectivity glyphs right. Monochrome,
+// quiet, never interactive.
+function StatusBar() {
+  return (
+    <div className="flex shrink-0 items-center justify-between px-5 pb-1 pt-2">
+      <span className="text-[13px] font-semibold text-zinc-900">9:41</span>
+      <div className="flex items-center gap-1.5 text-zinc-500">
+        <SignalHigh className="h-3.5 w-3.5" strokeWidth={1.75} />
+        <Wifi className="h-3.5 w-3.5" strokeWidth={1.75} />
+        <BatteryFull className="h-4 w-4" strokeWidth={1.75} />
+      </div>
+    </div>
+  );
+}
+
+// Home indicator lives in its own flex row below the scrollable screen
+// content (which is where `tabbar` renders via `mt-auto`), so it never
+// overlaps the tab bar regardless of screen content.
+function HomeIndicator() {
+  return (
+    <div className="flex shrink-0 items-center justify-center py-2">
+      <div className="h-[5px] w-[134px] rounded-full bg-zinc-300" />
+    </div>
+  );
+}
 
 function PhoneFrameNode({ data }: NodeProps) {
   const screen = data.screen as Screen;
@@ -25,11 +52,13 @@ function PhoneFrameNode({ data }: NodeProps) {
         {screen.name}
       </span>
       <div className="flex h-[640px] w-[340px] flex-col overflow-hidden rounded-[28px] border border-zinc-300 bg-white shadow-[0_20px_50px_-15px_rgba(0,0,0,0.6)]">
+        <StatusBar />
         <div className="flex flex-1 flex-col gap-3 overflow-y-auto py-3">
           {screen.elements.map((element, i) => (
             <WireframeElement key={i} element={element} />
           ))}
         </div>
+        <HomeIndicator />
       </div>
     </div>
   );
