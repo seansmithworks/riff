@@ -72,7 +72,12 @@ A light "studio" workspace — a light gray canvas that reads well projected in 
 ## 3. Typography
 
 - **Font:** Geist Sans (loaded via `next/font/google` in `layout.tsx`), monospace via Geist Mono.
-- No custom type scale was needed for this wave — headings/labels use Tailwind's default text sizes (`text-xs` through `text-lg`) at weights 400/500/600. Extend this section if the UI grows beyond the artifact canvas + conversation panel.
+- **Wireframe kit type scale:** the phone frame renders at 340px wide — roughly 0.87x a real 390px iPhone screen — so the kit uses iOS point sizes scaled down accordingly, each paired with an explicit line-height via Tailwind v4's slash modifier (arbitrary font sizes lose preflight's `line-height: 1.5` mismatch against iOS's ~1.3 otherwise):
+  - `text-[19px]/[24px]` — headings
+  - `text-[15px]/[19px]` — titles, buttons, navbar text, list/card titles
+  - `text-[13px]/[16px]` — body copy, input values, list/card subtitles
+  - `text-[11px]/[14px]` — input labels
+  This scale is local to `src/components/WireframeElement.tsx` and `WireframeCanvas.tsx`; the rest of the app (shell chrome, CopilotKit panel) still uses Tailwind's default text sizes.
 
 ## 4. Component Stylings
 

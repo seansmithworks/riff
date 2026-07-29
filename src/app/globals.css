@@ -25,6 +25,16 @@ body {
   font-family: var(--font-sans), system-ui, Arial, Helvetica, sans-serif;
 }
 
+/* Hides the browser scrollbar on the wireframe phone-frame scroll column
+   without disabling scroll — see src/components/WireframeCanvas.tsx */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* Presentation-mode voice glow — see src/components/PresentationOverlay.tsx */
 @keyframes riff-glow-listening {
   0%,
