@@ -183,152 +183,111 @@ export function RiffLogo() {
   );
 }
 
-// Floating icon toolbar — the only chrome over the full-canvas artifact
-// surface. Every control is icon-only with an aria-label + title tooltip so
-// the demo doesn't depend on remembering positions.
-export function Header({
-  onOpenChat,
-  presentation,
-  onToggleConversation,
+// Dev-only affordance for seeding the canvas without a live voice/text
+// session. Deliberately NOT styled like the view controls next to it — text
+// label (not an icon), muted color, dashed chip — so it can't be mistaken
+// for a "switch view" toggle. Hidden entirely in production builds.
+function SampleLoaderButton({
+  label,
+  onClick,
 }: {
-  onOpenChat: () => void;
-  presentation: boolean;
-  onToggleConversation: () => void;
+  label: string;
+  onClick: () => void;
 }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`Dev only — injects sample content onto the canvas (${label})`}
+      className="rounded-full border border-dashed border-zinc-300 px-2.5 py-1 text-[10px] font-medium whitespace-nowrap text-zinc-400 transition-colors hover:border-zinc-400 hover:text-zinc-600"
+    >
+      {label}
+    </button>
+  );
+}
+
+// Floating toolbar, top-right — hand-off in production; sample loaders too
+// in non-production builds (see SampleLoaderButton). Every icon control has
+// an aria-label + title tooltip so the demo doesn't depend on remembering
+// positions. The chat entry point is a separate floating button (see
+// ChatButton below), not part of this pill.
+export function Header() {
   const setArtifact = useStore((s) => s.setArtifact);
 
   return (
     <div className="fixed top-6 right-6 z-30 flex items-center gap-1 rounded-full border border-zinc-200 bg-white/95 p-1.5 shadow-lg backdrop-blur-sm">
-      <div className="flex items-center gap-0.5">
-        <IconButton
-          label="Wireframe"
-          onClick={() => setArtifact(SAMPLE_WIREFRAME)}
-        >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            aria-hidden="true"
-          >
-            <rect
-              x="3"
-              y="4"
-              width="8"
-              height="16"
-              rx="1.5"
-              stroke="currentColor"
-              strokeWidth="1.8"
+      {process.env.NODE_ENV !== "production" && (
+        <>
+          <div className="flex items-center gap-1 pl-1">
+            <SampleLoaderButton
+              label="Load sample wireframe"
+              onClick={() => setArtifact(SAMPLE_WIREFRAME)}
             />
-            <rect
-              x="13"
-              y="4"
-              width="8"
-              height="10"
-              rx="1.5"
-              stroke="currentColor"
-              strokeWidth="1.8"
+            <SampleLoaderButton
+              label="Load sample flow"
+              onClick={() => setArtifact(SAMPLE_FLOW)}
             />
-          </svg>
-        </IconButton>
-
-        <IconButton label="Flow" onClick={() => setArtifact(SAMPLE_FLOW)}>
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            aria-hidden="true"
-          >
-            <circle
-              cx="5"
-              cy="6"
-              r="2.3"
-              stroke="currentColor"
-              strokeWidth="1.8"
-            />
-            <circle
-              cx="19"
-              cy="6"
-              r="2.3"
-              stroke="currentColor"
-              strokeWidth="1.8"
-            />
-            <circle
-              cx="19"
-              cy="18"
-              r="2.3"
-              stroke="currentColor"
-              strokeWidth="1.8"
-            />
-            <path
-              d="M7.3 6h9.4M17 8.3v7.4a2 2 0 0 1-2 2H9"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-            />
-          </svg>
-        </IconButton>
-      </div>
-
-      <div className="mx-0.5 h-5 w-px bg-zinc-200" aria-hidden="true" />
+          </div>
+          <div className="mx-0.5 h-5 w-px bg-zinc-200" aria-hidden="true" />
+        </>
+      )}
 
       <ShareButton />
-
-      <div className="mx-0.5 h-5 w-px bg-zinc-200" aria-hidden="true" />
-
-      <IconButton
-        label={presentation ? "Show conversation" : "Hide conversation"}
-        active={!presentation}
-        onClick={onToggleConversation}
-      >
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          aria-hidden="true"
-        >
-          <path
-            d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4H6.5A2.5 2.5 0 0 1 4 12.5v-7Z"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </IconButton>
-
-      <IconButton label="Open text rail" onClick={onOpenChat}>
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          aria-hidden="true"
-        >
-          <rect
-            x="3"
-            y="6"
-            width="18"
-            height="12"
-            rx="2"
-            stroke="currentColor"
-            strokeWidth="1.8"
-          />
-          <path
-            d="M6.5 10h.01M9.5 10h.01M12.5 10h.01M15.5 10h.01M17.5 10h.01"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
-          <path
-            d="M7 15h10"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-          />
-        </svg>
-      </IconButton>
     </div>
+  );
+}
+
+// Single chat entry point — independently floating (not part of the pill)
+// so it reads as its own surface. Bottom-right keeps it clear of the
+// top-right pill, the top-left logo, and the bottom-center mic.
+//
+// Stays mounted while the panel is open (unmounting would kill the morph
+// animation) but fades/scales out and goes non-interactive as the panel
+// grows from this exact spot — see CopilotPanel.tsx's `.copilotKitWindow`
+// overrides, which are inset/anchored to line up with this button's
+// bottom-right corner so the panel reads as this button expanding, not two
+// separate objects. `disabled` + `aria-hidden` guarantee it's unreachable
+// (not just visually gone) for the whole time the panel is open, matching
+// the z-index finding from the previous pass: CopilotKit's window paints on
+// top of this button at equal z-index, so open state must never rely on the
+// button being visually covered alone.
+export function ChatButton({
+  open,
+  onClick,
+}: {
+  open: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={open}
+      aria-label={open ? "Close chat" : "Open chat"}
+      aria-pressed={open}
+      aria-hidden={open}
+      tabIndex={open ? -1 : 0}
+      title={open ? "Close chat" : "Open chat"}
+      className={`fixed bottom-6 right-6 z-30 flex h-12 w-12 items-center justify-center rounded-full border border-zinc-200 bg-white/95 shadow-lg backdrop-blur-sm transition-[opacity,transform] duration-[260ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:duration-150 motion-reduce:ease-out ${
+        open
+          ? "pointer-events-none scale-75 opacity-0 motion-reduce:scale-100"
+          : "scale-100 opacity-100 hover:bg-zinc-50"
+      } ${open ? "text-[#1F7A4D]" : "text-zinc-600"}`}
+    >
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true"
+      >
+        <path
+          d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4H6.5A2.5 2.5 0 0 1 4 12.5v-7Z"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </button>
   );
 }
