@@ -158,9 +158,13 @@ async function callFireworks(
   }
 
   let lastError: unknown;
+  let primaryFailedWith5xx = false;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const modelId = attempt === MAX_ATTEMPTS ? FALLBACK_MODEL_ID : MODEL_ID;
+    const modelId =
+      attempt === MAX_ATTEMPTS || primaryFailedWith5xx
+        ? FALLBACK_MODEL_ID
+        : MODEL_ID;
     try {
       const content = await callFireworksOnce(messages, apiKey, modelId);
       return { content, model: modelId };
@@ -169,11 +173,24 @@ async function callFireworks(
 
       // Retryable: thrown network errors (incl. timeout/abort, e.g. the
       // IPv6-related "fetch failed" seen on this machine) have no HTTP
-      // status; 429/503 are Fireworks' own overload signals. Any other
+      // status; 429/503 are Fireworks' own overload signals; 5xx means the
+      // provider itself is down, so fall over to FALLBACK_MODEL_ID right
+      // away instead of burning retries on a dead endpoint. Any other
       // 4xx is our bug — retrying just burns demo seconds.
       const status = err instanceof FireworksHttpError ? err.status : undefined;
       const retryable =
-        status === undefined || status === 429 || status === 503;
+        status === undefined ||
+        status === 429 ||
+        (status >= 500 && status < 600);
+
+      if (
+        status !== undefined &&
+        status >= 500 &&
+        status < 600 &&
+        modelId === MODEL_ID
+      ) {
+        primaryFailedWith5xx = true;
+      }
 
       if (!retryable || attempt === MAX_ATTEMPTS) {
         if (err instanceof Error) {
@@ -188,9 +205,11 @@ async function callFireworks(
           ? "HTTP 429"
           : status === 503
             ? "HTTP 503"
-            : "network error";
+            : status !== undefined && status >= 500 && status < 600
+              ? `HTTP ${status}`
+              : "network error";
       const fallbackNote =
-        nextAttempt === MAX_ATTEMPTS
+        nextAttempt === MAX_ATTEMPTS || primaryFailedWith5xx
           ? ` (falling back to ${FALLBACK_MODEL_ID})`
           : "";
       console.error(
