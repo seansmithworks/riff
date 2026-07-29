@@ -10,22 +10,40 @@ import {
 } from "@copilotkit/runtime";
 import type { NextRequest } from "next/server";
 
-const openai = new OpenAI({
-  apiKey: process.env.FIREWORKS_API_KEY,
-  baseURL: "https://api.fireworks.ai/inference/v1",
-});
+// Constructing the OpenAI client / adapter requires FIREWORKS_API_KEY, which
+// is only guaranteed to be present at request time (not during `next build`'s
+// page-data collection, and not on Vercel Preview where env vars are scoped
+// Production-only). Build these lazily, on first request, instead of at
+// module scope.
+let serviceAdapter: OpenAIAdapter | undefined;
+let runtime: CopilotRuntime | undefined;
 
-const serviceAdapter = new OpenAIAdapter({
-  openai,
-  model: "accounts/fireworks/models/glm-5p1",
-});
+function getServiceAdapter(): OpenAIAdapter {
+  if (!serviceAdapter) {
+    const openai = new OpenAI({
+      apiKey: process.env.FIREWORKS_API_KEY,
+      baseURL: "https://api.fireworks.ai/inference/v1",
+    });
 
-const runtime = new CopilotRuntime();
+    serviceAdapter = new OpenAIAdapter({
+      openai,
+      model: "accounts/fireworks/models/glm-5p1",
+    });
+  }
+  return serviceAdapter;
+}
+
+function getRuntime(): CopilotRuntime {
+  if (!runtime) {
+    runtime = new CopilotRuntime();
+  }
+  return runtime;
+}
 
 export async function POST(req: NextRequest) {
   const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
-    runtime,
-    serviceAdapter,
+    runtime: getRuntime(),
+    serviceAdapter: getServiceAdapter(),
     endpoint: "/api/copilotkit",
   });
 
