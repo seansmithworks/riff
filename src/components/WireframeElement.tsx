@@ -1,3 +1,4 @@
+import { ChevronRight, Search, Square } from "lucide-react";
 import type { Element } from "@/lib/artifact";
 
 // Diagonal-cross placeholder box used for images.
@@ -55,7 +56,7 @@ function Button({
     return (
       <button
         type="button"
-        className="w-full rounded-full border border-zinc-300 px-4 py-2 text-center text-sm font-medium text-zinc-700"
+        className="w-full rounded-full border border-zinc-300 px-4 py-2 text-center text-[15px]/[19px] font-medium text-zinc-700"
       >
         {label}
       </button>
@@ -64,7 +65,7 @@ function Button({
   return (
     <button
       type="button"
-      className="w-full rounded-full bg-[#1F7A4D] px-4 py-2 text-center text-sm font-semibold text-white"
+      className="w-full rounded-full bg-[#1F7A4D] px-4 py-2 text-center text-[15px]/[19px] font-semibold text-white"
     >
       {label}
     </button>
@@ -76,13 +77,13 @@ export function WireframeElement({ element }: { element: Element }) {
     case "navbar":
       return (
         <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-2.5">
-          <span className="text-sm font-semibold text-zinc-900">
+          <span className="min-w-0 truncate text-[15px]/[19px] font-semibold text-zinc-900">
             {element.title}
           </span>
           {element.actions?.length ? (
-            <div className="flex gap-2">
+            <div className="flex shrink-0 gap-2">
               {element.actions.map((action) => (
-                <span key={action} className="text-xs text-zinc-500">
+                <span key={action} className="text-[15px]/[19px] text-zinc-500">
                   {action}
                 </span>
               ))}
@@ -93,14 +94,14 @@ export function WireframeElement({ element }: { element: Element }) {
 
     case "heading":
       return (
-        <h3 className="px-3 text-base font-semibold text-zinc-900">
+        <h3 className="px-3 text-[19px]/[24px] font-bold text-zinc-900">
           {element.text}
         </h3>
       );
 
     case "text":
       return (
-        <p className="px-3 text-xs leading-relaxed text-zinc-500">
+        <p className="px-3 text-[13px] leading-relaxed text-zinc-500">
           {element.text}
         </p>
       );
@@ -115,10 +116,10 @@ export function WireframeElement({ element }: { element: Element }) {
     case "input":
       return (
         <div className="flex flex-col gap-1 px-3">
-          <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+          <span className="text-[11px]/[14px] font-medium text-zinc-400">
             {element.label}
           </span>
-          <div className="rounded-md border border-zinc-300 bg-white px-2.5 py-2 text-xs text-zinc-400">
+          <div className="rounded-md border border-zinc-300 bg-white px-2.5 py-2 text-[13px]/[16px] text-zinc-400">
             {element.placeholder ?? ""}
           </div>
         </div>
@@ -128,8 +129,11 @@ export function WireframeElement({ element }: { element: Element }) {
       return (
         <div className="px-3">
           <div className="flex items-center gap-1.5 rounded-full border border-zinc-300 bg-zinc-50 px-3 py-2">
-            <span className="text-zinc-400">⌕</span>
-            <span className="text-xs text-zinc-400">
+            <Search
+              className="h-3.5 w-3.5 shrink-0 text-zinc-400"
+              strokeWidth={1.75}
+            />
+            <span className="text-[13px]/[16px] text-zinc-400">
               {element.placeholder ?? "Search"}
             </span>
           </div>
@@ -151,16 +155,20 @@ export function WireframeElement({ element }: { element: Element }) {
               {item.hasImage ? (
                 <div className="h-9 w-9 shrink-0 rounded-md border border-zinc-300 bg-zinc-100" />
               ) : null}
-              <div className="flex min-w-0 flex-col gap-1">
-                <span className="truncate text-xs font-medium text-zinc-800">
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="truncate text-[15px]/[19px] font-medium text-zinc-900">
                   {item.title}
                 </span>
                 {item.subtitle ? (
-                  <span className="truncate text-[11px] text-zinc-400">
+                  <span className="truncate text-[13px]/[16px] text-zinc-400">
                     {item.subtitle}
                   </span>
                 ) : null}
               </div>
+              <ChevronRight
+                className="h-4 w-4 shrink-0 text-zinc-400"
+                strokeWidth={1.75}
+              />
             </div>
           ))}
         </div>
@@ -170,11 +178,11 @@ export function WireframeElement({ element }: { element: Element }) {
       return (
         <div className="mx-3 flex flex-col gap-2 rounded-lg border border-zinc-200 bg-zinc-50/60 p-3">
           {element.hasImage ? <ImageBox aspect="wide" /> : null}
-          <span className="text-xs font-semibold text-zinc-800">
+          <span className="text-[15px]/[19px] font-semibold text-zinc-900">
             {element.title}
           </span>
           {element.body ? (
-            <span className="text-[11px] leading-relaxed text-zinc-500">
+            <span className="text-[13px]/[16px] text-zinc-500">
               {element.body}
             </span>
           ) : null}
@@ -194,16 +202,23 @@ export function WireframeElement({ element }: { element: Element }) {
 
     case "tabbar":
       return (
-        <div className="mt-auto flex items-center justify-around border-t border-zinc-200 bg-white py-2.5">
+        <div className="flex items-center justify-around border-t border-zinc-200 bg-white py-2.5">
           {element.tabs.map((tab, i) => (
-            <span
-              key={tab}
-              className={`text-[10px] font-medium ${
-                i === element.active ? "text-[#1F7A4D]" : "text-zinc-400"
-              }`}
-            >
-              {tab}
-            </span>
+            <div key={tab} className="flex flex-col items-center gap-1">
+              <Square
+                className={`h-5 w-5 ${
+                  i === element.active ? "text-[#1F7A4D]" : "text-zinc-400"
+                }`}
+                strokeWidth={1.75}
+              />
+              <span
+                className={`text-[10px] font-medium ${
+                  i === element.active ? "text-[#1F7A4D]" : "text-zinc-400"
+                }`}
+              >
+                {tab}
+              </span>
+            </div>
           ))}
         </div>
       );
@@ -218,7 +233,9 @@ export function WireframeElement({ element }: { element: Element }) {
             {element.name?.slice(0, 1) ?? "?"}
           </div>
           {element.name ? (
-            <span className="text-xs text-zinc-600">{element.name}</span>
+            <span className="text-[13px]/[16px] text-zinc-600">
+              {element.name}
+            </span>
           ) : null}
         </div>
       );

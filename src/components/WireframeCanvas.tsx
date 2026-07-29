@@ -11,25 +11,67 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { Screen } from "@/lib/artifact";
+import { BatteryFull, SignalHigh, Wifi } from "lucide-react";
+import type { Element, Screen } from "@/lib/artifact";
 import { WireframeElement } from "./WireframeElement";
 
 const FRAME_WIDTH = 340;
 const GUTTER = 96;
 
+// Static iOS status bar — time left, connectivity glyphs right. Monochrome,
+// quiet, never interactive.
+function StatusBar() {
+  return (
+    <div className="flex shrink-0 items-center justify-between px-3 pb-1 pt-2">
+      <span className="text-[13px]/[16px] font-semibold text-zinc-900">
+        9:41
+      </span>
+      <div className="flex items-center gap-1.5 text-zinc-500">
+        <SignalHigh className="h-3.5 w-3.5" strokeWidth={1.75} />
+        <Wifi className="h-3.5 w-3.5" strokeWidth={1.75} />
+        <BatteryFull className="h-4 w-4" strokeWidth={1.75} />
+      </div>
+    </div>
+  );
+}
+
+// Home indicator lives in its own flex row below the tab bar (which now
+// renders as its own shrink-0 row, not inside the scroll column), so it
+// never overlaps the tab bar or scrolls out of view regardless of content.
+function HomeIndicator() {
+  return (
+    <div className="flex shrink-0 items-center justify-center py-2">
+      <div className="h-[5px] w-[134px] rounded-full bg-zinc-300" />
+    </div>
+  );
+}
+
 function PhoneFrameNode({ data }: NodeProps) {
   const screen = data.screen as Screen;
+  const tabbar = screen.elements.find(
+    (element): element is Extract<Element, { type: "tabbar" }> =>
+      element.type === "tabbar",
+  );
+  const rest = screen.elements.filter((element) => element.type !== "tabbar");
+
   return (
     <div className="flex shrink-0 flex-col items-center gap-3">
       <span className="text-xs font-medium tracking-wide text-zinc-500">
         {screen.name}
       </span>
       <div className="flex h-[640px] w-[340px] flex-col overflow-hidden rounded-[28px] border border-zinc-300 bg-white shadow-[0_20px_50px_-15px_rgba(0,0,0,0.6)]">
-        <div className="flex flex-1 flex-col gap-3 overflow-y-auto py-3">
-          {screen.elements.map((element, i) => (
+        <StatusBar />
+        <div className="no-scrollbar flex flex-1 flex-col gap-3 overflow-y-auto py-3">
+          {rest.map((element, i) => (
             <WireframeElement key={i} element={element} />
           ))}
         </div>
+        {tabbar ? (
+          <div className="shrink-0">
+            <WireframeElement element={tabbar} />
+          </div>
+        ) : null}
+        <HomeIndicator />
       </div>
     </div>
   );
