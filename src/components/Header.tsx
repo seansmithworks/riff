@@ -241,14 +241,16 @@ export function Header() {
 // so it reads as its own surface. Bottom-right keeps it clear of the
 // top-right pill, the top-left logo, and the bottom-center mic.
 //
-// Renders nothing while the sidebar is open: CopilotKit's sidebar window is
-// `fixed`/`width:28rem` inside `.copilotKitSidebar { z-index: 30 }`, and
-// <CopilotPanel> mounts after this button in page.tsx, so at equal z-index
-// the sidebar always paints on top and this button becomes unreachable
-// underneath it. The sidebar's own header X already closes it, so hiding
-// this button when open costs nothing. (A z-40 + right-offset fix was
-// considered and rejected — it doesn't survive the <640px breakpoint where
-// the sidebar goes `inset:0` and covers the whole viewport anyway.)
+// Stays mounted while the panel is open (unmounting would kill the morph
+// animation) but fades/scales out and goes non-interactive as the panel
+// grows from this exact spot — see CopilotPanel.tsx's `.copilotKitWindow`
+// overrides, which are inset/anchored to line up with this button's
+// bottom-right corner so the panel reads as this button expanding, not two
+// separate objects. `disabled` + `aria-hidden` guarantee it's unreachable
+// (not just visually gone) for the whole time the panel is open, matching
+// the z-index finding from the previous pass: CopilotKit's window paints on
+// top of this button at equal z-index, so open state must never rely on the
+// button being visually covered alone.
 export function ChatButton({
   open,
   onClick,
@@ -256,18 +258,21 @@ export function ChatButton({
   open: boolean;
   onClick: () => void;
 }) {
-  if (open) return null;
-
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={open}
       aria-label={open ? "Close chat" : "Open chat"}
       aria-pressed={open}
+      aria-hidden={open}
+      tabIndex={open ? -1 : 0}
       title={open ? "Close chat" : "Open chat"}
-      className={`fixed bottom-6 right-6 z-30 flex h-12 w-12 items-center justify-center rounded-full border border-zinc-200 bg-white/95 shadow-lg backdrop-blur-sm transition-colors hover:bg-zinc-50 ${
-        open ? "text-[#1F7A4D]" : "text-zinc-600"
-      }`}
+      className={`fixed bottom-6 right-6 z-30 flex h-12 w-12 items-center justify-center rounded-full border border-zinc-200 bg-white/95 shadow-lg backdrop-blur-sm transition-[opacity,transform] duration-[260ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:duration-150 motion-reduce:ease-out ${
+        open
+          ? "pointer-events-none scale-75 opacity-0 motion-reduce:scale-100"
+          : "scale-100 opacity-100 hover:bg-zinc-50"
+      } ${open ? "text-[#1F7A4D]" : "text-zinc-600"}`}
     >
       <svg
         width="20"

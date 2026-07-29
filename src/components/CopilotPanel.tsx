@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import "@copilotkit/react-ui/styles.css";
 import {
-  CopilotSidebar,
+  CopilotPopup,
   useChatContext,
   type CopilotKitCSSProperties,
 } from "@copilotkit/react-ui";
@@ -35,9 +35,10 @@ function artifactSummary(artifact: Artifact): string {
   }`;
 }
 
-// Bridges the sidebar's internal open state to Header's pill icon. Rendered
-// as a child of CopilotSidebar so it can reach useChatContext(); pushes our
-// externally-controlled `open` boolean into CopilotKit whenever it changes.
+// Bridges the panel's internal open state to Header's floating chat button.
+// Rendered as a child of CopilotPopup so it can reach useChatContext();
+// pushes our externally-controlled `open` boolean into CopilotKit whenever
+// it changes.
 function ChatOpenSync({ open }: { open: boolean }) {
   const { setOpen } = useChatContext();
   useEffect(() => {
@@ -47,7 +48,7 @@ function ChatOpenSync({ open }: { open: boolean }) {
 }
 
 // Mirrors voice-originated turns (from useVoice.ts / ElevenLabs, tracked in
-// the zustand store) into CopilotKit's own message list, so this sidebar is
+// the zustand store) into CopilotKit's own message list, so this panel is
 // the single surface showing both voice and typed turns in one thread.
 // appendMessage(..., { followUp: false }) adds the message to the visible
 // thread without triggering a chat completion — voice turns never go through
@@ -175,6 +176,34 @@ export function CopilotPanel({
           background and text-on-accent (e.g. the toggle button icon), so the
           header can't be retinted via CSS vars alone without also breaking
           contrast elsewhere. Scope a small override to match the light shell. */}
+      {/*
+        CopilotPopup over CopilotSidebar: the sidebar is a full-bleed,
+        full-height rail welded to the viewport edge — fighting its fixed
+        inset:0/height:100% layout with overrides to make it "float" means
+        overriding nearly every positioning rule it sets. CopilotPopup's
+        `.copilotKitWindow` (the non-sidebar variant) is ALREADY a floating,
+        inset, rounded, shadowed card that toggles a `.open` class rather
+        than mounting/unmounting — exactly the shape and the "always
+        mounted, transform+opacity driven" behavior the morph needs, so it's
+        the correct base to extend rather than re-fight.
+
+        The rules below do two things:
+        1. Resize/reposition `.copilotKitWindow` into the large, all-sides-
+           inset floating panel Sean asked for (DESIGN.md rounded-lg = 12px,
+           the token used for cards elsewhere in the app).
+        2. Replace CopilotKit's default (barely-there) open/close transform
+           with a stronger scale + border-radius morph anchored at
+           `transform-origin: bottom right`, positioned so that corner lines
+           up with ChatButton's own bottom-right corner (both inset 1.5rem
+           from the viewport edge) — so the panel visually grows out of the
+           button instead of appearing as a second, unrelated object.
+           Content (header + chat body, the window's only two direct
+           children) fades in on a short delay after the container has
+           mostly settled, and fades out immediately on close, so it's never
+           visibly stretched/squashed mid-morph. `prefers-reduced-motion`
+           strips the transform/radius animation down to a plain opacity
+           fade per the accessibility requirement.
+      */}
       <style jsx global>{`
         .copilotKitHeader {
           background-color: #ffffff;
@@ -185,11 +214,65 @@ export function CopilotPanel({
         .copilotKitInput > textarea::placeholder {
           color: #71717a;
         }
-        .copilotKitSidebar .copilotKitWindow {
-          border-left: 1px solid #e4e4e7;
+
+        .copilotKitPopup .copilotKitWindow {
+          border: 1px solid #d4d4d8;
+          border-radius: 9999px;
+          box-shadow:
+            0 25px 50px -12px rgba(0, 0, 0, 0.25),
+            0 10px 15px -3px rgba(0, 0, 0, 0.1);
+          transform-origin: bottom right;
+          transform: scale(0.06);
+          opacity: 0;
+          transition:
+            transform 260ms cubic-bezier(0.16, 1, 0.3, 1),
+            border-radius 260ms cubic-bezier(0.16, 1, 0.3, 1),
+            opacity 160ms ease-out;
+        }
+        .copilotKitPopup .copilotKitWindow.open {
+          border-radius: 12px;
+          transform: scale(1);
+          opacity: 1;
+        }
+        .copilotKitPopup .copilotKitWindow > .copilotKitHeader,
+        .copilotKitPopup .copilotKitWindow > .copilotKitChatBody {
+          opacity: 0;
+          transition: opacity 160ms ease-out;
+        }
+        .copilotKitPopup .copilotKitWindow.open > .copilotKitHeader,
+        .copilotKitPopup .copilotKitWindow.open > .copilotKitChatBody {
+          opacity: 1;
+          transition-delay: 140ms;
+        }
+
+        @media (min-width: 640px) {
+          .copilotKitPopup .copilotKitWindow {
+            top: 1.5rem;
+            right: 1.5rem;
+            bottom: 1.5rem;
+            left: auto;
+            margin-bottom: 0;
+            width: min(30rem, calc(100vw - 3rem));
+            height: auto;
+            min-height: 0;
+            max-height: none;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .copilotKitPopup .copilotKitWindow {
+            transform: none !important;
+            border-radius: 12px !important;
+            transition: opacity 150ms ease-out !important;
+          }
+          .copilotKitPopup .copilotKitWindow > .copilotKitHeader,
+          .copilotKitPopup .copilotKitWindow > .copilotKitChatBody {
+            transition: opacity 150ms ease-out !important;
+            transition-delay: 0ms !important;
+          }
         }
       `}</style>
-      <CopilotSidebar
+      <CopilotPopup
         defaultOpen={false}
         clickOutsideToClose={false}
         onSetOpen={onOpenChange}
@@ -203,7 +286,7 @@ export function CopilotPanel({
       >
         <ChatOpenSync open={open} />
         <VoiceTranscriptSync />
-      </CopilotSidebar>
+      </CopilotPopup>
     </div>
   );
 }
