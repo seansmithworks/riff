@@ -149,6 +149,11 @@ async function callFireworksOnce(
 // when the final attempt fell back to FALLBACK_MODEL_ID.
 export type ModelTaggedError = Error & { modelId?: string };
 
+// Module-level and sticky for the life of the process: once the primary has
+// failed over (5xx or 404 — e.g. retired), every subsequent call skips
+// straight to FALLBACK_MODEL_ID instead of re-trying a known-dead primary.
+let primaryFailedOver = false;
+
 async function callFireworks(
   messages: ChatMessage[],
 ): Promise<{ content: string; model: string }> {
@@ -158,11 +163,10 @@ async function callFireworks(
   }
 
   let lastError: unknown;
-  let primaryFailedWith5xx = false;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const modelId =
-      attempt === MAX_ATTEMPTS || primaryFailedWith5xx
+      attempt === MAX_ATTEMPTS || primaryFailedOver
         ? FALLBACK_MODEL_ID
         : MODEL_ID;
     try {
@@ -174,22 +178,23 @@ async function callFireworks(
       // Retryable: thrown network errors (incl. timeout/abort, e.g. the
       // IPv6-related "fetch failed" seen on this machine) have no HTTP
       // status; 429/503 are Fireworks' own overload signals; 5xx means the
-      // provider itself is down, so fall over to FALLBACK_MODEL_ID right
-      // away instead of burning retries on a dead endpoint. Any other
+      // provider itself is down, and 404 means the primary model id itself
+      // is gone (e.g. retired) — both fall over to FALLBACK_MODEL_ID right
+      // away instead of burning retries on a dead endpoint/model. Any other
       // 4xx is our bug — retrying just burns demo seconds.
       const status = err instanceof FireworksHttpError ? err.status : undefined;
       const retryable =
         status === undefined ||
         status === 429 ||
+        status === 404 ||
         (status >= 500 && status < 600);
 
       if (
         status !== undefined &&
-        status >= 500 &&
-        status < 600 &&
+        (status === 404 || (status >= 500 && status < 600)) &&
         modelId === MODEL_ID
       ) {
-        primaryFailedWith5xx = true;
+        primaryFailedOver = true;
       }
 
       if (!retryable || attempt === MAX_ATTEMPTS) {
@@ -205,11 +210,13 @@ async function callFireworks(
           ? "HTTP 429"
           : status === 503
             ? "HTTP 503"
-            : status !== undefined && status >= 500 && status < 600
-              ? `HTTP ${status}`
-              : "network error";
+            : status === 404
+              ? "HTTP 404"
+              : status !== undefined && status >= 500 && status < 600
+                ? `HTTP ${status}`
+                : "network error";
       const fallbackNote =
-        nextAttempt === MAX_ATTEMPTS || primaryFailedWith5xx
+        nextAttempt === MAX_ATTEMPTS || primaryFailedOver
           ? ` (falling back to ${FALLBACK_MODEL_ID})`
           : "";
       console.error(
