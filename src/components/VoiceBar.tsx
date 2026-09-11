@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Keyboard, Mic, PencilLine, X } from "lucide-react";
 import { LevelMeter } from "./LevelMeter";
 import { VoiceHint, type HintKind } from "./VoiceHint";
@@ -17,6 +17,7 @@ export type VoiceState =
   | "dropped";
 
 export type JobChip = {
+  id: number;
   status: "sketching" | "done" | "failed";
   label: string;
 };
@@ -71,7 +72,7 @@ function Segment({
 
 function Divider() {
   return (
-    <div className="mx-0.5 h-5 w-px shrink-0 bg-zinc-200" aria-hidden="true" />
+    <div className="mx-1 h-5 w-px shrink-0 bg-zinc-200" aria-hidden="true" />
   );
 }
 
@@ -92,8 +93,8 @@ function IconButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-zinc-100 ${
-        active ? "bg-zinc-100 text-[#3FBA6A]" : "text-zinc-600"
+      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1F7A4D] focus-visible:outline-none ${
+        active ? "bg-zinc-100 text-[#1F7A4D]" : "text-zinc-600"
       }`}
     >
       {children}
@@ -101,41 +102,66 @@ function IconButton({
   );
 }
 
-function SketchChip({ job }: { job: JobChip }) {
+// Snap-to-1 transition (160ms) then a 600ms linger before the parent
+// Segment collapses; failed lingers 6s. Owns its own show/hide timer keyed
+// by the parent's `key={job.id}` (a fresh id remounts and resets it) —
+// this keeps the Divider it renders with from ever being left on screen
+// alone once the chip itself decides to hide.
+function SketchChipSegment({ job }: { job: JobChip }) {
+  const [show, setShow] = useState(true);
+
+  useEffect(() => {
+    setShow(true);
+    if (job.status === "done") {
+      const t = setTimeout(() => setShow(false), 160 + 600);
+      return () => clearTimeout(t);
+    }
+    if (job.status === "failed") {
+      const t = setTimeout(() => setShow(false), 6000);
+      return () => clearTimeout(t);
+    }
+  }, [job.status]);
+
   const trackClass =
     job.status === "done"
-      ? "scale-x-100 transition-transform duration-150"
+      ? "scale-x-100 transition-transform duration-[160ms]"
       : "riff-track-fill";
 
   return (
-    <div className="flex min-w-0 flex-col gap-1 px-2 motion-safe:animate-[riff-chip-in_260ms_cubic-bezier(0.16,1,0.3,1)]">
-      <div className="flex items-center gap-1.5">
-        <PencilLine
-          className="h-[14px] w-[14px] shrink-0 text-zinc-500"
-          strokeWidth={1.75}
-          aria-hidden="true"
-        />
-        <span className="whitespace-nowrap text-sm/[20px] font-medium text-zinc-500">
-          {job.status === "failed"
-            ? "Couldn't sketch that — try again."
-            : job.label}
-        </span>
-      </div>
-      {job.status !== "failed" && (
-        <div className="h-[2px] w-full overflow-hidden rounded-full bg-[#e4e4e7]">
-          <div
-            className={`h-full w-full origin-left rounded-full bg-[#3FBA6A] ${trackClass}`}
-          />
+    <Segment show={show}>
+      <div className="flex items-center">
+        <Divider />
+        <div className="relative flex h-11 items-center px-2 motion-safe:animate-[riff-chip-in_260ms_cubic-bezier(0.16,1,0.3,1)]">
+          <div className="flex items-center gap-1.5">
+            <PencilLine
+              className="h-[14px] w-[14px] shrink-0 text-zinc-500"
+              strokeWidth={1.75}
+              aria-hidden="true"
+            />
+            <span
+              role="status"
+              className="whitespace-nowrap text-sm/[20px] font-medium text-zinc-500"
+            >
+              {job.status === "failed" ? "Sketch failed" : job.label}
+            </span>
+          </div>
+          {job.status !== "failed" && (
+            <div className="absolute inset-x-2 bottom-1 h-[2px] overflow-hidden rounded-full bg-zinc-200">
+              <div
+                className={`h-full w-full origin-left rounded-full bg-[#3FBA6A] ${trackClass}`}
+              />
+            </div>
+          )}
         </div>
-      )}
-    </div>
+      </div>
+    </Segment>
   );
 }
 
 function Caption({ text, tone }: { text: string; tone: "user" | "agent" }) {
   return (
     <div
-      className={`line-clamp-2 rounded-lg bg-white/80 px-3 py-1.5 text-center text-sm/[20px] backdrop-blur-sm ${
+      className={`line-clamp-2 rounded-lg bg-white/90 px-3 py-1.5 text-center text-sm/[20px] backdrop-blur-sm ${
         tone === "user" ? "text-zinc-500" : "text-zinc-900"
       }`}
     >
@@ -214,7 +240,15 @@ export function VoiceBar({
           @media (min-width: 640px) {
             .voice-bar-wrapper {
               right: ${rightInset}px;
-              transition: right 260ms cubic-bezier(0.16, 1, 0.3, 1);
+              ${rightInset > 0 ? "left: 346px;" : ""}
+              transition:
+                right 260ms cubic-bezier(0.16, 1, 0.3, 1),
+                left 260ms cubic-bezier(0.16, 1, 0.3, 1);
+            }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .voice-bar-wrapper {
+              transition: none;
             }
           }
         `}</style>
@@ -236,13 +270,13 @@ export function VoiceBar({
             </div>
           )}
 
-          <div className="flex h-14 items-center gap-1 rounded-full border border-zinc-200 bg-white/95 p-1.5 shadow-lg backdrop-blur-sm">
+          <div className="flex h-14 items-center gap-0 rounded-full border border-zinc-200 bg-white/95 p-1.5 shadow-lg backdrop-blur-sm">
             {layout === "idle" ? (
               <button
                 type="button"
                 onClick={onStart}
                 aria-label={label}
-                className="flex h-11 items-center rounded-full transition-transform hover:scale-105 active:scale-95"
+                className="flex h-11 items-center rounded-full transition-transform hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1F7A4D] focus-visible:outline-none motion-reduce:transition-none motion-reduce:hover:scale-100 motion-reduce:active:scale-100"
               >
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#3FBA6A] text-white">
                   <Mic
@@ -252,7 +286,10 @@ export function VoiceBar({
                   />
                 </span>
                 {!hideLabel && (
-                  <span className="px-2 text-sm/[20px] font-medium text-zinc-900">
+                  <span
+                    key={label}
+                    className="min-w-[88px] px-2 text-sm/[20px] font-medium text-zinc-900 motion-safe:animate-[riff-label-in_160ms_ease-out]"
+                  >
                     {label}
                   </span>
                 )}
@@ -261,8 +298,8 @@ export function VoiceBar({
               <div className="flex h-11 items-center">
                 <div
                   ref={layout === "live" ? haloRef : undefined}
-                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${
-                    layout === "dark" ? "bg-[#18181b]" : "bg-[#3FBA6A]"
+                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors duration-[260ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                    layout === "dark" ? "bg-zinc-900" : "bg-[#3FBA6A]"
                   }`}
                 >
                   {layout === "connecting" ? (
@@ -287,8 +324,9 @@ export function VoiceBar({
                   )}
                 </div>
                 <span
+                  key={label}
                   aria-live="polite"
-                  className={`px-2 text-sm/[20px] font-medium text-zinc-900 ${
+                  className={`min-w-[88px] px-2 text-sm/[20px] font-medium text-zinc-900 motion-safe:animate-[riff-label-in_160ms_ease-out] ${
                     job ? "max-sm:hidden" : ""
                   }`}
                 >
@@ -310,12 +348,7 @@ export function VoiceBar({
               </div>
             </Segment>
 
-            <Segment show={job !== null}>
-              <div className="flex items-center">
-                <Divider />
-                {job && <SketchChip job={job} />}
-              </div>
-            </Segment>
+            {job && <SketchChipSegment key={job.id} job={job} />}
 
             <Divider />
             <IconButton
