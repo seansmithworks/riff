@@ -78,3 +78,14 @@
 - [ ] **Phase 5 — Sean's review:** CHANGED — no Vercel preview (Preview env has no ElevenLabs/Fireworks keys, fixtures gated off in prod builds). Sean reviews on a local dev server from the `feat-voice-ui` worktree with `?voiceState=` + his real mic (also calibrates `SILENCE_LEVEL`/`SPEAKING_LEVEL`). Decide forks → merge to main on his nod (conflicts lightly with `feat/load-logo` in `Header.tsx`).
 - [ ] **Load-logo — DECIDE OR KILL** — `feat/load-logo` @ `0f52726`: clip ~1.6s + hold; static logo = last frame, which has pen-tool anchor handles baked in. Needs Sean's clean SVG/transparent PNG, or ship only the draw-in over the old logo, or kill.
 - [x] **Stack popover on hackathon footnote** — shipped to prod `e39b54f` after a reviewer-caught focus/click fix.
+
+## 2026-09-11 — wrap-continue (voice direction blend)
+
+- [x] **10 mild→wild voice variations** — design canvas https://claude.ai/code/artifact/ee2d308e-8127-4112-bb9f-2533d67c7f13 + game/app research (session scratchpad `voice-variations-research.md`).
+- [ ] **Blend one voice-first direction** (carried) — read Sean's canvas comments, pick/blend elements across the 10, draft the blend as new artboard(s) on the same canvas, then rebuild on `feat/voice-ui` (`cdd7ddd` is the baseline, not the answer).
+- [ ] **Real-mic voice review + calibrate silence thresholds** (carried) — only once the blended direction is built; `SILENCE_LEVEL`/`SPEAKING_LEVEL` uncalibrated.
+- [ ] **Recording** (carried 2× since 2026-09-10) — Sean records the 60–90s cut from prod per `docs/SHOT-LIST-90s.md`.
+- [ ] **Roughness 0.6 vs 0.45 + hero-logo gap — DECIDE OR KILL** (carried 2× since 2026-09-10) — shipped at 0.6 / existing gap; default is keep.
+- [ ] **Drawn logo — DECIDE OR KILL** (carried) — see above.
+- [ ] Spend caps / rate limit on the public site (parked) — no auth or rate limit; every visitor spends ElevenLabs + Fireworks credits.
+- [ ] Stale worktrees under `.claude/worktrees/` (parked) — `feat-desktop`, `feat-stack-popover`, `feat-copy`, `feat-logo`, `feat-sketch*`, `feat-first-open`, `fix-failover-404`, `docs-shot-list` are merged; `agent-a6823…` Sean said drop. Agents are permission-blocked from `git worktree remove --force`.
