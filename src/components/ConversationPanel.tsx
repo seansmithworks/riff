@@ -34,11 +34,13 @@ type DevOverride = (typeof DEV_OVERRIDES)[number];
 
 // Sine-modulated synthetic source so bars aren't flat in dev-override
 // screenshots — there's no live session to drive the real
-// getInput/OutputByteFrequencyData in that mode.
+// getInput/OutputByteFrequencyData in that mode. Centered around a
+// realistic-speech level (not pegged near max) so the meter reads as an
+// actual voice rather than a wall of full-height bars.
 function synthesizeLevelData(t: number): Uint8Array {
   const data = new Uint8Array(1024);
   for (let i = 0; i < 410; i++) {
-    const v = 140 + 90 * Math.sin(t / 220 + i * 0.15);
+    const v = 50 + 40 * Math.sin(t / 220 + i * 0.15);
     data[i] = Math.max(0, Math.min(255, Math.round(v)));
   }
   return data;
@@ -93,17 +95,29 @@ function ConversationPanelInner({
   });
 
   // jobs is the shared queue written by both the voice (useVoice.ts) and
-  // text (CopilotPanel.tsx) render paths — reused verbatim from the prior
-  // mic-label derivation.
-  const isGenerating = jobs.some((job) => job.status === "sketching");
-  const lastSettledJob = [...jobs]
-    .reverse()
-    .find((job) => job.status === "done" || job.status === "failed");
-  const showJobError = !isGenerating && lastSettledJob?.status === "failed";
-  const job: JobChip | null = isGenerating
-    ? { status: "sketching", label: artifact ? "Revising…" : "Sketching…" }
-    : showJobError
-      ? { status: "failed", label: "" }
+  // text (CopilotPanel.tsx) render paths. The most-recently-added job is
+  // always the one worth showing — the chip's own lifecycle (see
+  // SketchChipSegment in VoiceBar.tsx, keyed by job.id) owns how long it
+  // stays visible after settling, so this stays a plain "last job" read
+  // rather than needing to remember to null it back out once done/failed.
+  // "superseded" jobs (an older voice generation an agent's newer call
+  // overtook) show nothing.
+  const lastJob = jobs.length > 0 ? jobs[jobs.length - 1] : null;
+  const job: JobChip | null =
+    lastJob && lastJob.status !== "superseded"
+      ? {
+          id: lastJob.id,
+          status: lastJob.status,
+          // "done" keeps showing the same Sketching…/Revising… text through
+          // its brief snap-to-1-then-linger — SketchChipSegment in
+          // VoiceBar.tsx only swaps in different copy for "failed".
+          label:
+            lastJob.status === "failed"
+              ? ""
+              : artifact
+                ? "Revising…"
+                : "Sketching…",
+        }
       : null;
 
   // Dev-only ?voiceState= override — inert in production (see NODE_ENV
@@ -188,21 +202,40 @@ function ConversationPanelInner({
 
   const effectiveJob: JobChip | null = devOverride
     ? devOverride === "sketching"
-      ? { status: "sketching", label: "Sketching…" }
+      ? { id: -1, status: "sketching", label: "Sketching…" }
       : devOverride === "sketch-failed"
-        ? { status: "failed", label: "" }
+        ? { id: -2, status: "failed", label: "" }
         : null
     : job;
+
+  // The "Ended" state's 4s window — reachable outside the dev fixture via
+  // voice.ended, a fresh object on every non-error onDisconnect (see
+  // useVoice.ts). Keyed off that object reference (not its "by" value) so
+  // back-to-back sessions ended the same way each re-arm the timer.
+  const [endedVisible, setEndedVisible] = useState(false);
+  useEffect(() => {
+    if (!voice.ended) return;
+    setEndedVisible(true);
+    const t = setTimeout(() => {
+      setEndedVisible(false);
+      voice.clearEnded();
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [voice.ended, voice.clearEnded]);
 
   const caption = chatOpen
     ? null
     : devOverride === "ended"
       ? "Riff ended the session."
-      : voiceState === "listening" ||
-          voiceState === "silence" ||
-          voiceState === "speaking"
-        ? (lastMessage?.text ?? null)
-        : null;
+      : endedVisible
+        ? voice.ended?.by === "agent"
+          ? "Riff ended the session."
+          : (lastMessage?.text ?? null)
+        : voiceState === "listening" ||
+            voiceState === "silence" ||
+            voiceState === "speaking"
+          ? (lastMessage?.text ?? null)
+          : null;
 
   const captionTone: "user" | "agent" =
     lastMessage?.role === "user" ? "user" : "agent";
@@ -226,6 +259,18 @@ function ConversationPanelInner({
     onOpenChat();
   };
 
+  // The silence hint's dismiss suppresses it until speech is heard again
+  // (useMicSilence owns that). The 3 error cards are driven by voice.issue
+  // instead, so dismissing them must clear the issue directly — otherwise
+  // the ✕ on a mic-blocked/connect-failed/dropped card does nothing.
+  const handleDismissHint = () => {
+    if (hintKind === "silence") {
+      silence.dismiss();
+    } else {
+      voice.clearIssue();
+    }
+  };
+
   return (
     <VoiceBar
       voiceState={voiceState}
@@ -244,7 +289,7 @@ function ConversationPanelInner({
       onStart={voice.start}
       onStop={voice.stop}
       onToggleChat={onToggleChat}
-      onDismissHint={silence.dismiss}
+      onDismissHint={handleDismissHint}
       onHintPrimary={handleHintPrimary}
       onTypeInstead={handleTypeInstead}
       onSwitchMicDevice={(deviceId) =>

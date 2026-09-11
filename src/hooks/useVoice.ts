@@ -55,8 +55,18 @@ export function useVoice() {
   const [phase, setPhase] = useState<"idle" | "requesting">("idle");
   const [issue, setIssue] = useState<VoiceIssue>(null);
   const [userTurnCount, setUserTurnCount] = useState(0);
+  // A fresh object on every non-error disconnect (not just a changed value)
+  // so a consumer's effect re-fires even on back-to-back sessions ended the
+  // same way (e.g. "user", "user") — see the "Ended" state's 4s caption in
+  // ConversationPanel.tsx, which is how that state becomes reachable
+  // outside the dev ?voiceState= fixture.
+  const [ended, setEnded] = useState<{
+    by: "user" | "agent";
+    at: number;
+  } | null>(null);
   const hasConnectedRef = useRef(false);
   const clearIssue = useCallback(() => setIssue(null), []);
+  const clearEnded = useCallback(() => setEnded(null), []);
 
   const conversation = useConversation({
     onConnect: () => {
@@ -68,6 +78,8 @@ export function useVoice() {
       setStatus("idle");
       if (details.reason === "error") {
         setIssue("dropped");
+      } else {
+        setEnded({ by: details.reason, at: Date.now() });
       }
       hasConnectedRef.current = false;
     },
@@ -218,6 +230,8 @@ export function useVoice() {
     phase,
     issue,
     clearIssue,
+    ended,
+    clearEnded,
     userTurnCount,
     isConnected: conversation.status === "connected",
     isSpeaking: conversation.isSpeaking,

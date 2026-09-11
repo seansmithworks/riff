@@ -75,7 +75,7 @@ export function LevelMeter({
 
       if (haloRef?.current) {
         const level = shown.reduce((a, b) => a + b, 0) / shown.length;
-        haloRef.current.style.boxShadow = `0 0 0 ${2 + 4 * level}px rgba(63,186,106,0.18)`;
+        haloRef.current.style.boxShadow = `0 0 0 ${1 + 3 * level}px rgba(63,186,106,0.18)`;
       }
 
       raf = requestAnimationFrame(loop);
