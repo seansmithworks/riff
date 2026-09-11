@@ -5,13 +5,13 @@ import { roughLine, roughRoundedRect, roughEllipse } from "drawably";
 
 // One-line flips for the hand-drawn look. See CreativeConvos/ORCHESTRATOR.md
 // "fidelity line" — surface stays honest, structure stays real.
-export const SKETCH_ROUGHNESS = 0.9;
+export const SKETCH_ROUGHNESS = 0.6;
 export const SKETCH_STROKE_WIDTH = 1.25;
 export const SKETCH_HAND_FONT = true;
 
 // Rules (dividers/borders) use a lower roughness than rects/ellipses —
 // a hairline needs a lighter hand than a box outline to read as one stroke.
-const SKETCH_LINE_ROUGHNESS = 0.8;
+const SKETCH_LINE_ROUGHNESS = 0.55;
 
 // drawably's roughLine/roughRoundedRect/roughEllipse all emit a doubled
 // stroke (two overlapping passes) by design — right for a box outline, too
@@ -41,12 +41,21 @@ interface SketchProps {
   radius?: number;
   seedKey: string;
   className?: string;
+  // Overrides the kind-based default (1 for lines, SKETCH_STROKE_WIDTH
+  // otherwise) — used for the device frame's heavier outline.
+  strokeWidth?: number;
 }
 
 // Renders an aria-hidden absolutely-positioned SVG sibling that fills its
 // parent and draws a rough-sketch stroke over it. Client-only (no hydration
 // mismatch) — sizes itself via ResizeObserver and redraws on resize.
-export function Sketch({ kind, radius = 0, seedKey, className }: SketchProps) {
+export function Sketch({
+  kind,
+  radius = 0,
+  seedKey,
+  className,
+  strokeWidth,
+}: SketchProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ width: number; height: number } | null>(
     null,
@@ -106,7 +115,8 @@ export function Sketch({ kind, radius = 0, seedKey, className }: SketchProps) {
     }
   }
 
-  const strokeWidth = kind === "line" ? 1 : SKETCH_STROKE_WIDTH;
+  const resolvedStrokeWidth =
+    strokeWidth ?? (kind === "line" ? 1 : SKETCH_STROKE_WIDTH);
 
   return (
     <div
@@ -122,7 +132,7 @@ export function Sketch({ kind, radius = 0, seedKey, className }: SketchProps) {
             d={path}
             fill="none"
             stroke="var(--color-wireframe-ink)"
-            strokeWidth={strokeWidth}
+            strokeWidth={resolvedStrokeWidth}
             strokeLinecap="round"
             strokeLinejoin="round"
           />
