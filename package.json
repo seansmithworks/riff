@@ -18,7 +18,7 @@
     "@xyflow/react": "^12.11.2",
     "agentation": "^3.0.2",
     "braintrust": "^3.24.0",
-    "dialkit": "^1.4.3",
+    "dialkit": "1.4.3",
     "drawably": "^0.4.2",
     "lucide-react": "^1.27.0",
     "motion": "^13.2.0",

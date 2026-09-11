@@ -113,6 +113,9 @@ export class VoiceLabEngine {
   private dotGridCanvas: HTMLCanvasElement;
   private mql: MediaQueryList;
   private onStatus: ((s: EngineStatus) => void) | null = null;
+  private destroyed = false;
+  private onMqlChange = () => this.scheduleLoop();
+  private onVisibilityChange = () => this.scheduleLoop();
 
   constructor(canvas: HTMLCanvasElement, config?: EngineConfig) {
     this.canvas = canvas;
@@ -148,7 +151,8 @@ export class VoiceLabEngine {
       for (let y = 20; y < H; y += 28) gctx.fillRect(x, y, 1.4, 1.4);
 
     this.mql = window.matchMedia("(prefers-reduced-motion: reduce)");
-    this.mql.addEventListener("change", () => this.scheduleLoop());
+    this.mql.addEventListener("change", this.onMqlChange);
+    document.addEventListener("visibilitychange", this.onVisibilityChange);
   }
 
   onStatusChange(cb: (s: EngineStatus) => void) {
@@ -467,6 +471,7 @@ export class VoiceLabEngine {
   }
 
   scheduleLoop() {
+    if (this.destroyed) return;
     this.emitStatus();
     if (this.rafId) {
       cancelAnimationFrame(this.rafId);
@@ -475,6 +480,12 @@ export class VoiceLabEngine {
     if (this.staticIntervalId) {
       clearInterval(this.staticIntervalId);
       this.staticIntervalId = null;
+    }
+    // Hidden tabs get one static frame and no rAF/interval loop, so a
+    // backgrounded route doesn't keep animating or draining battery.
+    if (document.hidden) {
+      this.renderFrame(performance.now());
+      return;
     }
     if (this.reducedMotionActive()) {
       this.staticIntervalId = setInterval(
@@ -498,9 +509,12 @@ export class VoiceLabEngine {
   }
 
   destroy() {
+    this.destroyed = true;
     if (this.rafId) cancelAnimationFrame(this.rafId);
     if (this.staticIntervalId) clearInterval(this.staticIntervalId);
     if (this.autoLandTimer) clearTimeout(this.autoLandTimer);
+    this.mql.removeEventListener("change", this.onMqlChange);
+    document.removeEventListener("visibilitychange", this.onVisibilityChange);
     this.disableRealMic();
   }
 }
