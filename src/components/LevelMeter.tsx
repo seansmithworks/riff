@@ -2,10 +2,18 @@
 
 import { useEffect, useRef } from "react";
 
-// Calibrated 2026-09-11 against a real speech clip and a quiet (~-65dB)
-// clip via `?voiceState=` fake-audio sessions (see the build report) —
-// tuned so speech bars peak at 0.8-1.0. If calibration couldn't run this
-// stays at the spec's starting value and is uncalibrated.
+// UNCALIBRATED — still the spec's starting value. Calibration via
+// `?voiceState=` fake-audio sessions (Chrome's
+// --use-file-for-fake-audio-capture) was attempted 2026-09-11 but produced
+// silence in this headless-Chrome environment (confirmed independent of
+// this app with a raw getUserMedia -> AnalyserNode probe), so GAIN was
+// never tuned against a real speech sample.
+//
+// To calibrate with a real mic: open the app, start a session, speak
+// normally, and watch the bars — tune GAIN so speech peaks land around
+// 0.8-1.0 (scaleY on the tallest bar). `window.__riffVoice.getInputVolume()`
+// in the console gives the same signal as a single number if you'd rather
+// sample it than eyeball the bars.
 const GAIN = 2.5;
 
 // First 410 of 1024 bins ≈ 100-3.3kHz of the analyser's 100-8000Hz range.

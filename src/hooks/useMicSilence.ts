@@ -2,10 +2,19 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-// Calibrated 2026-09-11 against a real speech clip and a quiet (~-65dB)
-// clip via `?voiceState=` fake-audio sessions (see the build report). If
-// calibration couldn't run these stay at the spec's starting values and
-// are uncalibrated.
+// UNCALIBRATED — these are still the spec's starting values. Calibration
+// via `?voiceState=` fake-audio sessions (Chrome's
+// --use-file-for-fake-audio-capture) was attempted 2026-09-11 but produced
+// silence in this headless-Chrome environment (confirmed independent of
+// this app with a raw getUserMedia -> AnalyserNode probe), so no real
+// speech/quiet samples were ever captured.
+//
+// To calibrate with a real mic: open the app, start a session, and in the
+// console sample `window.__riffVoice.getInputVolume()` every 100ms for 10s
+// each while (a) speaking normally and (b) staying quiet. Record p50 and
+// max for each clip, then set SPEAKING_LEVEL = speech p50 / 2 and
+// SILENCE_LEVEL = sqrt(quiet max * speech p50). If quiet max >=
+// SPEAKING_LEVEL, the two don't separate — keep these starting values.
 export const SILENCE_LEVEL = 0.02;
 export const SPEAKING_LEVEL = 0.06;
 
@@ -40,37 +49,49 @@ export function useMicSilence({
   const prevStatusRef = useRef(status);
   const prevModeRef = useRef(mode);
 
-  const resetWindow = useCallback(() => {
+  // Per-turn reset: only the quiet-window clock. Runs on every
+  // speaking->listening flip. Does NOT touch verifiedRef — a mic that's
+  // already proven itself this session must keep its 10s (verified)
+  // timeout through every normal thinking pause after a Riff reply, not
+  // drop back to the 4s (unverified) timeout each turn.
+  const resetTurnWindow = useCallback(() => {
     const now = Date.now();
     windowStartRef.current = now;
     lastAboveSilenceRef.current = now;
     speakingAccumRef.current = 0;
-    verifiedRef.current = false;
     setSilent(false);
   }, []);
 
-  // The window resets on connect...
+  // Per-session reset: the turn window plus verifiedRef itself. Runs once,
+  // on connect — a new session hasn't proven its mic yet.
+  const resetSession = useCallback(() => {
+    resetTurnWindow();
+    verifiedRef.current = false;
+  }, [resetTurnWindow]);
+
+  // The session resets on connect...
   useEffect(() => {
     if (status === "connected" && prevStatusRef.current !== "connected") {
-      resetWindow();
+      resetSession();
     }
     if (status !== "connected") {
       setSilent(false);
     }
     prevStatusRef.current = status;
-  }, [status, resetWindow]);
+  }, [status, resetSession]);
 
-  // ...and every time mode flips from speaking to listening. Speaking
-  // itself always clears the hint (nothing to nag about mid-reply).
+  // ...and the turn window (only) resets every time mode flips from
+  // speaking to listening. Speaking itself always clears the hint (nothing
+  // to nag about mid-reply).
   useEffect(() => {
     if (mode === "listening" && prevModeRef.current === "speaking") {
-      resetWindow();
+      resetTurnWindow();
     }
     if (mode === "speaking") {
       setSilent(false);
     }
     prevModeRef.current = mode;
-  }, [mode, resetWindow]);
+  }, [mode, resetTurnWindow]);
 
   // A user transcript with a letter in it verifies the mic immediately.
   useEffect(() => {

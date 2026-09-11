@@ -48,8 +48,10 @@ export function useVoice() {
   // Additive voice-UI state (VoiceBar/useMicSilence). `phase` covers the
   // signed-url fetch window before the SDK itself reports "connecting".
   // `hasConnectedRef` disambiguates onError before vs. after a successful
-  // connect, since a non-fatal onError while already connected (mute/tool
-  // errors) must set no issue — see the "Error: dropped" row in the spec.
+  // connect: pre-connect, onError sets mic-blocked or connect-failed;
+  // post-connect it sets no issue at all (non-fatal — mute/tool errors),
+  // since only onDisconnect(reason: "error") sets "dropped" once a session
+  // is live — see the "Error: dropped" row in the spec.
   const [phase, setPhase] = useState<"idle" | "requesting">("idle");
   const [issue, setIssue] = useState<VoiceIssue>(null);
   const [userTurnCount, setUserTurnCount] = useState(0);
@@ -75,16 +77,20 @@ export function useVoice() {
         text: `Voice connection error: ${message}`,
       });
       setStatus("idle");
-      const err = context as { name?: string } | undefined;
-      const isPermissionError =
-        err?.name === "NotAllowedError" || /permission/i.test(message);
-      if (isPermissionError) {
-        setIssue("mic-blocked");
-      } else if (!hasConnectedRef.current) {
-        // onError while already connected is often non-fatal (mute, tool
-        // errors) and sets no issue — only onDisconnect(reason: "error")
-        // does, via the branch above.
-        setIssue("connect-failed");
+      // onError while already connected is often non-fatal (mute, a tool
+      // error like "Server error: permission denied", etc.) and must set no
+      // issue — only onDisconnect(reason: "error") does, via the branch
+      // above. Without this guard a mid-session error whose message happens
+      // to contain "permission" would slap a permanent "Mic access is
+      // blocked" card over an otherwise-healthy session.
+      if (!hasConnectedRef.current) {
+        const err = context as { name?: string } | undefined;
+        // NotAllowedError is the SDK's actual permission-denial signal.
+        // The /permission/i regex is a pre-connect-only fallback for SDK
+        // versions/paths that surface it as plain text instead.
+        const isPermissionError =
+          err?.name === "NotAllowedError" || /permission/i.test(message);
+        setIssue(isPermissionError ? "mic-blocked" : "connect-failed");
       }
     },
     onMessage: ({ message, source }) => {
