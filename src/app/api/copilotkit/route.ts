@@ -9,6 +9,7 @@ import {
   copilotRuntimeNextJSAppRouterEndpoint,
 } from "@copilotkit/runtime";
 import type { NextRequest } from "next/server";
+import { MODEL_ID } from "@/lib/generate";
 
 // Constructing the OpenAI client / adapter requires FIREWORKS_API_KEY, which
 // is only guaranteed to be present at request time (not during `next build`'s
@@ -27,7 +28,7 @@ function getServiceAdapter(): OpenAIAdapter {
 
     serviceAdapter = new OpenAIAdapter({
       openai,
-      model: "accounts/fireworks/models/glm-5p2",
+      model: MODEL_ID,
     });
   }
   return serviceAdapter;
