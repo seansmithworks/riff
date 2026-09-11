@@ -15,7 +15,7 @@ const SCHEMA_STRING = JSON.stringify(ARTIFACT_JSON_SCHEMA);
 const WIREFRAME_SCREEN_COUNT_RULE_INITIAL =
   "For wireframes: produce EXACTLY 3 screens. Only include the screens the brief actually supports — never invent screens the brief doesn't call for.";
 const WIREFRAME_SCREEN_COUNT_RULE_EVOLVE =
-  "For wireframes: only include the screens the brief actually supports — never invent screens the brief doesn't call for.";
+  "For wireframes: only include the screens the brief actually supports — never invent screens the brief doesn't call for. Keep the wireframe to at most 6 screens; when the brief adds content, extend existing screens before adding new ones.";
 
 function buildSystemPrompt(isEvolve: boolean): string {
   const wireframeRule = isEvolve
@@ -65,7 +65,7 @@ function buildRequestBody(messages: ChatMessage[], modelId: string = MODEL_ID) {
     model: modelId,
     messages,
     temperature: 0.4,
-    max_tokens: 4000,
+    max_tokens: 8000,
     response_format: {
       type: "json_schema",
       json_schema: {
