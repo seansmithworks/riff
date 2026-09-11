@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useConversation } from "@elevenlabs/react";
 import { useStore, nextJobId } from "@/lib/store";
 import type { Artifact } from "@/lib/artifact";
@@ -33,6 +33,8 @@ function artifactSummary(artifact: Artifact): string {
 let voiceGeneration = 0;
 let inFlightRequests = 0;
 
+export type VoiceIssue = "mic-blocked" | "connect-failed" | "dropped" | null;
+
 // Wraps ElevenLabs' useConversation with the render_artifact client tool and
 // keeps the zustand store (messages, status) in sync with the session.
 // Must be rendered inside a <ConversationProvider>.
@@ -43,21 +45,58 @@ export function useVoice() {
   const addJob = useStore((s) => s.addJob);
   const updateJobStatus = useStore((s) => s.updateJobStatus);
 
+  // Additive voice-UI state (VoiceBar/useMicSilence). `phase` covers the
+  // signed-url fetch window before the SDK itself reports "connecting".
+  // `hasConnectedRef` disambiguates onError before vs. after a successful
+  // connect, since a non-fatal onError while already connected (mute/tool
+  // errors) must set no issue — see the "Error: dropped" row in the spec.
+  const [phase, setPhase] = useState<"idle" | "requesting">("idle");
+  const [issue, setIssue] = useState<VoiceIssue>(null);
+  const [userTurnCount, setUserTurnCount] = useState(0);
+  const hasConnectedRef = useRef(false);
+  const clearIssue = useCallback(() => setIssue(null), []);
+
   const conversation = useConversation({
-    onConnect: () => setStatus("listening"),
-    onDisconnect: () => setStatus("idle"),
-    onError: (message) => {
+    onConnect: () => {
+      setStatus("listening");
+      hasConnectedRef.current = true;
+      setIssue(null);
+    },
+    onDisconnect: (details) => {
+      setStatus("idle");
+      if (details.reason === "error") {
+        setIssue("dropped");
+      }
+      hasConnectedRef.current = false;
+    },
+    onError: (message, context) => {
       addMessage({
         role: "assistant",
         text: `Voice connection error: ${message}`,
       });
       setStatus("idle");
+      const err = context as { name?: string } | undefined;
+      const isPermissionError =
+        err?.name === "NotAllowedError" || /permission/i.test(message);
+      if (isPermissionError) {
+        setIssue("mic-blocked");
+      } else if (!hasConnectedRef.current) {
+        // onError while already connected is often non-fatal (mute, tool
+        // errors) and sets no issue — only onDisconnect(reason: "error")
+        // does, via the branch above.
+        setIssue("connect-failed");
+      }
     },
     onMessage: ({ message, source }) => {
       addMessage({
         role: source === "user" ? "user" : "assistant",
         text: message,
       });
+      // "Verified" per useMicSilence.ts requires a user transcript with a
+      // letter in it, not just any source:"user" payload.
+      if (source === "user" && /[a-zA-Z]/.test(message)) {
+        setUserTurnCount((c) => c + 1);
+      }
     },
     onModeChange: ({ mode }) => {
       setStatus(mode === "speaking" ? "speaking" : "listening");
@@ -133,6 +172,9 @@ export function useVoice() {
   });
 
   const start = useCallback(async () => {
+    setPhase("requesting");
+    setIssue(null);
+    hasConnectedRef.current = false;
     try {
       const res = await fetch("/api/signed-url");
       if (!res.ok) {
@@ -141,6 +183,7 @@ export function useVoice() {
           role: "assistant",
           text: `Couldn't start the voice session: ${body.error ?? "signed URL request failed"}`,
         });
+        setIssue("connect-failed");
         return;
       }
       const { signedUrl } = (await res.json()) as { signedUrl: string };
@@ -151,6 +194,9 @@ export function useVoice() {
         text: "Couldn't access your microphone. Check your browser's mic permissions and try again.",
       });
       setStatus("idle");
+      setIssue("connect-failed");
+    } finally {
+      setPhase("idle");
     }
   }, [conversation, addMessage, setStatus]);
 
@@ -161,7 +207,18 @@ export function useVoice() {
   return {
     start,
     stop,
+    status: conversation.status,
+    mode: conversation.mode,
+    phase,
+    issue,
+    clearIssue,
+    userTurnCount,
     isConnected: conversation.status === "connected",
     isSpeaking: conversation.isSpeaking,
+    getInputVolume: conversation.getInputVolume,
+    getOutputVolume: conversation.getOutputVolume,
+    getInputByteFrequencyData: conversation.getInputByteFrequencyData,
+    getOutputByteFrequencyData: conversation.getOutputByteFrequencyData,
+    changeInputDevice: conversation.changeInputDevice,
   };
 }
