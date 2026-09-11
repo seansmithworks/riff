@@ -27,7 +27,8 @@ function buildSystemPrompt(isEvolve: boolean): string {
 Rules:
 - ${wireframeRule}
 - Use realistic, specific copy in labels/headings/list items/card text. Never use lorem ipsum or placeholders like "Label here" or "Item 1".
-- Design mobile-first: each screen's elements form a single vertical stack, top to bottom.
+- For wireframes, set "platform" to "desktop" when the brief describes a website, web app, dashboard, admin tool, marketing site, or anything meant for a browser/laptop; otherwise set it to "mobile". If a "CURRENT ARTIFACT" is provided, keep its platform unless the brief explicitly asks to change it.
+- Design mobile-first: each screen's elements form a single vertical stack, top to bottom. Exception — desktop platform: screens are wide, so use "navbar" with the site name as the title and 2–4 nav links in its actions, and use "row" to place 2–3 cards or buttons side by side; never use "tabbar" on desktop. The body still reads top-to-bottom within that wide layout.
 - Use the full element vocabulary deliberately — most screens should combine several of these, not just searchbar/list/card/row:
   - "navbar" at the top of nearly every screen: a title plus back/action labels for anything that isn't the root tab screen.
   - "searchbar" + "list" for browsing/filtering flat content; set "hasImage" on list items when the content is visually distinguishing (photos, avatars, thumbnails) so browsing reads as media-rich, not just text rows.

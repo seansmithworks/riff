@@ -2,7 +2,12 @@
 // Match this shape EXACTLY when wiring structured LLM output.
 
 export type Artifact =
-  | { kind: "wireframe"; title: string; screens: Screen[] }
+  | {
+      kind: "wireframe";
+      title: string;
+      screens: Screen[];
+      platform?: "mobile" | "desktop";
+    }
   | { kind: "flow"; title: string; nodes: FlowNode[]; edges: FlowEdge[] };
 
 export interface Screen {
@@ -239,6 +244,7 @@ export const ARTIFACT_JSON_SCHEMA = {
         kind: { const: "wireframe" },
         title: { type: "string" },
         screens: { type: "array", items: SCREEN_SCHEMA },
+        platform: { type: "string", enum: ["mobile", "desktop"] },
       },
       required: ["kind", "title", "screens"],
       additionalProperties: false,
