@@ -14,6 +14,7 @@ import "@xyflow/react/dist/style.css";
 import { BatteryFull, SignalHigh, Wifi } from "lucide-react";
 import type { Element, Screen } from "@/lib/artifact";
 import { WireframeElement } from "./WireframeElement";
+import { DesktopFrame, DESKTOP_FRAME_WIDTH } from "./DesktopFrame";
 
 const FRAME_WIDTH = 340;
 const GUTTER = 96;
@@ -44,6 +45,13 @@ function HomeIndicator() {
       <div className="h-[5px] w-[134px] rounded-full bg-zinc-300" />
     </div>
   );
+}
+
+function ScreenFrameNode(props: NodeProps) {
+  if (props.data.platform === "desktop") {
+    return <DesktopFrame screen={props.data.screen as Screen} />;
+  }
+  return <PhoneFrameNode {...props} />;
 }
 
 function PhoneFrameNode({ data }: NodeProps) {
@@ -77,22 +85,29 @@ function PhoneFrameNode({ data }: NodeProps) {
   );
 }
 
-const nodeTypes = { screenFrame: PhoneFrameNode };
+const nodeTypes = { screenFrame: ScreenFrameNode };
 
-function WireframeCanvasInner({ screens }: { screens: Screen[] }) {
+function WireframeCanvasInner({
+  screens,
+  platform = "mobile",
+}: {
+  screens: Screen[];
+  platform?: "mobile" | "desktop";
+}) {
   const { fitView } = useReactFlow();
+  const frameWidth = platform === "desktop" ? DESKTOP_FRAME_WIDTH : FRAME_WIDTH;
 
   const nodes: Node[] = useMemo(
     () =>
       screens.map((screen, i) => ({
         id: screen.id,
         type: "screenFrame",
-        data: { screen },
-        position: { x: i * (FRAME_WIDTH + GUTTER), y: 0 },
+        data: { screen, platform },
+        position: { x: i * (frameWidth + GUTTER), y: 0 },
         draggable: true,
         connectable: false,
       })),
-    [screens],
+    [screens, platform, frameWidth],
   );
 
   const nodeIds = nodes.map((n) => n.id).join("-");
@@ -142,10 +157,16 @@ function WireframeCanvasInner({ screens }: { screens: Screen[] }) {
   );
 }
 
-export function WireframeCanvas({ screens }: { screens: Screen[] }) {
+export function WireframeCanvas({
+  screens,
+  platform,
+}: {
+  screens: Screen[];
+  platform?: "mobile" | "desktop";
+}) {
   return (
     <ReactFlowProvider>
-      <WireframeCanvasInner screens={screens} />
+      <WireframeCanvasInner screens={screens} platform={platform} />
     </ReactFlowProvider>
   );
 }
