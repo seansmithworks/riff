@@ -25,6 +25,7 @@ colors:
   wireframeBorder: "#d4d4d8"      # zinc-300
   wireframeTextPrimary: "#18181b" # zinc-900, headings
   wireframeTextSecondary: "#71717a" # zinc-500, body/labels
+  wireframeInk: "#3f3f46"         # zinc-700, pen stroke for sketch borders
 typography:
   fontFamily: "Geist Sans (next/font/google), fallback: system-ui, sans-serif"
   monoFamily: "Geist Mono"
