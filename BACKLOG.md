@@ -77,3 +77,4 @@
 - [ ] **Phase 4 — Gates:** separate reviewer on the diff + `/design-review`; fixes if blocking.
 - [ ] **Phase 5 — Preview:** push `feat/voice-ui` (branch only) → Vercel preview URL; morning report with references, before/after, preview link, forks. Prod merge waits for Sean.
 - [ ] **Load-logo strawman** — `feat/load-logo` from `~/Downloads/studio.webm` (sped to ~3s, plays then docks). Fork for Sean: keep cursor/anchor points vs clean strokes (needs SVG/Lottie export).
+- [ ] **Stack popover on hackathon footnote** — Sean asked 2026-09-11 night. `feat/stack-popover` off prod: hover/focus/tap popover listing the verified stack. Branch only; ships with the morning review.
