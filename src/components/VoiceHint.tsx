@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Mic } from "lucide-react";
+import { Mic, X } from "lucide-react";
 
 export type HintKind = "silence" | "mic-blocked" | "connect-failed" | "dropped";
 
@@ -15,7 +15,7 @@ const COPY: Record<
     secondary: "Type instead",
   },
   "mic-blocked": {
-    message: "Mic access is blocked — allow it in the address bar.",
+    message: "Mic access is blocked. Allow it in the address bar.",
     primary: "Try again",
     secondary: "Type instead",
   },
@@ -73,9 +73,7 @@ export function VoiceHint({
         aria-hidden="true"
       />
       <div className="flex flex-col gap-1">
-        <p aria-live="polite" className="text-sm/[20px] text-zinc-700">
-          {copy.message}
-        </p>
+        <p className="text-sm/[20px] text-zinc-900">{copy.message}</p>
         <div className="flex items-center gap-1.5 text-sm">
           {kind === "silence" ? (
             <select
@@ -86,7 +84,7 @@ export function VoiceHint({
               onChange={(e) => {
                 if (e.target.value) onSwitchMicDevice(e.target.value);
               }}
-              className="appearance-none border-0 bg-transparent p-0 font-medium text-[#1F7A4D] hover:underline focus:outline-none"
+              className="-my-3 appearance-none rounded-sm border-0 bg-transparent px-0 py-3 font-medium text-[#1F7A4D] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1F7A4D]"
             >
               <option value="" disabled>
                 {copy.primary}
@@ -101,7 +99,7 @@ export function VoiceHint({
             <button
               type="button"
               onClick={onPrimary}
-              className="font-medium text-[#1F7A4D] hover:underline"
+              className="-my-3 py-3 font-medium text-[#1F7A4D] hover:underline"
             >
               {copy.primary}
             </button>
@@ -112,7 +110,7 @@ export function VoiceHint({
           <button
             type="button"
             onClick={onTypeInstead}
-            className="font-medium text-[#1F7A4D] hover:underline"
+            className="-my-3 py-3 font-medium text-[#1F7A4D] hover:underline"
           >
             {copy.secondary}
           </button>
@@ -122,9 +120,9 @@ export function VoiceHint({
         type="button"
         onClick={onDismiss}
         aria-label="Dismiss"
-        className="ml-auto shrink-0 text-zinc-400 hover:text-zinc-900"
+        className="-mt-3 -mr-3 -mb-3 ml-auto shrink-0 p-3 text-zinc-500 hover:text-zinc-900"
       >
-        &times;
+        <X className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
       </button>
     </div>
   );
