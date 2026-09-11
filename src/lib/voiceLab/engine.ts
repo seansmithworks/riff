@@ -125,10 +125,10 @@ export class VoiceLabEngine {
     this.ctx = ctx;
     setMarksContext(ctx);
 
-    const DPR = Math.min(2, window.devicePixelRatio || 1);
-    canvas.width = W * DPR;
-    canvas.height = H * DPR;
-    ctx.scale(DPR, DPR);
+    // Backing store starts at the logical 1440x900 size; Stage calls
+    // resize() once it knows the actual displayed (contain-fit) size.
+    canvas.width = W;
+    canvas.height = H;
 
     const svgNS = "http://www.w3.org/2000/svg";
     const measureSvg = document.createElementNS(svgNS, "svg");
@@ -506,6 +506,23 @@ export class VoiceLabEngine {
   setReducedMotion(on: boolean) {
     this.config.reducedMotion = on;
     this.scheduleLoop();
+  }
+
+  // Sizes the canvas backing store to the actual displayed (contain-fit)
+  // CSS size × devicePixelRatio (capped at 2), so the stage stays crisp at
+  // every window size instead of a fixed 1440x900 store stretched by CSS.
+  // The engine's drawing coordinate space stays the logical 1440x900 — a
+  // uniform transform maps it onto the resized backing store.
+  resize(cssWidth: number, cssHeight: number) {
+    if (this.destroyed || cssWidth <= 0 || cssHeight <= 0) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const backingWidth = Math.max(1, Math.round(cssWidth * dpr));
+    const backingHeight = Math.max(1, Math.round(cssHeight * dpr));
+    if (this.canvas.width !== backingWidth) this.canvas.width = backingWidth;
+    if (this.canvas.height !== backingHeight)
+      this.canvas.height = backingHeight;
+    const scale = backingWidth / W;
+    this.ctx.setTransform(scale, 0, 0, scale, 0, 0);
   }
 
   destroy() {
