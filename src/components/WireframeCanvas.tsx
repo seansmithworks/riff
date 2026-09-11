@@ -99,9 +99,11 @@ const nodeTypes = { screenFrame: ScreenFrameNode };
 function WireframeCanvasInner({
   screens,
   platform = "mobile",
+  rightInset,
 }: {
   screens: Screen[];
   platform?: "mobile" | "desktop";
+  rightInset: number;
 }) {
   const { fitView } = useReactFlow();
   const frameWidth = platform === "desktop" ? DESKTOP_FRAME_WIDTH : FRAME_WIDTH;
@@ -127,12 +129,17 @@ function WireframeCanvasInner({
   // corner (see page.tsx main, which no longer carries pb-40).
   useEffect(() => {
     fitView({
-      padding: { top: 0.15, right: 0.15, bottom: "180px", left: 0.15 },
+      padding: {
+        top: 0.15,
+        right: rightInset ? `${rightInset + 24}px` : 0.15,
+        bottom: "180px",
+        left: 0.15,
+      },
       minZoom: 0.15,
       maxZoom: 1.5,
       duration: 400,
     });
-  }, [nodeIds, fitView]);
+  }, [nodeIds, fitView, rightInset]);
 
   return (
     <div
@@ -150,7 +157,12 @@ function WireframeCanvasInner({
         nodesConnectable={false}
         fitView
         fitViewOptions={{
-          padding: { top: 0.15, right: 0.15, bottom: "180px", left: 0.15 },
+          padding: {
+            top: 0.15,
+            right: rightInset ? `${rightInset + 24}px` : 0.15,
+            bottom: "180px",
+            left: 0.15,
+          },
           minZoom: 0.4,
           maxZoom: 1.5,
         }}
@@ -169,13 +181,19 @@ function WireframeCanvasInner({
 export function WireframeCanvas({
   screens,
   platform,
+  rightInset,
 }: {
   screens: Screen[];
   platform?: "mobile" | "desktop";
+  rightInset: number;
 }) {
   return (
     <ReactFlowProvider>
-      <WireframeCanvasInner screens={screens} platform={platform} />
+      <WireframeCanvasInner
+        screens={screens}
+        platform={platform}
+        rightInset={rightInset}
+      />
     </ReactFlowProvider>
   );
 }

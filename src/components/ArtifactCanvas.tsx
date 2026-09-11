@@ -3,14 +3,20 @@
 import { useStore } from "@/lib/store";
 import { WireframeCanvas } from "./WireframeCanvas";
 import { FlowCanvas } from "./FlowCanvas";
-import { WireframeSkeleton, GeneratingIndicator } from "./CanvasSkeleton";
+import { WireframeSkeleton } from "./CanvasSkeleton";
 import { SAMPLE_WIREFRAME } from "@/lib/samples";
 import { useSessionActive } from "./Header";
 
 // Always-available entry point (not gated on NODE_ENV, unlike Header's
 // sample loaders) — this is the one no-mic path a recruiter without mic
 // access can use to see the product actually do something.
-export function ArtifactCanvas({ onOpenChat }: { onOpenChat: () => void }) {
+export function ArtifactCanvas({
+  onOpenChat,
+  rightInset,
+}: {
+  onOpenChat: () => void;
+  rightInset: number;
+}) {
   const artifact = useStore((s) => s.artifact);
   const setArtifact = useStore((s) => s.setArtifact);
   const jobs = useStore((s) => s.jobs);
@@ -65,14 +71,18 @@ export function ArtifactCanvas({ onOpenChat }: { onOpenChat: () => void }) {
 
   return (
     <div className="relative h-full w-full">
-      {isGenerating && <GeneratingIndicator />}
       {artifact.kind === "wireframe" ? (
         <WireframeCanvas
           screens={artifact.screens}
           platform={artifact.platform}
+          rightInset={rightInset}
         />
       ) : (
-        <FlowCanvas nodes={artifact.nodes} edges={artifact.edges} />
+        <FlowCanvas
+          nodes={artifact.nodes}
+          edges={artifact.edges}
+          rightInset={rightInset}
+        />
       )}
     </div>
   );

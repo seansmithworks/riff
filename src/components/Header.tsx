@@ -242,8 +242,8 @@ function SampleLoaderButton({
 // Floating toolbar, top-right — hand-off in production; sample loaders too
 // in non-production builds (see SampleLoaderButton). Every icon control has
 // an aria-label + title tooltip so the demo doesn't depend on remembering
-// positions. The chat entry point is a separate floating button (see
-// ChatButton below), not part of this pill.
+// positions. The chat entry point lives in the Conversation Bar's keyboard
+// button (see VoiceBar.tsx), not in this pill.
 export function Header() {
   const setArtifact = useStore((s) => s.setArtifact);
 
@@ -267,60 +267,5 @@ export function Header() {
 
       <ShareButton />
     </div>
-  );
-}
-
-// Single chat entry point — independently floating (not part of the pill)
-// so it reads as its own surface. Bottom-right keeps it clear of the
-// top-right pill, the top-left logo, and the bottom-center mic.
-//
-// Stays mounted while the panel is open (unmounting would kill the morph
-// animation) but fades/scales out and goes non-interactive as the panel
-// grows from this exact spot — see CopilotPanel.tsx's `.copilotKitWindow`
-// overrides, which are inset/anchored to line up with this button's
-// bottom-right corner so the panel reads as this button expanding, not two
-// separate objects. `disabled` + `aria-hidden` guarantee it's unreachable
-// (not just visually gone) for the whole time the panel is open, matching
-// the z-index finding from the previous pass: CopilotKit's window paints on
-// top of this button at equal z-index, so open state must never rely on the
-// button being visually covered alone.
-export function ChatButton({
-  open,
-  onClick,
-}: {
-  open: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={open}
-      aria-label={open ? "Close chat" : "Open chat"}
-      aria-pressed={open}
-      aria-hidden={open}
-      tabIndex={open ? -1 : 0}
-      title={open ? "Close chat" : "Open chat"}
-      className={`fixed bottom-6 right-6 z-30 flex h-12 w-12 items-center justify-center rounded-full border border-zinc-200 bg-white/95 shadow-lg backdrop-blur-sm transition-[opacity,transform] duration-[260ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:duration-150 motion-reduce:ease-out ${
-        open
-          ? "pointer-events-none scale-75 opacity-0 motion-reduce:scale-100"
-          : "scale-100 opacity-100 hover:bg-zinc-50"
-      } ${open ? "text-[#1F7A4D]" : "text-zinc-600"}`}
-    >
-      <svg
-        width="20"
-        height="20"
-        viewBox="0 0 24 24"
-        fill="none"
-        aria-hidden="true"
-      >
-        <path
-          d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4H6.5A2.5 2.5 0 0 1 4 12.5v-7Z"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </button>
   );
 }

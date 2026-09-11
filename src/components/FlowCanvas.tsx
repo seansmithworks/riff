@@ -23,9 +23,11 @@ function toReactFlowType(type: FlowNode["type"]) {
 function FlowCanvasInner({
   nodes,
   edges,
+  rightInset,
 }: {
   nodes: FlowNode[];
   edges: FlowEdge[];
+  rightInset: number;
 }) {
   const { fitView } = useReactFlow();
 
@@ -57,12 +59,17 @@ function FlowCanvasInner({
   // corner (see page.tsx main, which no longer carries pb-40).
   useEffect(() => {
     fitView({
-      padding: { top: 0.15, right: 0.15, bottom: "180px", left: 0.15 },
+      padding: {
+        top: 0.15,
+        right: rightInset ? `${rightInset + 24}px` : 0.15,
+        bottom: "180px",
+        left: 0.15,
+      },
       minZoom: 0.5,
       maxZoom: 2.5,
       duration: 400,
     });
-  }, [nodeIds, fitView]);
+  }, [nodeIds, fitView, rightInset]);
 
   return (
     <div
@@ -79,7 +86,12 @@ function FlowCanvasInner({
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{
-          padding: { top: 0.15, right: 0.15, bottom: "180px", left: 0.15 },
+          padding: {
+            top: 0.15,
+            right: rightInset ? `${rightInset + 24}px` : 0.15,
+            bottom: "180px",
+            left: 0.15,
+          },
           minZoom: 0.5,
           maxZoom: 2.5,
         }}
@@ -98,13 +110,15 @@ function FlowCanvasInner({
 export function FlowCanvas({
   nodes,
   edges,
+  rightInset,
 }: {
   nodes: FlowNode[];
   edges: FlowEdge[];
+  rightInset: number;
 }) {
   return (
     <ReactFlowProvider>
-      <FlowCanvasInner nodes={nodes} edges={edges} />
+      <FlowCanvasInner nodes={nodes} edges={edges} rightInset={rightInset} />
     </ReactFlowProvider>
   );
 }

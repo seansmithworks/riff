@@ -184,25 +184,22 @@ export function CopilotPanel({
         `.copilotKitWindow` (the non-sidebar variant) is ALREADY a floating,
         inset, rounded, shadowed card that toggles a `.open` class rather
         than mounting/unmounting — exactly the shape and the "always
-        mounted, transform+opacity driven" behavior the morph needs, so it's
+        mounted, transform+opacity driven" behavior the panel needs, so it's
         the correct base to extend rather than re-fight.
 
         The rules below do two things:
         1. Resize/reposition `.copilotKitWindow` into the large, all-sides-
            inset floating panel Sean asked for (DESIGN.md rounded-lg = 12px,
            the token used for cards elsewhere in the app).
-        2. Replace CopilotKit's default (barely-there) open/close transform
-           with a stronger scale + border-radius morph anchored at
-           `transform-origin: bottom right`, positioned so that corner lines
-           up with ChatButton's own bottom-right corner (both inset 1.5rem
-           from the viewport edge) — so the panel visually grows out of the
-           button instead of appearing as a second, unrelated object.
-           Content (header + chat body, the window's only two direct
-           children) fades in on a short delay after the container has
-           mostly settled, and fades out immediately on close, so it's never
-           visibly stretched/squashed mid-morph. `prefers-reduced-motion`
-           strips the transform/radius animation down to a plain opacity
-           fade per the accessibility requirement.
+        2. Open/close via a plain slide+fade (no scale-from-a-corner morph —
+           that grew out of the deleted floating chat toggle button, which
+           no longer exists now that the Conversation Bar's keyboard button
+           is the only chat entry point; see VoiceBar.tsx). Closed is translateX(16px)
+           (translateY below 640px, matching the bar's own bottom-center
+           anchor), open is transform: none. Content (header + chat body)
+           fades in 80ms after the container starts settling and fades out
+           immediately on close. `prefers-reduced-motion` strips the
+           transform animation down to a plain opacity fade.
       */}
       <style jsx global>{`
         .copilotKitHeader {
@@ -217,21 +214,18 @@ export function CopilotPanel({
 
         .copilotKitPopup .copilotKitWindow {
           border: 1px solid #d4d4d8;
-          border-radius: 9999px;
+          border-radius: 12px;
           box-shadow:
             0 25px 50px -12px rgba(0, 0, 0, 0.25),
             0 10px 15px -3px rgba(0, 0, 0, 0.1);
-          transform-origin: bottom right;
-          transform: scale(0.06);
+          transform: translateY(16px);
           opacity: 0;
           transition:
             transform 260ms cubic-bezier(0.16, 1, 0.3, 1),
-            border-radius 260ms cubic-bezier(0.16, 1, 0.3, 1),
             opacity 160ms ease-out;
         }
         .copilotKitPopup .copilotKitWindow.open {
-          border-radius: 12px;
-          transform: scale(1);
+          transform: none;
           opacity: 1;
         }
         .copilotKitPopup .copilotKitWindow > .copilotKitHeader,
@@ -242,7 +236,7 @@ export function CopilotPanel({
         .copilotKitPopup .copilotKitWindow.open > .copilotKitHeader,
         .copilotKitPopup .copilotKitWindow.open > .copilotKitChatBody {
           opacity: 1;
-          transition-delay: 140ms;
+          transition-delay: 80ms;
         }
 
         @media (min-width: 640px) {
@@ -256,13 +250,16 @@ export function CopilotPanel({
             height: auto;
             min-height: 0;
             max-height: none;
+            transform: translateX(16px);
+          }
+          .copilotKitPopup .copilotKitWindow.open {
+            transform: none;
           }
         }
 
         @media (prefers-reduced-motion: reduce) {
           .copilotKitPopup .copilotKitWindow {
             transform: none !important;
-            border-radius: 12px !important;
             transition: opacity 150ms ease-out !important;
           }
           .copilotKitPopup .copilotKitWindow > .copilotKitHeader,

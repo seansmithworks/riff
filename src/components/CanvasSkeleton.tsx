@@ -51,17 +51,3 @@ export function WireframeSkeleton() {
     </div>
   );
 }
-
-// Overlaid on top of an existing artifact during a subsequent generation —
-// the artifact underneath stays fully visible; this is just a non-blocking
-// signal that new work is in progress.
-export function GeneratingIndicator() {
-  return (
-    <div className="pointer-events-none absolute top-4 left-1/2 z-10 -translate-x-1/2 rounded-full border border-zinc-200 bg-white/90 px-4 py-1.5 shadow-lg backdrop-blur-sm">
-      <span className="flex items-center gap-2 text-xs font-medium text-zinc-600">
-        <span className="h-1.5 w-1.5 rounded-full bg-[#3FBA6A] motion-safe:animate-pulse" />
-        Sketching&hellip;
-      </span>
-    </div>
-  );
-}
