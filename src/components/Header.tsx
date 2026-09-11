@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "@/lib/store";
 import { SAMPLE_WIREFRAME, SAMPLE_FLOW } from "@/lib/samples";
 
@@ -193,8 +193,72 @@ function ShareButton() {
 // same element moving, not a crossfade. The source SVG has a pale mint
 // background baked in; multiply-blending it against the light canvas
 // removes the visible rectangle without needing a separate asset.
+//
+// STRAWMAN — first-load intro. On mount, if the session hasn't already gone
+// active and the user hasn't asked for reduced motion, plays a short clip of
+// the logo being hand-drawn (in the same 160px hero box, same green as the
+// SVG's baked-in background) once, then crossfades into the static logo,
+// which docks exactly as it always has. Any failure mode (reduced motion,
+// video error, autoplay blocked) collapses immediately to today's behavior
+// — the static logo never stays hidden waiting on the clip.
+function LogoIntro({ onDone }: { onDone: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const doneRef = useRef(false);
+
+  function finish() {
+    if (doneRef.current) return;
+    doneRef.current = true;
+    onDone();
+  }
+
+  useEffect(() => {
+    // Safety net: if `ended`/`error` never fire (stalled load, blocked
+    // autoplay), don't strand the hero on a frozen video forever.
+    const t = setTimeout(finish, 5000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div
+      className="absolute inset-0 overflow-hidden rounded-lg"
+      style={{ backgroundColor: "#45F5A2" }}
+    >
+      <video
+        ref={videoRef}
+        className="h-full w-full object-cover"
+        autoPlay
+        muted
+        playsInline
+        onEnded={finish}
+        onError={finish}
+        poster="/riff-logo-draw-poster.png"
+      >
+        <source src="/riff-logo-draw.webm" type="video/webm" />
+        <source src="/riff-logo-draw.mp4" type="video/mp4" />
+      </video>
+    </div>
+  );
+}
+
 export function RiffLogo() {
   const docked = useSessionActive();
+  const [showIntro] = useState(() => {
+    if (typeof window === "undefined") return false;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return false;
+    }
+    return true;
+  });
+  const [introDone, setIntroDone] = useState(false);
+
+  // Once the session goes active mid-clip, cut straight to the static logo
+  // rather than let a playing (and about-to-shrink) video dock alongside it.
+  useEffect(() => {
+    if (docked && showIntro && !introDone) setIntroDone(true);
+  }, [docked, showIntro, introDone]);
+
+  const introVisible = showIntro && !introDone;
 
   return (
     <div
@@ -206,12 +270,20 @@ export function RiffLogo() {
         transformOrigin: "top left",
       }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/riff-logo.svg"
-        alt="Riff"
-        style={{ width: 160, height: "auto" }}
-      />
+      <div className="relative" style={{ width: 160, height: 170 }}>
+        {introVisible && <LogoIntro onDone={() => setIntroDone(true)} />}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/riff-logo.svg"
+          alt="Riff"
+          className="absolute top-0 left-0 transition-opacity duration-300"
+          style={{
+            width: 160,
+            height: "auto",
+            opacity: introVisible ? 0 : 1,
+          }}
+        />
+      </div>
     </div>
   );
 }
