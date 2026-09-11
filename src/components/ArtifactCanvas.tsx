@@ -23,11 +23,11 @@ export function ArtifactCanvas({ onOpenChat }: { onOpenChat: () => void }) {
       <div className="flex h-full w-full flex-col items-center justify-center gap-6 px-8 text-center">
         <div className="flex max-w-md flex-col gap-3">
           <h1 className="text-2xl font-semibold text-zinc-900">
-            Design out loud.
+            Design with conversation
           </h1>
           <p className="text-sm text-zinc-500">
-            Describe an app or a screen. Riff sketches wireframes and user flows
-            on the canvas as you talk — and revises them as you keep going.
+            Talk to Riff about what you want to create, and sketch out and edit
+            the screens and flows together as you keep talking.
           </p>
         </div>
         <div className="flex items-center gap-4 text-sm">

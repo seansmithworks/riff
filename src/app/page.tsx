@@ -5,6 +5,7 @@ import { Header, RiffLogo, ChatButton } from "@/components/Header";
 import { ArtifactCanvas } from "@/components/ArtifactCanvas";
 import { ConversationPanel } from "@/components/ConversationPanel";
 import { CopilotPanel } from "@/components/CopilotPanel";
+import { HackathonFootnote } from "@/components/HackathonFootnote";
 import { useStore } from "@/lib/store";
 
 export default function Home() {
@@ -28,6 +29,7 @@ export default function Home() {
       </main>
       <ConversationPanel />
       <CopilotPanel open={chatOpen} onOpenChange={setChatOpen} />
+      <HackathonFootnote />
     </div>
   );
 }
