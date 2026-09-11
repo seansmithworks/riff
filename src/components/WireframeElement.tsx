@@ -58,7 +58,11 @@ function Button({
           radius={999}
           seedKey={`button-secondary:${label}`}
         />
-        <span className={handFontClass}>{label}</span>
+        <span
+          className={`block overflow-hidden text-ellipsis whitespace-nowrap ${handFontClass}`}
+        >
+          {label}
+        </span>
       </button>
     );
   }
@@ -68,7 +72,11 @@ function Button({
       className="relative w-full rounded-full bg-[#1F7A4D] px-4 py-2 text-center text-[15px]/[19px] font-semibold text-white"
     >
       <Sketch kind="rect" radius={999} seedKey={`button-primary:${label}`} />
-      <span className={handFontClass}>{label}</span>
+      <span
+        className={`block overflow-hidden text-ellipsis whitespace-nowrap ${handFontClass}`}
+      >
+        {label}
+      </span>
     </button>
   );
 }
@@ -223,7 +231,7 @@ export function WireframeElement({ element }: { element: Element }) {
       return (
         <div className="flex gap-2 px-3">
           {element.children.map((child, i) => (
-            <div key={i} className="flex-1">
+            <div key={i} className="flex-auto min-w-0">
               <WireframeElement element={child} />
             </div>
           ))}

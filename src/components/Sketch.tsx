@@ -9,6 +9,20 @@ export const SKETCH_ROUGHNESS = 1.2;
 export const SKETCH_STROKE_WIDTH = 1.5;
 export const SKETCH_HAND_FONT = true;
 
+// Rules (dividers/borders) use a lower roughness than rects/ellipses —
+// a hairline needs a lighter hand than a box outline to read as one stroke.
+const SKETCH_LINE_ROUGHNESS = 0.8;
+
+// drawably's roughLine/roughRoundedRect/roughEllipse all emit a doubled
+// stroke (two overlapping passes) by design — right for a box outline, too
+// heavy for a 1px rule. Keep only the first pass for rules.
+function firstStroke(doubledPath: string): string {
+  const secondMoveIndex = doubledPath.indexOf("M", 1);
+  return secondMoveIndex === -1
+    ? doubledPath
+    : doubledPath.slice(0, secondMoveIndex);
+}
+
 // Deterministic 32-bit string hash (djb2 variant) — content-derived seed so
 // an untouched element keeps its exact stroke across an evolve; only edited
 // elements redraw. Never seed from array index.
@@ -83,9 +97,16 @@ export function Sketch({ kind, radius = 0, seedKey, className }: SketchProps) {
         roughLine(0, 0, width, height, roughOptions) +
         roughLine(width, 0, 0, height, { ...roughOptions, seed: seed + 1 });
     } else {
-      path = roughLine(0, height / 2, width, height / 2, roughOptions);
+      path = firstStroke(
+        roughLine(0, height / 2, width, height / 2, {
+          ...roughOptions,
+          roughness: SKETCH_LINE_ROUGHNESS,
+        }),
+      );
     }
   }
+
+  const strokeWidth = kind === "line" ? 1 : SKETCH_STROKE_WIDTH;
 
   return (
     <div
@@ -101,7 +122,7 @@ export function Sketch({ kind, radius = 0, seedKey, className }: SketchProps) {
             d={path}
             fill="none"
             stroke="var(--color-wireframe-ink)"
-            strokeWidth={SKETCH_STROKE_WIDTH}
+            strokeWidth={strokeWidth}
             strokeLinecap="round"
             strokeLinejoin="round"
           />
