@@ -115,7 +115,7 @@ function SketchChip({ job }: { job: JobChip }) {
           strokeWidth={1.75}
           aria-hidden="true"
         />
-        <span className="max-sm:hidden whitespace-nowrap text-sm/[20px] font-medium text-zinc-500">
+        <span className="whitespace-nowrap text-sm/[20px] font-medium text-zinc-500">
           {job.status === "failed"
             ? "Couldn't sketch that — try again."
             : job.label}
@@ -288,7 +288,9 @@ export function VoiceBar({
                 </div>
                 <span
                   aria-live="polite"
-                  className="px-2 text-sm/[20px] font-medium text-zinc-900"
+                  className={`px-2 text-sm/[20px] font-medium text-zinc-900 ${
+                    job ? "max-sm:hidden" : ""
+                  }`}
                 >
                   {label}
                 </span>
