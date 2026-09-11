@@ -71,10 +71,10 @@
 
 **Landed tonight:** `6974192` on main = prod (sketch look, copy, docking logo, desktop platform). Prod mic "not hearing" diagnosed as local input device: ElevenLabs received −60 to −74 dB during Sean's turns; voice code unchanged in the push.
 
-- [ ] **Phase 1 — Mobbin references:** capture voice-AI conversation UIs (listening / speaking / thinking / transcript / error states) to a reference set.
-- [ ] **Phase 2 — Direction spec (planner):** one strawman direction for Riff's voice + conversation surface grounded in the references and DESIGN.md, states enumerated, forks named for Sean. Include a visible mic-level signal — tonight's silent-mic failure was invisible in the UI.
-- [ ] **Phase 3 — Build (implementer):** `feat/voice-ui` off main in its own worktree; tsc; screenshots per state; recording.
-- [ ] **Phase 4 — Gates:** separate reviewer on the diff + `/design-review`; fixes if blocking.
-- [ ] **Phase 5 — Preview:** push `feat/voice-ui` (branch only) → Vercel preview URL; morning report with references, before/after, preview link, forks. Prod merge waits for Sean.
-- [ ] **Load-logo strawman** — `feat/load-logo` from `~/Downloads/studio.webm` (sped to ~3s, plays then docks). Fork for Sean: keep cursor/anchor points vs clean strokes (needs SVG/Lottie export).
-- [ ] **Stack popover on hackathon footnote** — Sean asked 2026-09-11 night. `feat/stack-popover` off prod: hover/focus/tap popover listing the verified stack. Branch only; ships with the morning review.
+- [x] **Phase 1 — Mobbin references:** captured iOS voice-assistant + listening grids and web voice-mode screens (session scratchpad `mobbin/`).
+- [x] **Phase 2 — Direction spec (planner):** "Conversation Bar" spec with 12 states, live mic level, silence hint, 3 forks for Sean.
+- [x] **Phase 3 — Build (implementer):** `feat/voice-ui` off prod `6974192`; tsc clean; screenshots per state + recording.
+- [x] **Phase 4 — Gates:** code review (3 fixes applied, `bae92f8`), design review 65/100 with 1 blocker + 13 fixes (all applied, `15241f4`..`cdd7ddd`), delta review passed with notes.
+- [ ] **Phase 5 — Sean's review:** CHANGED — no Vercel preview (Preview env has no ElevenLabs/Fireworks keys, fixtures gated off in prod builds). Sean reviews on a local dev server from the `feat-voice-ui` worktree with `?voiceState=` + his real mic (also calibrates `SILENCE_LEVEL`/`SPEAKING_LEVEL`). Decide forks → merge to main on his nod (conflicts lightly with `feat/load-logo` in `Header.tsx`).
+- [ ] **Load-logo — DECIDE OR KILL** — `feat/load-logo` @ `0f52726`: clip ~1.6s + hold; static logo = last frame, which has pen-tool anchor handles baked in. Needs Sean's clean SVG/transparent PNG, or ship only the draw-in over the old logo, or kill.
+- [x] **Stack popover on hackathon footnote** — shipped to prod `e39b54f` after a reviewer-caught focus/click fix.
