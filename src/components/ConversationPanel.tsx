@@ -76,8 +76,10 @@ function ConversationPanelInner() {
   // label across both instead of relying on `status`, which only the voice
   // path keeps in sync.
   const isGenerating = jobs.some((job) => job.status === "sketching");
-  const lastJob = jobs[jobs.length - 1];
-  const showError = lastJob?.status === "failed";
+  const lastSettledJob = [...jobs]
+    .reverse()
+    .find((job) => job.status === "done" || job.status === "failed");
+  const showError = !isGenerating && lastSettledJob?.status === "failed";
 
   const label = isGenerating
     ? artifact
@@ -104,8 +106,8 @@ function ConversationPanelInner() {
         {label}
       </span>
       {showError && (
-        <span className="text-xs font-medium text-red-500">
-          Something went wrong — try again.
+        <span className="text-xs font-medium text-zinc-500">
+          Couldn&rsquo;t sketch that — try again.
         </span>
       )}
     </PresentationOverlay>

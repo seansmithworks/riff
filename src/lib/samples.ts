@@ -1,87 +1,166 @@
 import type { Artifact } from "./artifact";
 
-// Dog-walking app: Home (search + list), Detail (image + card + actions),
-// Booking (inputs + confirm).
+// Real generated output (climbing gym session booking brief) captured from
+// the live model — schema-valid, kept verbatim as the "See an example" seed.
 export const SAMPLE_WIREFRAME: Artifact = {
   kind: "wireframe",
-  title: "Pawmise — Dog Walking",
+  title: "ClimbBook — Climbing Gym Session Booking",
   screens: [
     {
       id: "home",
-      name: "Home",
+      name: "Home — Upcoming Sessions",
       elements: [
-        { type: "navbar", title: "Pawmise", actions: ["Profile"] },
-        { type: "searchbar", placeholder: "Search walkers near you" },
-        { type: "heading", text: "Available today" },
+        { type: "navbar", title: "ClimbBook" },
+        { type: "heading", text: "Upcoming Sessions" },
         {
           type: "list",
           items: [
             {
-              title: "Jamie R.",
-              subtitle: "4.9 stars · 0.4mi away",
+              title: "Bouldering Basics — The Crimp Club",
+              subtitle: "Tue, Mar 12 · 6:30 PM · 3 spots left",
               hasImage: true,
             },
             {
-              title: "Alex T.",
-              subtitle: "4.8 stars · 0.7mi away",
+              title: "Lead Climbing Clinic — Summit Vertical",
+              subtitle: "Thu, Mar 14 · 7:00 PM · Waitlist #2",
               hasImage: true,
             },
             {
-              title: "Morgan L.",
-              subtitle: "5.0 stars · 1.1mi away",
-              hasImage: true,
-            },
-            {
-              title: "Casey P.",
-              subtitle: "4.7 stars · 1.5mi away",
+              title: "Open Climb — Granite State Gym",
+              subtitle: "Sat, Mar 16 · 10:00 AM · Confirmed",
               hasImage: true,
             },
           ],
         },
+        { type: "divider" },
+        { type: "heading", text: "Recommended Near You" },
         {
-          type: "tabbar",
-          tabs: ["Home", "Bookings", "Messages", "Profile"],
-          active: 0,
+          type: "list",
+          items: [
+            {
+              title: "Vertical World Seattle",
+              subtitle: "4.8 ★ · 2.1 mi · 12 sessions open",
+              hasImage: true,
+            },
+            {
+              title: "Seattle Bouldering Project",
+              subtitle: "4.9 ★ · 3.4 mi · 8 sessions open",
+              hasImage: true,
+            },
+          ],
         },
+        { type: "tabbar", tabs: ["Home", "Search", "Profile"], active: 0 },
       ],
     },
     {
-      id: "detail",
-      name: "Walker Detail",
+      id: "search",
+      name: "Gym Search with Filters",
       elements: [
-        { type: "navbar", title: "Jamie R.", actions: ["Share"] },
-        { type: "image", label: "Jamie R.", aspect: "wide" },
-        { type: "heading", text: "Jamie R." },
-        {
-          type: "text",
-          text: "4.9 stars · 212 walks completed · Certified pet first aid",
-        },
-        {
-          type: "card",
-          title: "About",
-          body: "Been walking dogs in the neighborhood for 5 years. Loves big energetic breeds.",
-          hasImage: false,
-        },
-        { type: "divider" },
+        { type: "navbar", title: "Find Gyms", actions: ["Back"] },
+        { type: "searchbar", placeholder: "Search by gym name or city" },
+        { type: "heading", text: "Filters" },
         {
           type: "row",
           children: [
-            { type: "button", label: "Message", variant: "secondary" },
-            { type: "button", label: "Book Walk", variant: "primary" },
+            { type: "button", label: "Indoor", variant: "primary" },
+            { type: "button", label: "Outdoor", variant: "secondary" },
           ],
         },
+        {
+          type: "row",
+          children: [
+            { type: "button", label: "Bouldering", variant: "primary" },
+            { type: "button", label: "Top Rope", variant: "secondary" },
+            { type: "button", label: "Lead", variant: "secondary" },
+          ],
+        },
+        {
+          type: "input",
+          label: "Max Distance",
+          placeholder: "Within 10 miles",
+        },
+        { type: "divider" },
+        { type: "heading", text: "12 Gyms Matching" },
+        {
+          type: "list",
+          items: [
+            {
+              title: "Vertical World Seattle",
+              subtitle: "Indoor · Top Rope, Lead · 2.1 mi",
+              hasImage: true,
+            },
+            {
+              title: "Seattle Bouldering Project",
+              subtitle: "Indoor · Bouldering · 3.4 mi",
+              hasImage: true,
+            },
+            {
+              title: "Exit 38 Outdoor Climbing",
+              subtitle: "Outdoor · Sport, Trad · 8.7 mi",
+              hasImage: true,
+            },
+            {
+              title: "Stone Gardens Climbing",
+              subtitle: "Indoor · Bouldering, Top Rope · 4.0 mi",
+              hasImage: true,
+            },
+          ],
+        },
+        { type: "tabbar", tabs: ["Home", "Search", "Profile"], active: 1 },
       ],
     },
     {
-      id: "booking",
-      name: "Booking",
+      id: "gym-detail",
+      name: "Gym Detail & Booking Confirmation",
       elements: [
-        { type: "navbar", title: "Book a Walk", actions: ["Cancel"] },
-        { type: "input", label: "Dog name", placeholder: "e.g. Biscuit" },
-        { type: "input", label: "Date & time", placeholder: "Today, 4:30 PM" },
-        { type: "input", label: "Duration", placeholder: "30 minutes" },
-        { type: "text", text: "Estimated total: $22.00" },
-        { type: "button", label: "Confirm Booking", variant: "primary" },
+        {
+          type: "navbar",
+          title: "Vertical World Seattle",
+          actions: ["Back", "Share"],
+        },
+        {
+          type: "image",
+          label: "Gym interior with lead wall and bouldering area",
+          aspect: "wide",
+        },
+        {
+          type: "card",
+          title: "Vertical World Seattle",
+          body: "Seattle's original climbing gym since 1987. 18,000 sq ft of lead, top rope, and bouldering terrain. Auto-belays available. Gear rental on-site.",
+          hasImage: false,
+        },
+        { type: "heading", text: "Available Sessions This Week" },
+        {
+          type: "list",
+          items: [
+            {
+              title: "Bouldering Open Session",
+              subtitle: "Mon, Mar 11 · 5:00 PM · $18 · 6 spots",
+            },
+            {
+              title: "Lead Climbing Clinic",
+              subtitle: "Wed, Mar 13 · 7:00 PM · $35 · 4 spots",
+            },
+            {
+              title: "Family Climb Hour",
+              subtitle: "Sat, Mar 16 · 10:00 AM · $22 · 8 spots",
+            },
+          ],
+        },
+        {
+          type: "row",
+          children: [
+            { type: "button", label: "Save Gym", variant: "secondary" },
+            { type: "button", label: "Book Session", variant: "primary" },
+          ],
+        },
+        { type: "divider" },
+        {
+          type: "card",
+          title: "Booking Confirmed",
+          body: "Lead Climbing Clinic — Wed, Mar 13 at 7:00 PM. Confirmation #VW-3392. Bring your own harness or rent on-site for $5. Cancellation free until 24 hours prior.",
+          hasImage: false,
+        },
       ],
     },
   ],
