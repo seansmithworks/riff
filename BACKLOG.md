@@ -44,3 +44,25 @@
 - [ ] **No real view switcher exists.** The pill's "Wireframe"/"Flow" buttons inject sample data; they are now dev-only and explicitly labelled. There is no control that switches the view of the *current* artifact between wireframe and flow. That's a genuine feature if wanted.
 - [ ] **Logo exploration — mic as the "i" in Riff.** Prompt written and handed to Sean for Quiver on 2026-07-28. Open question flagged in it: the speech bubble and a mic are both "talking" metaphors, so one may need to go. 16px legibility is the binding constraint.
 - [ ] **Reset the global model default** — carried from 2026-07-24. Sean set it to Opus 5 default via `/model` this session; verify that's intended vs. `opusplan`.
+
+## 2026-09-11 (light-refresh session, wrap-continue)
+
+**Shipped to prod 2026-09-10 (`4df6c37`):** primary model `glm-5p2`, 404 arms fallback, first-open empty state + "or type it" + "See an example", jobs-driven "Sketching…" label, real generated sample, `docs/SHOT-LIST-90s.md`.
+
+**Carried (on-objective, on `refresh/integration-2` @ `65ae1bd`, pushed, not on main):**
+
+- [ ] **Desktop platform** — `feat/desktop-platform` @ `bac2a77` is WIP: `max_tokens` 8000 + evolve cap 6 (`694848d`), `platform` field in schema/prompt (`ebe98bf`), then an unverified `DesktopFrame.tsx` + `WireframeCanvas.tsx` branch. Rebase onto `refresh/integration-2` (it predates the sketch-tune commits), finish, type-check, screenshot, review, merge.
+- [ ] **Sean's picks:** roughness 0.6 (committed) vs 0.45; tighten the hero-logo → headline gap (default on pickup: pull the logo down so the block reads as one unit, ~40px gap, Sean redlines).
+- [ ] **Merge `refresh/integration-2` → main + push** (= prod deploy; Sean nods per push), verify `/api/generate` → 200 on prod, then Sean records from `docs/SHOT-LIST-90s.md`.
+
+**Parked (off-objective):**
+
+- [ ] OG share card / `openGraph` metadata in `layout.tsx` — the link gets pasted into messages; no preview image today.
+- [ ] Phone-width pass — never checked beyond the empty state at 400px.
+- [ ] Flow nodes are not sketched — `FlowNodes.tsx` still crisp while wireframes are hand-drawn; inconsistent when both appear.
+- [ ] Docked hero logo overlaps the leftmost phone's screen title (pre-existing "logo overlaps status bar" item, now the title).
+- [ ] `ArtifactCanvas.tsx` hero top padding is a magic number (`pt-[280px]`), not derived from the logo box.
+- [ ] Stale worktree `.claude/worktrees/agent-a6823ba9705833ef4` (old copilotkit sticky-failover draft, 80 uncommitted lines) — Sean said drop it; `git worktree remove --force` was permission-blocked for agents. Also 8 finished session worktrees under `.claude/worktrees/` can go once their branches are merged.
+- [ ] CopilotKit chat throws `AI_MissingToolResultsError` when a `render_artifact` generate fails — the tool call never gets a result; the chat thread wedges.
+- [ ] Chat route has no model failover (streaming makes per-request failover impractical); it imports `MODEL_ID` so a retirement is a one-line fix.
+- [ ] Global model default: Sean said he switched to Fable this session; confirm it was session-only (`s`), not saved as default.
