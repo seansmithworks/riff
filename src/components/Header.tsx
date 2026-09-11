@@ -190,17 +190,21 @@ function ShareButton() {
 // useSessionActive) and stays docked for the rest of the session. One
 // element, one transform: `top`/`left` reposition the (always 160px-wide)
 // box, `scale` grows it from a `top left` origin so hero and docked are the
-// same element moving, not a crossfade. The source SVG has a pale mint
-// background baked in; multiply-blending it against the light canvas
-// removes the visible rectangle without needing a separate asset.
+// same element moving.
+//
+// The logo image itself is `riff-logo-drawn.webp` — a still exported from
+// the same recording as the intro clip below (the final drawn-and-filled
+// frame, mint tile baked in), NOT the old `riff-logo.svg`. That keeps the
+// intro clip and the at-rest logo pixel-identical, so ending the clip and
+// swapping to the still is invisible. `riff-logo.svg` is no longer
+// referenced anywhere in the app after this change.
 //
 // STRAWMAN — first-load intro. On mount, if the session hasn't already gone
 // active and the user hasn't asked for reduced motion, plays a short clip of
-// the logo being hand-drawn (in the same 160px hero box, same green as the
-// SVG's baked-in background) once, then crossfades into the static logo,
-// which docks exactly as it always has. Any failure mode (reduced motion,
-// video error, autoplay blocked) collapses immediately to today's behavior
-// — the static logo never stays hidden waiting on the clip.
+// the logo being hand-drawn (in the same 160px hero box) once, holds on its
+// final frame, then swaps to the (pixel-identical) still. Any failure mode
+// (reduced motion, video error, autoplay rejected) collapses immediately to
+// the still — it never stays hidden waiting on the clip.
 function LogoIntro({ onDone }: { onDone: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const doneRef = useRef(false);
@@ -212,9 +216,16 @@ function LogoIntro({ onDone }: { onDone: () => void }) {
   }
 
   useEffect(() => {
-    // Safety net: if `ended`/`error` never fire (stalled load, blocked
-    // autoplay), don't strand the hero on a frozen video forever.
-    const t = setTimeout(finish, 5000);
+    const video = videoRef.current;
+    // Autoplay can be silently rejected (e.g. Safari Low Power Mode) without
+    // ever firing `error` — call play() explicitly and fall back the moment
+    // the returned promise rejects, instead of waiting on the safety net.
+    video?.play().catch(finish);
+
+    // Safety net for a stalled load that never fires `ended`/`error`/a
+    // play() rejection: clip is ~2.6s (1.6s draw + 1s hold), so 4s is a
+    // generous margin.
+    const t = setTimeout(finish, 4000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -227,12 +238,11 @@ function LogoIntro({ onDone }: { onDone: () => void }) {
       <video
         ref={videoRef}
         className="h-full w-full object-cover"
-        autoPlay
         muted
         playsInline
         onEnded={finish}
         onError={finish}
-        poster="/riff-logo-draw-poster.png"
+        poster="/riff-logo-drawn.webp"
       >
         <source src="/riff-logo-draw.webm" type="video/webm" />
         <source src="/riff-logo-draw.mp4" type="video/mp4" />
@@ -260,8 +270,8 @@ export function RiffLogo() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Once the session goes active mid-clip, cut straight to the static logo
-  // rather than let a playing (and about-to-shrink) video dock alongside it.
+  // Once the session goes active mid-clip, cut straight to the still rather
+  // than let a playing (and about-to-shrink) video dock alongside it.
   useEffect(() => {
     if (docked && showIntro && !introDone) setIntroDone(true);
   }, [docked, showIntro, introDone]);
@@ -278,20 +288,16 @@ export function RiffLogo() {
         transformOrigin: "top left",
       }}
     >
-      {/* Box matches the static SVG's own aspect ratio (225x150 viewBox,
-          160px wide -> 106.67px tall) so the intro tile is exactly the
-          static logo's footprint — no layout shift into the headline below
-          when it crossfades. */}
-      <div
-        className="relative"
-        style={{ width: 160, height: 160 / (225 / 150) }}
-      >
+      {/* Box matches riff-logo-drawn.webp's own 3:2 aspect (642x428), 160px
+          wide -> 106.67px tall, so the intro tile is exactly the still's
+          footprint — no layout shift into the headline below. */}
+      <div className="relative" style={{ width: 160, height: 160 / 1.5 }}>
         {introVisible && <LogoIntro onDone={() => setIntroDone(true)} />}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/riff-logo.svg"
+          src="/riff-logo-drawn.webp"
           alt="Riff"
-          className="absolute top-0 left-0 transition-opacity duration-300"
+          className="absolute top-0 left-0 rounded-lg"
           style={{
             width: 160,
             height: "auto",
