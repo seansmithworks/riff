@@ -67,7 +67,10 @@ export function ArtifactCanvas({ onOpenChat }: { onOpenChat: () => void }) {
     <div className="relative h-full w-full">
       {isGenerating && <GeneratingIndicator />}
       {artifact.kind === "wireframe" ? (
-        <WireframeCanvas screens={artifact.screens} />
+        <WireframeCanvas
+          screens={artifact.screens}
+          platform={artifact.platform}
+        />
       ) : (
         <FlowCanvas nodes={artifact.nodes} edges={artifact.edges} />
       )}
