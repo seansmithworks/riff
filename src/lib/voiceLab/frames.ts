@@ -245,13 +245,21 @@ export function spawnCinder(
   frames: Frame[],
   t: number,
   cinders: Cinder[],
+  // Sparks off ray tips: when provided, the cinder launches from the tip
+  // point, flying outward along the ray's own direction, then joins the
+  // same wind field and landing behavior as an origin-spawned cinder.
+  emitter?: { x: number; y: number; angle: number },
 ) {
-  const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.4;
+  const angle = emitter
+    ? emitter.angle
+    : -Math.PI / 2 + (Math.random() - 0.5) * 1.4;
   const speed = 0.7 + Math.random() * 0.8;
   const frameId = frames[Math.floor(Math.random() * frames.length)].id;
+  const x = emitter ? emitter.x : origin.x + (Math.random() - 0.5) * 24;
+  const y = emitter ? emitter.y : origin.y;
   cinders.push({
-    x: origin.x + (Math.random() - 0.5) * 24,
-    y: origin.y,
+    x,
+    y,
     vx: Math.cos(angle) * speed,
     vy: Math.sin(angle) * speed,
     born: t,

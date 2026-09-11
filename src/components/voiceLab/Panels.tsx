@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useDialKit } from "dialkit";
 import { useEngine, type EngineHandle } from "./EngineContext";
 import { MARKS } from "@/lib/voiceLab/marks";
-import { VOICE_STATE_LABELS } from "@/lib/voiceLab/types";
+import { INK, RIFF_GREEN } from "@/lib/voiceLab/constants";
+import { VOICE_STATE_LABELS, type Role } from "@/lib/voiceLab/types";
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -71,21 +72,9 @@ function JobPanel() {
   return null;
 }
 
-function TogglesPanel({
-  onMarkChange,
-}: {
-  onMarkChange: (id: string) => void;
-}) {
+function TogglesPanel() {
   const handle = useEngine();
   const raw = useDialKit("Toggles", {
-    mark: {
-      type: "select",
-      options: MARKS.map((m) => ({
-        value: m.id,
-        label: `${pad(m.num)} — ${m.name}`,
-      })),
-      default: "burst",
-    },
     origin: {
       type: "select",
       options: [
@@ -96,14 +85,6 @@ function TogglesPanel({
     },
     centerCircle: true,
     onsetRings: true,
-    colorMode: {
-      type: "select",
-      options: [
-        { value: "ink", label: "Ink" },
-        { value: "green", label: "Green" },
-      ],
-      default: "ink",
-    },
     ambientGlow: true,
     cinders: true,
     showFrames: true,
@@ -111,21 +92,14 @@ function TogglesPanel({
     reducedMotion: false,
   });
 
-  const mark = raw.mark as string;
   const origin = raw.origin as "center" | "right";
   const centerCircle = raw.centerCircle as boolean;
   const onsetRings = raw.onsetRings as boolean;
-  const colorMode = raw.colorMode as "ink" | "green";
   const ambientGlow = raw.ambientGlow as boolean;
   const cinders = raw.cinders as boolean;
   const showFrames = raw.showFrames as boolean;
   const realMic = raw.realMic as boolean;
   const reducedMotion = raw.reducedMotion as boolean;
-
-  useEffect(() => {
-    onMarkChange(mark);
-    if (handle) handle.engine.config.currentMarkId = mark;
-  }, [mark, handle, onMarkChange]);
 
   useEffect(() => {
     if (!handle) return;
@@ -141,11 +115,6 @@ function TogglesPanel({
     if (!handle) return;
     handle.engine.config.onsetRingsOn = onsetRings;
   }, [handle, onsetRings]);
-
-  useEffect(() => {
-    if (!handle) return;
-    handle.engine.config.colorMode = colorMode;
-  }, [handle, colorMode]);
 
   useEffect(() => {
     if (!handle) return;
@@ -176,7 +145,10 @@ function TogglesPanel({
   return null;
 }
 
-function SelectedMarkPanel({ markId }: { markId: string }) {
+// Per-role tuners for whichever mark that role currently has assigned.
+// Keyed by role + markId so each role keeps independent values even when
+// both roles pick the same mark.
+function RoleMarkTunerPanel({ role, markId }: { role: Role; markId: string }) {
   const handle = useEngine();
   const mark = MARKS.find((m) => m.id === markId) ?? MARKS[0];
   const config = Object.fromEntries(
@@ -185,42 +157,72 @@ function SelectedMarkPanel({ markId }: { markId: string }) {
       [p.def, p.min, p.max, p.step] as [number, number, number, number],
     ]),
   );
-  const raw = useDialKit(`${pad(mark.num)} — ${mark.name}`, config, {
-    id: `mark-${mark.id}`,
-  });
+  const roleLabel = role === "human" ? "Human" : "Riff";
+  const raw = useDialKit(
+    `${roleLabel}: ${pad(mark.num)} — ${mark.name}`,
+    config,
+    {
+      id: `${role}-mark-${mark.id}`,
+    },
+  );
 
   useEffect(() => {
     if (!handle) return;
     for (const p of mark.params) {
-      handle.engine.config.markConfigs[mark.id][p.key] = raw[p.key] as number;
+      handle.engine.config.markConfigsByRole[role][mark.id][p.key] = raw[
+        p.key
+      ] as number;
     }
-  }, [handle, mark, raw]);
+  }, [handle, role, mark, raw]);
 
   return null;
 }
 
-function RiffPanel() {
+// Speaker -> mark assignment: each role picks any mark from the shared
+// library, plus its own color. The mark's own tuners render underneath.
+function RoleVoicePanel({
+  role,
+  title,
+  defaultMarkId,
+  defaultColor,
+}: {
+  role: Role;
+  title: string;
+  defaultMarkId: string;
+  defaultColor: string;
+}) {
   const handle = useEngine();
-  const raw = useDialKit("Riff voice", {
-    arcCount: [3, 1, 5, 1],
-    baseRadius: [34, 20, 70, 1],
-    radiusStep: [20, 0, 40, 1],
-    amplitude: [5, 0, 20, 1],
-    thickness: [1.5, 0.5, 3, 0.1],
-  });
+  const raw = useDialKit(
+    title,
+    {
+      mark: {
+        type: "select",
+        options: MARKS.map((m) => ({
+          value: m.id,
+          label: `${pad(m.num)} — ${m.name}`,
+        })),
+        default: defaultMarkId,
+      },
+      color: defaultColor,
+    },
+    { id: `${role}-voice` },
+  );
+  const markId = raw.mark as string;
+  const color = raw.color as string;
 
   useEffect(() => {
     if (!handle) return;
-    handle.engine.config.riffConfig = {
-      arcCount: raw.arcCount as number,
-      baseRadius: raw.baseRadius as number,
-      radiusStep: raw.radiusStep as number,
-      amplitude: raw.amplitude as number,
-      thickness: raw.thickness as number,
-    };
-  }, [handle, raw]);
+    if (role === "human") handle.engine.config.humanMarkId = markId;
+    else handle.engine.config.riffMarkId = markId;
+  }, [handle, role, markId]);
 
-  return null;
+  useEffect(() => {
+    if (!handle) return;
+    if (role === "human") handle.engine.config.humanColor = color;
+    else handle.engine.config.riffColor = color;
+  }, [handle, role, color]);
+
+  return <RoleMarkTunerPanel role={role} markId={markId} />;
 }
 
 function CinderPanel() {
@@ -230,6 +232,7 @@ function CinderPanel() {
     windStrength: [1.0, 0, 3, 0.1],
     burstSize: [40, 0, 120, 5],
     landDurationMs: [900, 400, 1800, 50],
+    tipSparkRate: [0.8, 0, 1, 0.05],
   });
 
   useEffect(() => {
@@ -239,6 +242,7 @@ function CinderPanel() {
       windStrength: raw.windStrength as number,
       burstSize: raw.burstSize as number,
       landDurationMs: raw.landDurationMs as number,
+      tipSparkRate: raw.tipSparkRate as number,
     };
   }, [handle, raw]);
 
@@ -246,14 +250,23 @@ function CinderPanel() {
 }
 
 export default function VoiceLabPanels() {
-  const [markId, setMarkId] = useState("burst");
   return (
     <>
       <VoicePanel />
       <JobPanel />
-      <TogglesPanel onMarkChange={setMarkId} />
-      <SelectedMarkPanel markId={markId} />
-      <RiffPanel />
+      <TogglesPanel />
+      <RoleVoicePanel
+        role="human"
+        title="Human voice"
+        defaultMarkId="ripple"
+        defaultColor={INK}
+      />
+      <RoleVoicePanel
+        role="riff"
+        title="Riff voice"
+        defaultMarkId="burst"
+        defaultColor={RIFF_GREEN}
+      />
       <CinderPanel />
     </>
   );

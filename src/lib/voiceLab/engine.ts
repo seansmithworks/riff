@@ -25,7 +25,6 @@ import {
   drawMicDisc,
   drawFlatline,
   drawIdleSquiggle,
-  drawRiffMark,
   strokeChain,
 } from "./marks";
 import {
@@ -41,7 +40,14 @@ import {
   type Cinder,
   type DustPuff,
 } from "./frames";
-import type { EngineConfig, VoiceState, JobState } from "./types";
+import type {
+  EngineConfig,
+  VoiceState,
+  JobState,
+  Role,
+  MarkDef,
+  MarkDrawArgs,
+} from "./types";
 import { VOICE_STATES } from "./types";
 
 export function defaultEngineConfig(): EngineConfig {
@@ -49,26 +55,26 @@ export function defaultEngineConfig(): EngineConfig {
     voiceState: "idle",
     jobState: "none",
     originSide: "center",
-    colorMode: "ink",
     centerCircleOn: true,
     onsetRingsOn: true,
     ambientGlowOn: true,
     cindersOn: true,
     showFramesOn: true,
-    currentMarkId: "burst",
-    markConfigs: defaultMarkConfigs(),
-    riffConfig: {
-      arcCount: 3,
-      baseRadius: 34,
-      radiusStep: 20,
-      amplitude: 5,
-      thickness: 1.5,
+    // Speaker -> mark assignment: Riff = Burst (green), Human = Ripple (ink).
+    humanMarkId: "ripple",
+    riffMarkId: "burst",
+    humanColor: INK,
+    riffColor: RIFF_GREEN,
+    markConfigsByRole: {
+      human: defaultMarkConfigs(),
+      riff: defaultMarkConfigs(),
     },
     cinderConfig: {
       cinderCap: 500,
       windStrength: 1.0,
       burstSize: 40,
       landDurationMs: 900,
+      tipSparkRate: 0.8,
     },
     reducedMotion: false,
     realMicEnabled: false,
@@ -97,8 +103,17 @@ export class VoiceLabEngine {
   private lastOnsetAt = 0;
   private prevUserAvg = 0;
   private nextSyntheticOnsetAt = 0;
+  // Riff gets its own onset pulse — it has no real-mic input, so it's
+  // always the synthetic-schedule path, analogous to the human one above.
+  private riffOnsetPulse = 0;
+  private lastRiffOnsetAt = 0;
+  private nextRiffOnsetAt = 0;
   private smoothedUser = [0.2, 0.2, 0.2, 0.2, 0.2];
   private smoothedAgent = [0.2, 0.2, 0.2, 0.2, 0.2];
+  // Cached from the last frame's active-speaker mark draw call, so sketch-job
+  // cinder spawning (which runs before drawVoiceLayer each frame) can read
+  // its tip emitters with a harmless one-frame lag.
+  private lastMarkContext: { mark: MarkDef; g: MarkDrawArgs } | null = null;
   private boilFrame = 0;
   private lastBoilAt = 0;
   private sketchStartTime = 0;
@@ -159,12 +174,19 @@ export class VoiceLabEngine {
     this.onStatus = cb;
   }
 
+  private activeRoleAndMarkId(): { role: Role; markId: string } {
+    return this.config.voiceState === "riff-talking"
+      ? { role: "riff", markId: this.config.riffMarkId }
+      : { role: "human", markId: this.config.humanMarkId };
+  }
+
   private emitStatus() {
     if (!this.onStatus) return;
+    const { markId } = this.activeRoleAndMarkId();
     this.onStatus({
       voiceState: this.config.voiceState,
       jobState: this.config.jobState,
-      markName: MARK_BY_ID[this.config.currentMarkId]?.name ?? "",
+      markName: MARK_BY_ID[markId]?.name ?? "",
       originSide: this.config.originSide,
       realMic: this.config.realMicEnabled,
       reducedMotion: this.reducedMotionActive(),
@@ -175,10 +197,6 @@ export class VoiceLabEngine {
     return this.config.originSide === "center"
       ? { x: W / 2, y: H - 90 }
       : { x: W - 160, y: H - 90 };
-  }
-
-  currentColor() {
-    return this.config.colorMode === "green" ? RIFF_GREEN : INK;
   }
 
   reducedMotionActive(): boolean {
@@ -194,6 +212,7 @@ export class VoiceLabEngine {
     if (!VOICE_STATES.includes(next)) return;
     this.config.voiceState = next;
     if (next === "you-talking") this.nextSyntheticOnsetAt = 0;
+    if (next === "riff-talking") this.nextRiffOnsetAt = 0;
     this.emitStatus();
   }
 
@@ -327,9 +346,20 @@ export class VoiceLabEngine {
     }
   }
 
-  private drawOnsetRings(t: number) {
+  // Riff has no real-mic input, so its onset pulse is always the synthetic
+  // schedule — the same shape as the human path's synthetic branch above.
+  private maybeDetectRiffOnset(t: number) {
+    if (this.config.voiceState !== "riff-talking") return;
+    if (this.nextRiffOnsetAt === 0) this.nextRiffOnsetAt = t + 300;
+    if (t >= this.nextRiffOnsetAt) {
+      this.lastRiffOnsetAt = t;
+      this.riffOnsetPulse = 1;
+      this.nextRiffOnsetAt = t + 500 + Math.random() * 400;
+    }
+  }
+
+  private drawOnsetRings(t: number, color: string) {
     this.rings = this.rings.filter((r) => t - r.born < 480);
-    const color = this.currentColor();
     for (const r of this.rings) {
       const p = (t - r.born) / 480;
       const radius = 22 + p * 100;
@@ -361,13 +391,16 @@ export class VoiceLabEngine {
 
   private drawVoiceLayer(t: number, dt: number) {
     const o = this.getOrigin();
-    const color = this.currentColor();
     const state = this.config.voiceState;
-    if (this.config.centerCircleOn) drawMicDisc(o, color);
+    if (this.config.centerCircleOn) drawMicDisc(o, INK);
     if (t - this.lastBoilAt > 400) {
       this.boilFrame = (this.boilFrame + 1) % 3;
       this.lastBoilAt = t;
     }
+
+    // Only a talking state has an "active speaker mark" whose tips sketch
+    // cinders can spawn from; every other state clears it.
+    this.lastMarkContext = null;
 
     if (state === "you-talking") {
       const data = this.levelDataForState(t, state);
@@ -376,32 +409,49 @@ export class VoiceLabEngine {
       const level = bands.reduce((a, b) => a + b, 0) / bands.length;
       this.maybeDetectOnset(t, level);
       this.onsetPulse *= Math.pow(0.86, dt / 16.7);
-      const mark = MARK_BY_ID[this.config.currentMarkId];
-      mark.draw({
+      const mark = MARK_BY_ID[this.config.humanMarkId];
+      const g: MarkDrawArgs = {
         o,
         t,
         level,
         bands,
         onsetPulse: this.onsetPulse,
         boilFrame: this.boilFrame,
-        color,
-        cfg: this.config.markConfigs[this.config.currentMarkId],
+        color: this.config.humanColor,
+        cfg: this.config.markConfigsByRole.human[this.config.humanMarkId],
         mode: "talking",
-      });
-      if (this.config.onsetRingsOn) this.drawOnsetRings(t);
+      };
+      mark.draw(g);
+      this.lastMarkContext = { mark, g };
+      if (this.config.onsetRingsOn)
+        this.drawOnsetRings(t, this.config.humanColor);
     } else if (state === "riff-talking") {
       const data = synthesizeLevelData(t * 0.8 + 4000);
       this.smoothedAgent = computeBands(data, this.smoothedAgent);
-      const level =
-        this.smoothedAgent.reduce((a, b) => a + b, 0) /
-        this.smoothedAgent.length;
-      drawRiffMark(o, t, level, this.config.riffConfig, RIFF_GREEN);
+      const bands = BAR_ORDER.map((i) => this.smoothedAgent[i]);
+      const level = bands.reduce((a, b) => a + b, 0) / bands.length;
+      this.maybeDetectRiffOnset(t);
+      this.riffOnsetPulse *= Math.pow(0.86, dt / 16.7);
+      const mark = MARK_BY_ID[this.config.riffMarkId];
+      const g: MarkDrawArgs = {
+        o,
+        t,
+        level,
+        bands,
+        onsetPulse: this.riffOnsetPulse,
+        boilFrame: this.boilFrame,
+        color: this.config.riffColor,
+        cfg: this.config.markConfigsByRole.riff[this.config.riffMarkId],
+        mode: "talking",
+      };
+      mark.draw(g);
+      this.lastMarkContext = { mark, g };
     } else if (state === "silence") {
       const data = this.levelDataForState(t, state);
       this.smoothedUser = computeBands(data, this.smoothedUser);
       const bands = BAR_ORDER.map((i) => this.smoothedUser[i]);
       const level = bands.reduce((a, b) => a + b, 0) / bands.length;
-      const mark = MARK_BY_ID[this.config.currentMarkId];
+      const mark = MARK_BY_ID[this.config.humanMarkId];
       mark.draw({
         o,
         t,
@@ -409,14 +459,14 @@ export class VoiceLabEngine {
         bands,
         onsetPulse: 0,
         boilFrame: this.boilFrame,
-        color,
-        cfg: this.config.markConfigs[this.config.currentMarkId],
+        color: this.config.humanColor,
+        cfg: this.config.markConfigsByRole.human[this.config.humanMarkId],
         mode: "silence",
       });
     } else if (state === "dead-mic") {
-      drawFlatline(o, color);
+      drawFlatline(o, this.config.humanColor);
     } else {
-      drawIdleSquiggle(o, t, color, 0);
+      drawIdleSquiggle(o, t, this.config.humanColor, 0);
     }
   }
 
@@ -432,12 +482,25 @@ export class VoiceLabEngine {
     if (this.cinders.length >= this.config.cinderConfig.cinderCap) return;
     const rate = Math.max(0, 30 * (1 - elapsed / 11000));
     this.spawnAccumulator += (rate * dt) / 1000;
+    // Sparks off ray tips: if the active speaker mark exposes an emitter
+    // (e.g. Burst), a fraction of spawns fly off its live tip points instead
+    // of the disc origin. Falls back to the origin when there's no active
+    // talking mark or it has no emitter.
+    const emitters = this.lastMarkContext?.mark.getTipEmitters
+      ? this.lastMarkContext.mark.getTipEmitters(this.lastMarkContext.g)
+      : [];
     while (
       this.spawnAccumulator >= 1 &&
       this.cinders.length < this.config.cinderConfig.cinderCap
     ) {
       this.spawnAccumulator -= 1;
-      spawnCinder(this.getOrigin(), this.frames, t, this.cinders);
+      const useTip =
+        emitters.length > 0 &&
+        Math.random() < this.config.cinderConfig.tipSparkRate;
+      const emitter = useTip
+        ? emitters[Math.floor(Math.random() * emitters.length)]
+        : undefined;
+      spawnCinder(this.getOrigin(), this.frames, t, this.cinders, emitter);
     }
   }
 

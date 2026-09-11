@@ -24,7 +24,10 @@ export const VOICE_STATE_LABELS: Record<VoiceState, string> = {
 export type JobState = "none" | "sketching" | "landing";
 
 export type OriginSide = "center" | "right";
-export type ColorMode = "ink" | "green";
+
+// The mark library is role-agnostic: either speaker can be assigned any
+// mark, with its own color and its own tuner values for that mark.
+export type Role = "human" | "riff";
 
 export type MarkParam = {
   key: string;
@@ -34,6 +37,8 @@ export type MarkParam = {
   step: number;
   def: number;
 };
+
+export type TipEmitter = { x: number; y: number; angle: number };
 
 export type MarkDrawArgs = {
   o: { x: number; y: number };
@@ -53,14 +58,10 @@ export type MarkDef = {
   name: string;
   params: MarkParam[];
   draw(g: MarkDrawArgs): void;
-};
-
-export type RiffConfig = {
-  arcCount: number;
-  baseRadius: number;
-  radiusStep: number;
-  amplitude: number;
-  thickness: number;
+  // Optional emitter interface: exposes this frame's ray/line tip points in
+  // world space so sketch-job cinders can spawn off them instead of the
+  // disc origin. Only marks with distinct "tips" (e.g. Burst) implement it.
+  getTipEmitters?(g: MarkDrawArgs): TipEmitter[];
 };
 
 export type CinderConfig = {
@@ -68,21 +69,28 @@ export type CinderConfig = {
   windStrength: number;
   burstSize: number;
   landDurationMs: number;
+  // Fraction (0-1) of sketch-job spawns that originate from the active
+  // speaker mark's ray tips (when it exposes an emitter) instead of the
+  // disc origin.
+  tipSparkRate: number;
 };
 
 export type EngineConfig = {
   voiceState: VoiceState;
   jobState: JobState;
   originSide: OriginSide;
-  colorMode: ColorMode;
   centerCircleOn: boolean;
   onsetRingsOn: boolean;
   ambientGlowOn: boolean;
   cindersOn: boolean;
   showFramesOn: boolean;
-  currentMarkId: string;
-  markConfigs: Record<string, Record<string, number>>;
-  riffConfig: RiffConfig;
+  // Speaker -> mark assignment. Each role picks any mark from the shared
+  // library, with its own color and its own per-mark tuner values.
+  humanMarkId: string;
+  riffMarkId: string;
+  humanColor: string;
+  riffColor: string;
+  markConfigsByRole: Record<Role, Record<string, Record<string, number>>>;
   cinderConfig: CinderConfig;
   reducedMotion: boolean;
   realMicEnabled: boolean;

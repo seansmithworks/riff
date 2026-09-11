@@ -5,13 +5,7 @@ import {
   roughCircle,
   mulberry32,
 } from "drawably";
-import {
-  SKETCH_ROUGHNESS,
-  hashSeed,
-  polar,
-  arcPts,
-  wavePoints,
-} from "./constants";
+import { SKETCH_ROUGHNESS, hashSeed, polar, arcPts } from "./constants";
 import type { MarkDef, MarkDrawArgs } from "./types";
 
 // Shared drawing helpers ----------------------------------------------------
@@ -155,6 +149,41 @@ export const MARKS: MarkDef[] = [
           0.45 + energyAbove * 0.5,
         );
       }
+    },
+    // Mirrors the tip computation in draw() so sketch-job cinders can spawn
+    // off the live ray ends instead of the disc origin.
+    getTipEmitters(g: MarkDrawArgs) {
+      const { o, t, bands, onsetPulse, cfg } = g;
+      const pool = Math.round(cfg.rayCount);
+      const jitterBucket = Math.floor(t / 150);
+      const tips = [];
+      for (let i = 0; i < pool; i++) {
+        const frac = i / (pool - 1);
+        const pos = frac * (bands.length - 1);
+        const i0 = Math.floor(pos),
+          i1 = Math.min(bands.length - 1, i0 + 1),
+          lerp = pos - i0;
+        const lvl = bands[i0] * (1 - lerp) + bands[i1] * lerp;
+        const slotRng = mulberry32(hashSeed(`b-slot-${i}`));
+        const threshold = 0.05 + slotRng() * 0.5;
+        const posJitterDeg = (slotRng() - 0.5) * 16;
+        const lenJitter = slotRng();
+        if (lvl < threshold) continue;
+        const energyAbove = Math.min(1, (lvl - threshold) / (1 - threshold));
+        const angleDeg =
+          -90 - cfg.spread / 2 + cfg.spread * frac + posJitterDeg;
+        const jitterRng = mulberry32(hashSeed(`b-jit-${i}-${jitterBucket}`));
+        const angleJitter = (jitterRng() - 0.5) * 6;
+        const a = ((angleDeg + angleJitter) * Math.PI) / 180;
+        const len =
+          12 +
+          energyAbove * cfg.reach +
+          lenJitter * 18 +
+          onsetPulse * cfg.onsetPunch * 24;
+        const [x2, y2] = polar(o.x, o.y, 26 + len, a);
+        tips.push({ x: x2, y: y2, angle: a });
+      }
+      return tips;
     },
   },
   {
@@ -856,6 +885,174 @@ export const MARKS: MarkDef[] = [
       }
     },
   },
+  {
+    // Promotes the broken/gapped onset-ring visual (previously only a
+    // transient overlay fired by onsets, drawOnsetRings) to a standalone,
+    // continuously-driven mark: level sets the resting radius/alpha, onsets
+    // punch it outward. This is a new implementation, not a reuse of
+    // "10 — Concentric Rings" — that mark draws closed loops; Ripple draws
+    // the gapped double-arc rings, matching what onsets already throw.
+    id: "ripple",
+    num: 12,
+    name: "Ripple",
+    params: [
+      {
+        key: "ringCount",
+        label: "Ring count",
+        min: 2,
+        max: 6,
+        step: 1,
+        def: 4,
+      },
+      {
+        key: "spacing",
+        label: "Spacing (px)",
+        min: 8,
+        max: 30,
+        step: 1,
+        def: 15,
+      },
+      { key: "gapDeg", label: "Gap (deg)", min: 10, max: 60, step: 2, def: 26 },
+      {
+        key: "thickness",
+        label: "Thickness",
+        min: 0.5,
+        max: 2.5,
+        step: 0.1,
+        def: 1.4,
+      },
+      {
+        key: "onsetPunch",
+        label: "Onset punch",
+        min: 0,
+        max: 2,
+        step: 0.1,
+        def: 1.0,
+      },
+    ],
+    draw(g: MarkDrawArgs) {
+      const { o, t, level, onsetPulse, color, cfg, mode } = g;
+      const n = Math.round(cfg.ringCount);
+      const gapRad = (cfg.gapDeg * Math.PI) / 180;
+      for (let i = 0; i < n; i++) {
+        const radius =
+          22 + i * cfg.spacing + level * 16 + onsetPulse * cfg.onsetPunch * 22;
+        const rot = t / 1800 + i * 0.6;
+        const arcs: [number, number][] = [
+          [rot, rot + Math.PI - gapRad],
+          [rot + Math.PI, rot + Math.PI * 2 - gapRad],
+        ];
+        const alpha =
+          mode === "silence"
+            ? 0.28
+            : Math.max(0.2, 0.85 - i * 0.15) * (0.5 + level * 0.5);
+        const seedBase = hashSeed(`ripple-${i}`) + Math.floor(t / 260);
+        for (const [a0, a1] of arcs) {
+          strokeChain(
+            arcPts(o.x, o.y, radius, a0, a1, 6),
+            color,
+            cfg.thickness,
+            seedBase,
+            alpha,
+          );
+        }
+      }
+    },
+  },
+  {
+    // Riff's voice, generalized into the shared mark library so either
+    // speaker can select it. Arcs are split into segments driven by the 5
+    // frequency bands (so different parts of the sweep flex independently,
+    // not one uniform phase wobble), a sweep tuner controls how far they
+    // wrap the mic disc (default ~300°, innermost arc hugging it), and a
+    // traveling bump — gated by onsetPulse — reads as a pulse moving along
+    // the arcs.
+    id: "riffArcs",
+    num: 13,
+    name: "Riff Arcs",
+    params: [
+      { key: "arcCount", label: "Arc count", min: 1, max: 5, step: 1, def: 3 },
+      {
+        key: "baseRadius",
+        label: "Base radius",
+        min: 16,
+        max: 50,
+        step: 1,
+        def: 28,
+      },
+      { key: "arcGap", label: "Arc gap", min: 4, max: 30, step: 1, def: 14 },
+      {
+        key: "sweep",
+        label: "Sweep (deg)",
+        min: 120,
+        max: 340,
+        step: 5,
+        def: 300,
+      },
+      { key: "bandFlex", label: "Band flex", min: 0, max: 20, step: 1, def: 8 },
+      {
+        key: "pulseSpeed",
+        label: "Pulse speed",
+        min: 0.2,
+        max: 3,
+        step: 0.1,
+        def: 1.0,
+      },
+      {
+        key: "thickness",
+        label: "Thickness",
+        min: 0.5,
+        max: 3,
+        step: 0.1,
+        def: 1.5,
+      },
+    ],
+    draw(g: MarkDrawArgs) {
+      const { o, t, level, bands, onsetPulse, color, cfg, mode } = g;
+      const n = Math.round(cfg.arcCount);
+      const sweepRad = (cfg.sweep * Math.PI) / 180;
+      const a0 = -Math.PI / 2 - sweepRad / 2;
+      const a1 = -Math.PI / 2 + sweepRad / 2;
+      const segsPerBand = 4;
+      const totalSegs = bands.length * segsPerBand;
+      const pulseT = ((t * cfg.pulseSpeed) / 1000) % 1;
+      for (let i = 0; i < n; i++) {
+        const baseR = cfg.baseRadius + i * cfg.arcGap;
+        const pts: [number, number][] = [];
+        for (let s = 0; s <= totalSegs; s++) {
+          const frac = s / totalSegs;
+          const a = a0 + (a1 - a0) * frac;
+          const bandIdx = Math.min(
+            bands.length - 1,
+            Math.floor(frac * bands.length),
+          );
+          const bandLevel = bands[bandIdx];
+          const wob =
+            Math.sin(frac * 9 + t / 240 + i * 1.3 + bandIdx * 0.8) *
+            cfg.bandFlex *
+            (0.3 + bandLevel);
+          const pulseDist = Math.abs(frac - pulseT);
+          const pulseBump =
+            onsetPulse > 0.02
+              ? Math.max(0, 1 - pulseDist * 6) * onsetPulse * 10
+              : 0;
+          const r = baseR + wob + pulseBump + level * 4;
+          pts.push(polar(o.x, o.y, r, a));
+        }
+        const alpha =
+          mode === "silence"
+            ? 0.3
+            : Math.max(0.2, 0.55 + level * 0.35 - i * 0.05);
+        strokeChain(
+          pts,
+          color,
+          cfg.thickness,
+          hashSeed(`arcs-${i}`) + Math.floor(t / 90),
+          alpha,
+        );
+      }
+    },
+  },
 ];
 
 export const MARK_BY_ID: Record<string, MarkDef> = Object.fromEntries(
@@ -905,41 +1102,6 @@ export function drawIdleSquiggle(
     boilSeed: seed,
   });
   strokePath(new Path2D(d), color, 1.25, boil ? 0.5 : 0.6);
-}
-
-export function drawRiffMark(
-  o: { x: number; y: number },
-  t: number,
-  level: number,
-  cfg: {
-    arcCount: number;
-    baseRadius: number;
-    radiusStep: number;
-    amplitude: number;
-    thickness: number;
-  },
-  riffGreen: string,
-) {
-  const n = Math.round(cfg.arcCount);
-  for (let i = 0; i < n; i++) {
-    const r = cfg.baseRadius + i * cfg.radiusStep + level * 14;
-    const pts = wavePoints(
-      o.x,
-      o.y,
-      r,
-      cfg.amplitude + level * 8,
-      1.1,
-      t / 260 + i,
-      10,
-    );
-    strokeChain(
-      pts,
-      riffGreen,
-      cfg.thickness,
-      hashSeed(`wave-${i}`) + Math.floor(t / 100),
-      0.85,
-    );
-  }
 }
 
 export function resetWaveformBuf() {
