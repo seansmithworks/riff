@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 const STACK = [
   { name: "ElevenLabs Conversational AI", role: "Voice agent" },
@@ -34,6 +34,24 @@ export function HackathonFootnote() {
     closeTimeout.current = setTimeout(() => setOpen(false), 100);
   }
 
+  useEffect(() => {
+    return () => {
+      if (closeTimeout.current) clearTimeout(closeTimeout.current);
+    };
+  }, []);
+
+  // Touch has no hover/focus-visible equivalent, so it drives its own
+  // toggle here. Mouse and keyboard are handled entirely by
+  // hover/focus/blur below — deliberately no onClick, since a real click
+  // or Enter/Space always fires focus (and, for mouse, mouseenter) first;
+  // an onClick toggle on top of that would immediately cancel the open it
+  // just caused.
+  function handlePointerDown(e: React.PointerEvent) {
+    if (e.pointerType === "touch") {
+      setOpen((prev) => !prev);
+    }
+  }
+
   return (
     <div
       className="fixed bottom-4 left-16 z-20"
@@ -46,7 +64,7 @@ export function HackathonFootnote() {
         aria-describedby={popoverId}
         onFocus={show}
         onBlur={hide}
-        onClick={() => setOpen((prev) => !prev)}
+        onPointerDown={handlePointerDown}
         onKeyDown={(e) => {
           if (e.key === "Escape") hide();
         }}
