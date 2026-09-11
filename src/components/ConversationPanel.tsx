@@ -67,7 +67,23 @@ export function ConversationPanel() {
 function ConversationPanelInner() {
   const messages = useStore((s) => s.messages);
   const status = useStore((s) => s.status);
+  const artifact = useStore((s) => s.artifact);
+  const jobs = useStore((s) => s.jobs);
   const { start, stop, isConnected } = useVoice();
+
+  // jobs is the shared queue written by both the voice (useVoice.ts) and
+  // text (CopilotPanel.tsx) render paths — reading it here unifies the mic
+  // label across both instead of relying on `status`, which only the voice
+  // path keeps in sync.
+  const isGenerating = jobs.some((job) => job.status === "sketching");
+  const lastJob = jobs[jobs.length - 1];
+  const showError = lastJob?.status === "failed";
+
+  const label = isGenerating
+    ? artifact
+      ? "Revising…"
+      : "Sketching…"
+    : (STATUS_LABEL[status] ?? STATUS_LABEL.idle);
 
   const handleMicClick = () => {
     if (isConnected) {
@@ -85,8 +101,13 @@ function ConversationPanelInner() {
         onClick={handleMicClick}
       />
       <span className="text-xs font-medium tracking-wide text-zinc-500">
-        {STATUS_LABEL[status] ?? STATUS_LABEL.idle}
+        {label}
       </span>
+      {showError && (
+        <span className="text-xs font-medium text-red-500">
+          Something went wrong — try again.
+        </span>
+      )}
     </PresentationOverlay>
   );
 }

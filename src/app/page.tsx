@@ -24,7 +24,7 @@ export default function Home() {
       <Header />
       <ChatButton open={chatOpen} onClick={() => setChatOpen((o) => !o)} />
       <main className="flex-1 overflow-hidden">
-        <ArtifactCanvas />
+        <ArtifactCanvas onOpenChat={() => setChatOpen(true)} />
       </main>
       <ConversationPanel />
       <CopilotPanel open={chatOpen} onOpenChange={setChatOpen} />
