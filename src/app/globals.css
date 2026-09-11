@@ -37,7 +37,7 @@ body {
   display: none;
 }
 
-/* Presentation-mode voice glow — see src/components/PresentationOverlay.tsx */
+/* Ambient voice glow — see src/components/VoiceBar.tsx */
 @keyframes riff-glow-listening {
   0%,
   100% {
@@ -92,5 +92,69 @@ body {
   .riff-glow-speaking {
     animation: none;
     opacity: 0.18;
+  }
+}
+
+/* Conversation Bar — see src/components/VoiceBar.tsx */
+@keyframes riff-bars-wait {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.riff-bars-wait {
+  animation: riff-bars-wait 900ms ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .riff-bars-wait {
+    animation: none;
+    transform: scaleY(0.65);
+  }
+}
+
+/* Sketching-chip progress track — eases to 90% over the 11-19s generation
+   window, then VoiceBar snaps it to 100% via a plain transition on done. */
+@keyframes riff-track-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(0.9);
+  }
+}
+
+.riff-track-fill {
+  animation: riff-track-fill 16s cubic-bezier(0.1, 0.6, 0.3, 1) forwards;
+}
+
+@keyframes riff-chip-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes riff-hint-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .riff-track-fill {
+    animation: none;
+    transform: scaleX(0.9);
   }
 }
