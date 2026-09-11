@@ -27,7 +27,7 @@ function getServiceAdapter(): OpenAIAdapter {
 
     serviceAdapter = new OpenAIAdapter({
       openai,
-      model: "accounts/fireworks/models/glm-5p1",
+      model: "accounts/fireworks/models/glm-5p2",
     });
   }
   return serviceAdapter;

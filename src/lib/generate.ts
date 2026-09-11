@@ -7,7 +7,7 @@ const FIREWORKS_URL = "https://api.fireworks.ai/inference/v1/chat/completions";
 
 // Primary model per Fireworks' current fast-structured-output list.
 // Fallback (e.g. if the primary is unavailable): "accounts/fireworks/models/gpt-oss-120b".
-export const MODEL_ID = "accounts/fireworks/models/glm-5p1";
+export const MODEL_ID = "accounts/fireworks/models/glm-5p2";
 export const FALLBACK_MODEL_ID = "accounts/fireworks/models/gpt-oss-120b";
 
 const SCHEMA_STRING = JSON.stringify(ARTIFACT_JSON_SCHEMA);
