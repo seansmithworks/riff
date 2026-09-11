@@ -5,8 +5,8 @@ import { roughLine, roughRoundedRect, roughEllipse } from "drawably";
 
 // One-line flips for the hand-drawn look. See CreativeConvos/ORCHESTRATOR.md
 // "fidelity line" — surface stays honest, structure stays real.
-export const SKETCH_ROUGHNESS = 1.2;
-export const SKETCH_STROKE_WIDTH = 1.5;
+export const SKETCH_ROUGHNESS = 0.9;
+export const SKETCH_STROKE_WIDTH = 1.25;
 export const SKETCH_HAND_FONT = true;
 
 // Rules (dividers/borders) use a lower roughness than rects/ellipses —
