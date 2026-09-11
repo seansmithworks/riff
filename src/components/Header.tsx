@@ -1,8 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import { SAMPLE_WIREFRAME, SAMPLE_FLOW } from "@/lib/samples";
+
+// Shared "has the session started" flag: mic tap, sent text, or a loaded
+// artifact all dock the logo (and, once docked, keep the empty-state canvas
+// out of hero-reserved spacing) — and it never un-docks for the rest of the
+// session, even if status returns to idle. Exported so ArtifactCanvas can
+// read the same latch instead of re-deriving a second one that could drift.
+export function useSessionActive(): boolean {
+  const status = useStore((s) => s.status);
+  const jobsLength = useStore((s) => s.jobs.length);
+  const hasArtifact = useStore((s) => s.artifact !== null);
+  const isActiveNow = status !== "idle" || jobsLength > 0 || hasArtifact;
+  const [active, setActive] = useState(isActiveNow);
+  useEffect(() => {
+    if (isActiveNow) setActive(true);
+  }, [isActiveNow]);
+  return active;
+}
 
 type ShareState = "idle" | "loading" | "success" | "error";
 
@@ -167,12 +184,28 @@ function ShareButton() {
   );
 }
 
-// Riff logo, floating top-left over the canvas. The source SVG has a pale
-// mint background baked in; multiply-blending it against the light canvas
+// Riff logo. Starts large and centered as the hero mark over the empty
+// canvas; docks to the current top-left corner position/size the moment the
+// session goes active (mic tap, sent text, or a loaded artifact — see
+// useSessionActive) and stays docked for the rest of the session. One
+// element, one transform: `top`/`left` reposition the (always 160px-wide)
+// box, `scale` grows it from a `top left` origin so hero and docked are the
+// same element moving, not a crossfade. The source SVG has a pale mint
+// background baked in; multiply-blending it against the light canvas
 // removes the visible rectangle without needing a separate asset.
 export function RiffLogo() {
+  const docked = useSessionActive();
+
   return (
-    <div className="pointer-events-none fixed top-6 left-6 z-30">
+    <div
+      className="pointer-events-none fixed z-30 transition-[top,left,transform] duration-[600ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none"
+      style={{
+        top: docked ? 24 : 96,
+        left: docked ? 24 : "calc(50% - 160px)",
+        transform: docked ? "scale(1)" : "scale(2)",
+        transformOrigin: "top left",
+      }}
+    >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/riff-logo.svg"

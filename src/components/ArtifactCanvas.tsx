@@ -5,6 +5,7 @@ import { WireframeCanvas } from "./WireframeCanvas";
 import { FlowCanvas } from "./FlowCanvas";
 import { WireframeSkeleton, GeneratingIndicator } from "./CanvasSkeleton";
 import { SAMPLE_WIREFRAME } from "@/lib/samples";
+import { useSessionActive } from "./Header";
 
 // Always-available entry point (not gated on NODE_ENV, unlike Header's
 // sample loaders) — this is the one no-mic path a recruiter without mic
@@ -14,13 +15,22 @@ export function ArtifactCanvas({ onOpenChat }: { onOpenChat: () => void }) {
   const setArtifact = useStore((s) => s.setArtifact);
   const jobs = useStore((s) => s.jobs);
   const isGenerating = jobs.some((job) => job.status === "sketching");
+  // Reserve room above the empty-state block for the hero logo (fixed,
+  // rendered by RiffLogo) so headline/actions read as centered under it
+  // rather than under a taller-than-usual empty top. Once the session goes
+  // active the logo has docked to the corner, so this padding drops away.
+  const sessionActive = useSessionActive();
 
   if (!artifact) {
     if (isGenerating) {
       return <WireframeSkeleton />;
     }
     return (
-      <div className="flex h-full w-full flex-col items-center justify-center gap-6 px-8 text-center">
+      <div
+        className={`flex h-full w-full flex-col items-center justify-center gap-6 px-8 text-center ${
+          sessionActive ? "" : "pt-[280px]"
+        }`}
+      >
         <div className="flex max-w-md flex-col gap-3">
           <h1 className="text-2xl font-semibold text-zinc-900">
             Design with conversation
