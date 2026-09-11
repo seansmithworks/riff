@@ -13,6 +13,14 @@ import { useStore } from "@/lib/store";
 // block) — 480/48/24 are that same 30rem/3rem/1.5rem math in px. Only the
 // fitView padding changes; the canvas container itself never shrinks (see
 // WireframeCanvas.tsx / FlowCanvas.tsx).
+//
+// The bar itself only has room to recenter (VoiceBar.tsx pins its wrapper
+// to `left: 346px` once rightInset > 0, clearing HackathonFootnote and the
+// zoom controls) when there's still >= 360px left for it between that
+// 346px left edge and the panel's left edge. Below that — reviewer-found
+// collision at ~1100px and an off-screen bar at 768px — chatInset stays 0
+// so the chat panel simply overlays the (unrefit, still-centered) canvas
+// and bar, the same tradeoff already made on phone.
 function useChatInset(open: boolean): number {
   const [vw, setVw] = useState(0);
 
@@ -25,7 +33,9 @@ function useChatInset(open: boolean): number {
     return () => window.removeEventListener("resize", update);
   }, []);
 
-  return open && vw >= 640 ? Math.min(480, vw - 48) + 24 : 0;
+  if (!open || vw < 640) return 0;
+  const chatInset = Math.min(480, vw - 48) + 24;
+  return vw - chatInset - 346 >= 360 ? chatInset : 0;
 }
 
 export default function Home() {
