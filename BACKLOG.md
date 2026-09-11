@@ -66,3 +66,14 @@
 - [ ] CopilotKit chat throws `AI_MissingToolResultsError` when a `render_artifact` generate fails — the tool call never gets a result; the chat thread wedges.
 - [ ] Chat route has no model failover (streaming makes per-request failover impractical); it imports `MODEL_ID` so a retirement is a one-line fix.
 - [ ] Global model default: Sean said he switched to Fable this session; confirm it was session-only (`s`), not saved as default.
+
+## 2026-09-11 night — overnight voice/conversation UI redesign (Sean asked; branch + preview only, no prod)
+
+**Landed tonight:** `6974192` on main = prod (sketch look, copy, docking logo, desktop platform). Prod mic "not hearing" diagnosed as local input device: ElevenLabs received −60 to −74 dB during Sean's turns; voice code unchanged in the push.
+
+- [ ] **Phase 1 — Mobbin references:** capture voice-AI conversation UIs (listening / speaking / thinking / transcript / error states) to a reference set.
+- [ ] **Phase 2 — Direction spec (planner):** one strawman direction for Riff's voice + conversation surface grounded in the references and DESIGN.md, states enumerated, forks named for Sean. Include a visible mic-level signal — tonight's silent-mic failure was invisible in the UI.
+- [ ] **Phase 3 — Build (implementer):** `feat/voice-ui` off main in its own worktree; tsc; screenshots per state; recording.
+- [ ] **Phase 4 — Gates:** separate reviewer on the diff + `/design-review`; fixes if blocking.
+- [ ] **Phase 5 — Preview:** push `feat/voice-ui` (branch only) → Vercel preview URL; morning report with references, before/after, preview link, forks. Prod merge waits for Sean.
+- [ ] **Load-logo strawman** — `feat/load-logo` from `~/Downloads/studio.webm` (sped to ~3s, plays then docks). Fork for Sean: keep cursor/anchor points vs clean strokes (needs SVG/Lottie export).
