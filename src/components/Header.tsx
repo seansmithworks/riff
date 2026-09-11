@@ -243,14 +243,22 @@ function LogoIntro({ onDone }: { onDone: () => void }) {
 
 export function RiffLogo() {
   const docked = useSessionActive();
-  const [showIntro] = useState(() => {
-    if (typeof window === "undefined") return false;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      return false;
-    }
-    return true;
-  });
+  // Starts false on both server and client to keep first paint identical
+  // (avoids a hydration mismatch) — flips true in an effect right after
+  // mount, client-only, once we know reduced-motion and whether the session
+  // was already active before the intro could even start.
+  const [showIntro, setShowIntro] = useState(false);
   const [introDone, setIntroDone] = useState(false);
+
+  useEffect(() => {
+    if (docked) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return;
+    }
+    setShowIntro(true);
+    // Only ever decided once, from the state at mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Once the session goes active mid-clip, cut straight to the static logo
   // rather than let a playing (and about-to-shrink) video dock alongside it.
@@ -270,7 +278,14 @@ export function RiffLogo() {
         transformOrigin: "top left",
       }}
     >
-      <div className="relative" style={{ width: 160, height: 170 }}>
+      {/* Box matches the static SVG's own aspect ratio (225x150 viewBox,
+          160px wide -> 106.67px tall) so the intro tile is exactly the
+          static logo's footprint — no layout shift into the headline below
+          when it crossfades. */}
+      <div
+        className="relative"
+        style={{ width: 160, height: 160 / (225 / 150) }}
+      >
         {introVisible && <LogoIntro onDone={() => setIntroDone(true)} />}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
