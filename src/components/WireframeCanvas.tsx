@@ -13,6 +13,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { BatteryFull, SignalHigh, Wifi } from "lucide-react";
 import type { Element, Screen } from "@/lib/artifact";
+import { Sketch } from "./Sketch";
 import { WireframeElement } from "./WireframeElement";
 
 const FRAME_WIDTH = 340;
@@ -38,10 +39,12 @@ function StatusBar() {
 // Home indicator lives in its own flex row below the tab bar (which now
 // renders as its own shrink-0 row, not inside the scroll column), so it
 // never overlaps the tab bar or scrolls out of view regardless of content.
-function HomeIndicator() {
+function HomeIndicator({ seedKey }: { seedKey: string }) {
   return (
     <div className="flex shrink-0 items-center justify-center py-2">
-      <div className="h-[5px] w-[134px] rounded-full bg-zinc-300" />
+      <div className="relative h-[5px] w-[134px]">
+        <Sketch kind="line" seedKey={`home-indicator:${seedKey}`} />
+      </div>
     </div>
   );
 }
@@ -59,7 +62,13 @@ function PhoneFrameNode({ data }: NodeProps) {
       <span className="text-xs font-medium tracking-wide text-zinc-500">
         {screen.name}
       </span>
-      <div className="flex h-[640px] w-[340px] flex-col overflow-hidden rounded-[28px] border border-zinc-300 bg-white shadow-[0_20px_50px_-15px_rgba(0,0,0,0.6)]">
+      <div className="relative flex h-[640px] w-[340px] flex-col overflow-hidden rounded-[28px] border border-transparent bg-white shadow-[0_20px_50px_-15px_rgba(0,0,0,0.6)]">
+        <Sketch
+          kind="rect"
+          radius={28}
+          strokeWidth={1.5}
+          seedKey={`frame:${screen.id}`}
+        />
         <StatusBar />
         <div className="no-scrollbar flex flex-1 flex-col gap-3 overflow-y-auto py-3">
           {rest.map((element, i) => (
@@ -71,7 +80,7 @@ function PhoneFrameNode({ data }: NodeProps) {
             <WireframeElement element={tabbar} />
           </div>
         ) : null}
-        <HomeIndicator />
+        <HomeIndicator seedKey={screen.id} />
       </div>
     </div>
   );
