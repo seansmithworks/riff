@@ -605,6 +605,72 @@ function CinderPanel() {
   return null;
 }
 
+// Sparks-build-the-sketch dials (build-plan.md §4, dotgrid addendum §3) —
+// after the Cinder panel, since a build's launch points recruit from the
+// same drift cinders that panel tunes.
+function BuildPanel() {
+  const handle = useEngine();
+  const raw = useDialKit(
+    "Build",
+    {
+      flightSpeed: [1, 0.5, 2, 0.05],
+      arc: [0.18, 0, 0.5, 0.01],
+      densityFrame: [2.5, 0.5, 6, 0.1],
+      densityBlocks: [2.0, 0.5, 6, 0.1],
+      densityDetails: [1.2, 0.5, 6, 0.1],
+      tierGapMs: [-100, -200, 300, 10],
+      speculativeFrame: {
+        type: "select",
+        options: [
+          { value: "off", label: "Off" },
+          { value: "construction", label: "Construction" },
+          { value: "full", label: "Full ink" },
+        ],
+        default: "construction",
+      },
+      guideDots: {
+        type: "select",
+        options: [
+          { value: "off", label: "Off" },
+          { value: "dots", label: "Lit dots" },
+          { value: "dotsLines", label: "Lit dots + faint lines" },
+        ],
+        default: "dots",
+      },
+      arrival: {
+        type: "select",
+        options: [
+          { value: "dotsLead", label: "Dots lead" },
+          { value: "comet", label: "Comet" },
+        ],
+        default: "dotsLead",
+      },
+      snapToGrid: true,
+      dotPop: [0.6, 0, 1, 0.05],
+    },
+    { persist: persistKey("build") },
+  );
+
+  useEffect(() => {
+    if (!handle) return;
+    handle.engine.config.buildConfig = {
+      flightSpeed: raw.flightSpeed as number,
+      arc: raw.arc as number,
+      densityFrame: raw.densityFrame as number,
+      densityBlocks: raw.densityBlocks as number,
+      densityDetails: raw.densityDetails as number,
+      tierGapMs: raw.tierGapMs as number,
+      speculativeFrame: raw.speculativeFrame as "off" | "construction" | "full",
+      guideDots: raw.guideDots as "off" | "dots" | "dotsLines",
+      arrival: raw.arrival as "dotsLead" | "comet",
+      snapToGrid: raw.snapToGrid as boolean,
+      dotPop: raw.dotPop as number,
+    };
+  }, [handle, raw]);
+
+  return null;
+}
+
 export default function VoiceLabPanels() {
   return (
     <>
@@ -627,6 +693,7 @@ export default function VoiceLabPanels() {
         defaultColor={RIFF_GREEN}
       />
       <CinderPanel />
+      <BuildPanel />
       <DiscPanel />
     </>
   );
