@@ -13,6 +13,10 @@ import {
   INK,
   RIFF_GREEN,
   GLOW_DEFAULT_STRENGTH,
+  GLOW_DEFAULT_SIZE,
+  GLOW_DEFAULT_HEIGHT,
+  GLOW_DEFAULT_COLOR_MIX,
+  GLOW_DEFAULT_EDGE_SOFTNESS,
   synthesizeLevelData,
   computeBands,
   BAR_ORDER,
@@ -60,6 +64,10 @@ export function defaultEngineConfig(): EngineConfig {
     onsetRingsOn: true,
     ambientGlowOn: true,
     glowStrength: GLOW_DEFAULT_STRENGTH,
+    glowSize: GLOW_DEFAULT_SIZE,
+    glowHeight: GLOW_DEFAULT_HEIGHT,
+    glowColorMix: GLOW_DEFAULT_COLOR_MIX,
+    glowEdgeSoftness: GLOW_DEFAULT_EDGE_SOFTNESS,
     cindersOn: true,
     showFramesOn: true,
     // Speaker -> mark assignment: Riff = Burst (green), Human = Ripple (ink).
@@ -92,6 +100,10 @@ export type EngineStatus = {
   reducedMotion: boolean;
   ambientGlowOn: boolean;
   glowStrength: number;
+  glowSize: number;
+  glowHeight: number;
+  glowColorMix: number;
+  glowEdgeSoftness: number;
 };
 
 export class VoiceLabEngine {
@@ -196,6 +208,10 @@ export class VoiceLabEngine {
       reducedMotion: this.reducedMotionActive(),
       ambientGlowOn: this.config.ambientGlowOn,
       glowStrength: this.config.glowStrength,
+      glowSize: this.config.glowSize,
+      glowHeight: this.config.glowHeight,
+      glowColorMix: this.config.glowColorMix,
+      glowEdgeSoftness: this.config.glowEdgeSoftness,
     });
   }
 
@@ -588,6 +604,26 @@ export class VoiceLabEngine {
 
   setGlowStrength(v: number) {
     this.config.glowStrength = v;
+    this.emitStatus();
+  }
+
+  setGlowSize(v: number) {
+    this.config.glowSize = v;
+    this.emitStatus();
+  }
+
+  setGlowHeight(v: number) {
+    this.config.glowHeight = v;
+    this.emitStatus();
+  }
+
+  setGlowColorMix(v: number) {
+    this.config.glowColorMix = v;
+    this.emitStatus();
+  }
+
+  setGlowEdgeSoftness(v: number) {
+    this.config.glowEdgeSoftness = v;
     this.emitStatus();
   }
 

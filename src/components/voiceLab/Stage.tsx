@@ -3,40 +3,72 @@
 import { useEffect, useRef, useState } from "react";
 import { VoiceLabEngine, type EngineStatus } from "@/lib/voiceLab/engine";
 import { Autoplay } from "@/lib/voiceLab/autoplay";
-import { W, H } from "@/lib/voiceLab/constants";
+import { W, H, GLOW_TOTAL_BASE } from "@/lib/voiceLab/constants";
 import { EngineContext, type EngineHandle } from "./EngineContext";
 import { VOICE_STATES, VOICE_STATE_LABELS } from "@/lib/voiceLab/types";
 
-// Base alphas at strength 1. The strength dial (Toggles panel) multiplies
-// these — not the layer's CSS opacity, which caps at 1 and can't brighten
-// past the mask's attenuation near the disc — so alpha is clamped to 1 here.
-const GLOW_CYAN_ALPHA = 0.35;
-const GLOW_GREEN_ALPHA = 0.28;
+type GlowOrigin = "center" | "right";
 
-function glowAlpha(base: number, strength: number) {
-  return Math.max(0, Math.min(1, base * strength));
+type GlowParams = {
+  strength: number;
+  size: number;
+  height: number;
+  colorMix: number;
+  edgeSoftness: number;
+};
+
+function clamp(v: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, v));
 }
 
-function buildGlowCenter(strength: number) {
-  const cyan = glowAlpha(GLOW_CYAN_ALPHA, strength);
-  const green = glowAlpha(GLOW_GREEN_ALPHA, strength);
-  return `radial-gradient(ellipse 55% 60% at 50% 100%, rgba(0,245,241,${cyan}), transparent 55%), radial-gradient(ellipse 45% 50% at 60% 100%, rgba(183,255,0,${green}), transparent 60%)`;
-}
+// Ellipse shapes at size 1 — unaffected by strength/height/colorMix/softness.
+const GLOW_SHAPES: Record<
+  GlowOrigin,
+  { x: number; rx: number; ry: number; cut: number; hue: "cyan" | "green" }[]
+> = {
+  center: [
+    { x: 50, rx: 55, ry: 60, cut: 55, hue: "cyan" },
+    { x: 60, rx: 45, ry: 50, cut: 60, hue: "green" },
+  ],
+  right: [
+    { x: 88, rx: 40, ry: 55, cut: 55, hue: "cyan" },
+    { x: 94, rx: 32, ry: 45, cut: 60, hue: "green" },
+  ],
+};
 
-function buildGlowRight(strength: number) {
-  const cyan = glowAlpha(GLOW_CYAN_ALPHA, strength);
-  const green = glowAlpha(GLOW_GREEN_ALPHA, strength);
-  return `radial-gradient(ellipse 40% 55% at 88% 100%, rgba(0,245,241,${cyan}), transparent 55%), radial-gradient(ellipse 32% 45% at 94% 100%, rgba(183,255,0,${green}), transparent 60%)`;
-}
+// Single source of truth for the glow's background gradients AND its
+// clipping mask — both are a function of the same param set, so they can
+// never fork into a second copy that drifts out of sync.
+//
+// The mask, not the gradients' own geometry, is what guarantees the glow
+// clears every edge: its bands always land on an explicit 0%/100%
+// transparent stop, independent of size/height/strength, so retuning those
+// can never reintroduce a hard line.
+function buildGlow(origin: GlowOrigin, p: GlowParams) {
+  const cyanAlpha = clamp(GLOW_TOTAL_BASE * p.colorMix * p.strength, 0, 1);
+  const greenAlpha = clamp(
+    GLOW_TOTAL_BASE * (1 - p.colorMix) * p.strength,
+    0,
+    1,
+  );
+  const hueColor = {
+    cyan: `rgba(0,245,241,${cyanAlpha})`,
+    green: `rgba(183,255,0,${greenAlpha})`,
+  };
+  const background = GLOW_SHAPES[origin]
+    .map(
+      (s) =>
+        `radial-gradient(ellipse ${s.rx * p.size}% ${s.ry * p.size}% at ${s.x}% ${p.height}%, ${hueColor[s.hue]}, transparent ${s.cut}%)`,
+    )
+    .join(", ");
 
-// A mask, not the gradient's own geometry, is what guarantees the glow
-// clears every edge — retuning GLOW_CENTER/GLOW_RIGHT's radii or stops can
-// never reintroduce the hard line, because the mask's alpha is 0 at each
-// edge by construction (transparent at 0%) independent of what the
-// background-image underneath does. Vertical fade clears the bottom (and
-// top) over a wide band; horizontal fade clears the sides over a narrow one.
-const GLOW_MASK =
-  "linear-gradient(to top, transparent 0%, black 25%, black 90%, transparent 100%), linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%)";
+  const bottomBand = clamp(25 * p.edgeSoftness, 1, 45);
+  const topBand = clamp(10 * p.edgeSoftness, 0.5, 45);
+  const sideBand = clamp(6 * p.edgeSoftness, 0.5, 45);
+  const mask = `linear-gradient(to top, transparent 0%, black ${bottomBand}%, black ${100 - topBand}%, transparent 100%), linear-gradient(to right, transparent 0%, black ${sideBand}%, black ${100 - sideBand}%, transparent 100%)`;
+
+  return { background, mask };
+}
 
 export default function Stage({ children }: { children: React.ReactNode }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -112,11 +144,27 @@ export default function Stage({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!glowRef.current || !status) return;
-    glowRef.current.style.background =
-      status.originSide === "center"
-        ? buildGlowCenter(status.glowStrength)
-        : buildGlowRight(status.glowStrength);
-  }, [status?.originSide, status?.glowStrength]);
+    const { background, mask } = buildGlow(
+      status.originSide === "center" ? "center" : "right",
+      {
+        strength: status.glowStrength,
+        size: status.glowSize,
+        height: status.glowHeight,
+        colorMix: status.glowColorMix,
+        edgeSoftness: status.glowEdgeSoftness,
+      },
+    );
+    glowRef.current.style.background = background;
+    glowRef.current.style.maskImage = mask;
+    glowRef.current.style.setProperty("-webkit-mask-image", mask);
+  }, [
+    status?.originSide,
+    status?.glowStrength,
+    status?.glowSize,
+    status?.glowHeight,
+    status?.glowColorMix,
+    status?.glowEdgeSoftness,
+  ]);
 
   return (
     <EngineContext.Provider value={handle}>
@@ -144,8 +192,6 @@ export default function Stage({ children }: { children: React.ReactNode }) {
                 opacity:
                   (status?.ambientGlowOn === false ? 0 : 1) *
                   (status?.reducedMotion ? 0.4 : 1),
-                maskImage: GLOW_MASK,
-                WebkitMaskImage: GLOW_MASK,
                 maskComposite: "intersect",
                 WebkitMaskComposite: "source-in",
               }}

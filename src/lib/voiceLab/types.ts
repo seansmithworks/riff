@@ -82,9 +82,21 @@ export type EngineConfig = {
   centerCircleOn: boolean;
   onsetRingsOn: boolean;
   ambientGlowOn: boolean;
-  // Multiplies the ambient glow's color alphas (not CSS opacity, which caps
-  // at 1 and can't brighten past it). 1 = the gradients' own base alphas.
+  // Ambient glow tuners — all consumed by Stage's single buildGlow() so the
+  // gradients/mask never fork into a second copy.
+  // Multiplies the glow's color alphas (not CSS opacity, which caps at 1
+  // and can't brighten past it).
   glowStrength: number;
+  // Scales both ellipse radii together.
+  glowSize: number;
+  // Vertical position of the gradient centers, % of card height.
+  glowHeight: number;
+  // Teal (cyan) vs. lime (green) balance, 0-1; weights the two gradients'
+  // alphas against their shared total.
+  glowColorMix: number;
+  // Scales the mask's fade-band widths together; the mask always still
+  // lands on an explicit 0%/100% transparent stop, so edges stay clear.
+  glowEdgeSoftness: number;
   cindersOn: boolean;
   showFramesOn: boolean;
   // Speaker -> mark assignment. Each role picks any mark from the shared

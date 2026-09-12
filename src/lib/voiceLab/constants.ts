@@ -10,11 +10,23 @@ export const SKETCH_LINE_ROUGHNESS = 0.55;
 export const INK = "#3f3f46";
 export const RIFF_GREEN = "#3FBA6A";
 
-// Ambient-glow strength dial default. The mask (Stage.tsx) fades the glow
-// out near the card's edges — including the band where the disc itself
-// sits — so this multiplier boosts the gradients' color alphas back up to
-// roughly the pre-mask visual weight around the disc.
+// Ambient-glow tuner defaults, all consumed by Stage's buildGlow(). Every
+// default here reproduces today's fixed look exactly, so adding the dials
+// doesn't visibly change anything until Sean moves one.
+// Base alphas (at strength 1) for the two gradient hues, and their combined
+// total — colorMix (0-1) weights this total between them instead of driving
+// two independent sliders, so it can't fall out of sync with strength.
+export const GLOW_CYAN_BASE = 0.35;
+export const GLOW_GREEN_BASE = 0.28;
+export const GLOW_TOTAL_BASE = GLOW_CYAN_BASE + GLOW_GREEN_BASE;
+export const GLOW_DEFAULT_COLOR_MIX = GLOW_CYAN_BASE / GLOW_TOTAL_BASE;
+// The mask (Stage.tsx) fades the glow out near the card's edges — including
+// the band where the disc itself sits — so this multiplier boosts the
+// gradients' color alphas back up to roughly the pre-mask visual weight.
 export const GLOW_DEFAULT_STRENGTH = 2.5;
+export const GLOW_DEFAULT_SIZE = 1;
+export const GLOW_DEFAULT_HEIGHT = 100;
+export const GLOW_DEFAULT_EDGE_SOFTNESS = 1;
 
 export function hashSeed(input: string): number {
   let hash = 5381;
