@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { VoiceLabEngine, type EngineStatus } from "@/lib/voiceLab/engine";
 import { Autoplay } from "@/lib/voiceLab/autoplay";
 import { W, H, GLOW_TOTAL_BASE } from "@/lib/voiceLab/constants";
+import { FLUID_W, FLUID_H } from "@/lib/voiceLab/fluidGlow";
 import { EngineContext, type EngineHandle } from "./EngineContext";
 import { VOICE_STATES, VOICE_STATE_LABELS } from "@/lib/voiceLab/types";
 
@@ -81,6 +82,7 @@ export default function Stage({ children }: { children: React.ReactNode }) {
   const outerRef = useRef<HTMLDivElement | null>(null);
   const glowCyanRef = useRef<HTMLDivElement | null>(null);
   const glowGreenRef = useRef<HTMLDivElement | null>(null);
+  const glowFluidRef = useRef<HTMLCanvasElement | null>(null);
   const progressRef = useRef<HTMLDivElement | null>(null);
   const engineRef = useRef<VoiceLabEngine | null>(null);
   const [handle, setHandle] = useState<EngineHandle | null>(null);
@@ -101,6 +103,7 @@ export default function Stage({ children }: { children: React.ReactNode }) {
         cyan: glowCyanRef.current,
         green: glowGreenRef.current,
       });
+    if (glowFluidRef.current) engine.attachGlowFluid(glowFluidRef.current);
     if (progressRef.current) engine.attachProgress(progressRef.current);
     engine.scheduleLoop();
     const h: EngineHandle = { engine, autoplay };
@@ -245,6 +248,18 @@ export default function Stage({ children }: { children: React.ReactNode }) {
               <div
                 ref={glowGreenRef}
                 className="pointer-events-none absolute inset-0"
+                style={{ opacity: 0 }}
+              />
+              {/* Fluid "shader" glow (ask 1): a tiny density canvas the
+                  engine repaints per-pixel every frame and upscales via
+                  ordinary smooth canvas-to-CSS-size scaling. Lives in this
+                  same never-animating mask wrapper as the two gradients
+                  above — only its own opacity/transform ever change. */}
+              <canvas
+                ref={glowFluidRef}
+                width={FLUID_W}
+                height={FLUID_H}
+                className="pointer-events-none absolute inset-0 h-full w-full"
                 style={{ opacity: 0 }}
               />
             </div>

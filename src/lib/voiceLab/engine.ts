@@ -39,6 +39,7 @@ import {
   drawIdleSquiggle,
   strokeChain,
 } from "./marks";
+import { renderFluidGlow } from "./fluidGlow";
 import {
   createFrames,
   resetFrames,
@@ -91,8 +92,8 @@ export function defaultEngineConfig(): EngineConfig {
     glowEdgeSoftness: GLOW_DEFAULT_EDGE_SOFTNESS,
     cindersOn: true,
     showFramesOn: true,
-    // Speaker -> mark assignment: Riff = Burst (green), Human = Ripple (ink).
-    humanMarkId: "ripple",
+    // Speaker -> mark assignment: Riff = Burst (green), Human = Amoeba (ink).
+    humanMarkId: "amoeba",
     riffMarkId: "burst",
     humanColor: INK,
     riffColor: RIFF_GREEN,
@@ -109,6 +110,16 @@ export function defaultEngineConfig(): EngineConfig {
     },
     reducedMotion: false,
     realMicEnabled: false,
+    glowStyle: "fluid",
+    glowHumanColor: "#2F6FED",
+    glowRiffColor: "#F5C518",
+    glowMixSoftness: 0.4,
+    glowFlowSpeed: 1,
+    glowBlobScale: 1,
+    glowBlobCount: 3,
+    discStretchAmount: 0.35,
+    discSquishBounce: 0.35,
+    discWobble: 0.15,
   };
 }
 
@@ -217,8 +228,22 @@ export class VoiceLabEngine implements SequenceHost {
   // animates.
   private glowCyanEl: HTMLElement | null = null;
   private glowGreenEl: HTMLElement | null = null;
+  private glowFluidCanvas: HTMLCanvasElement | null = null;
   private glowFollower = 0;
   private progressEl: HTMLElement | null = null;
+
+  // Last computed voice level per role (drawRole), read by the fluid glow so
+  // its flow/turbulence tracks loudness, not just presence.
+  private lastLevel: Record<Role, number> = { human: 0, riff: 0 };
+
+  // Disc squash & stretch spring state (ask 4) — target aspect comes from
+  // role presence; this is the current/velocity pair the spring integrates
+  // toward that target every frame, composed multiplicatively with the
+  // existing anticipation/breathe squash in computeDiscSquash.
+  private discSx = 1;
+  private discSy = 1;
+  private discVx = 0;
+  private discVy = 0;
 
   constructor(canvas: HTMLCanvasElement, config?: EngineConfig) {
     this.canvas = canvas;
@@ -765,7 +790,7 @@ export class VoiceLabEngine implements SequenceHost {
         : this.markClock;
   }
 
-  private computeDiscSquash(t: number, preset: SequencePreset) {
+  private computeDiscSquash(t: number, dt: number, preset: SequencePreset) {
     let depth = 0;
     if (this.anticipationMs > 0) {
       const elapsed = t - this.anticipationStart;
@@ -785,9 +810,57 @@ export class VoiceLabEngine implements SequenceHost {
         Math.sin((t / preset.breathe.periodMs) * Math.PI * 2) *
         preset.breathe.depth;
     }
-    return {
+    const anticipation = {
       sx: 1 + depth * 0.25 - breathe * 0.5,
       sy: 1 - depth * 0.5 + breathe,
+    };
+
+    // Ask 4: squash & stretch from role presence — human -> vertical oval
+    // (sy>sx), riff -> horizontal (sx>sy) — reached via an overshooting
+    // spring, volume-preserving (sx*sy ≈ 1), composed multiplicatively with
+    // the anticipation/breathe squash above.
+    const stretch = this.config.discStretchAmount;
+    const bias = this.presence.human - this.presence.riff; // -1..1
+    let targetSy = 1 + bias * stretch * 0.5;
+    targetSy = Math.max(0.4, targetSy);
+    let targetSx = 1 / targetSy; // exact volume preservation
+
+    const reduced = this.reducedMotionActive();
+    const zeta = reduced ? 1 : Math.max(0.05, 1 - this.config.discSquishBounce);
+    const wn = (2 * Math.PI) / 260; // ~260ms nominal settle period, in ms^-1... see below
+    const dtSec = Math.min(48, dt) / 1000;
+    const wnRad = wn * 1000; // convert to rad/s
+    const springStep = (
+      cur: number,
+      vel: number,
+      target: number,
+    ): [number, number] => {
+      const accel = -wnRad * wnRad * (cur - target) - 2 * zeta * wnRad * vel;
+      const nextVel = vel + accel * dtSec;
+      const nextVal = cur + nextVel * dtSec;
+      return [nextVal, nextVel];
+    };
+    [this.discSx, this.discVx] = springStep(this.discSx, this.discVx, targetSx);
+    [this.discSy, this.discVy] = springStep(this.discSy, this.discVy, targetSy);
+
+    // Small level-driven wobble while either role is talking, opposite-signed
+    // between axes so it stays roughly volume-neutral. Dropped in reduced
+    // motion (aspect change stays, wobble doesn't).
+    let wobbleSx = 1;
+    let wobbleSy = 1;
+    if (!reduced) {
+      const level = Math.max(
+        this.presence.human * this.lastLevel.human,
+        this.presence.riff * this.lastLevel.riff,
+      );
+      const wob = Math.sin(t / 90) * this.config.discWobble * level * 0.08;
+      wobbleSx = 1 + wob;
+      wobbleSy = 1 - wob;
+    }
+
+    return {
+      sx: anticipation.sx * this.discSx * wobbleSx,
+      sy: anticipation.sy * this.discSy * wobbleSy,
     };
   }
 
@@ -828,6 +901,7 @@ export class VoiceLabEngine implements SequenceHost {
       if (active) this.maybeDetectRiffOnset(t);
       onsetPulse = this.riffOnsetPulse;
     }
+    this.lastLevel[role] = level;
     const smear = this.smearFramesLeft[role] > 0 ? 1.6 : 1;
     const g: MarkDrawArgs = {
       o,
@@ -851,10 +925,11 @@ export class VoiceLabEngine implements SequenceHost {
     if (this.smearFramesLeft[role] > 0) this.smearFramesLeft[role]--;
     if (role === "human" && active && this.config.onsetRingsOn)
       this.drawOnsetRings(t, color);
-    // Sketch-job cinders spawn off whichever mark is Burst (spec item 2):
-    // prefer the active speaker so ray tips stay live during a handoff, but
-    // fall back to a fading Burst so backchannel/underlay sparks keep going.
-    if (mark.id === "burst" && (active || !this.lastMarkContext))
+    // Sketch-job cinders spawn off whichever assigned mark exposes tip
+    // emitters (Burst, Amoeba — spec item 2): prefer the active speaker so
+    // ray/bulge tips stay live during a handoff, but fall back to a fading
+    // one so backchannel/underlay sparks keep going.
+    if (mark.getTipEmitters && (active || !this.lastMarkContext))
       this.lastMarkContext = { mark, g };
   }
 
@@ -865,7 +940,7 @@ export class VoiceLabEngine implements SequenceHost {
     this.presence.human = this.evalPresence("human", t);
     this.presence.riff = this.evalPresence("riff", t);
 
-    const squash = this.computeDiscSquash(t, preset);
+    const squash = this.computeDiscSquash(t, dt, preset);
     if (this.config.centerCircleOn) drawMicDisc(o, INK, squash.sx, squash.sy);
 
     if (this.markT - this.lastBoilAt > 400) {
@@ -960,6 +1035,14 @@ export class VoiceLabEngine implements SequenceHost {
     this.glowGreenEl = els.green;
   }
 
+  // Fluid "shader" glow canvas (ask 1) — lives inside the same never-
+  // animating mask wrapper as the two classic gradient divs; the engine
+  // writes pixels + opacity/transform onto it directly, same imperative
+  // pattern as attachGlow above.
+  attachGlowFluid(canvas: HTMLCanvasElement) {
+    this.glowFluidCanvas = canvas;
+  }
+
   // Loop progress bar, driven the same way as glow: written directly onto a
   // DOM element every frame, never through setState (spec item 2).
   attachProgress(el: HTMLElement) {
@@ -989,13 +1072,49 @@ export class VoiceLabEngine implements SequenceHost {
     const opacity =
       Math.max(0, Math.min(1.2, this.glowFollower)) * ambient * reducedMul;
     const scale = 1 + (preset.glow.swell - 1) * this.glowFollower;
-    if (this.glowCyanEl) {
-      this.glowCyanEl.style.opacity = String(opacity);
-      this.glowCyanEl.style.transform = `scale(${scale})`;
+
+    if (this.config.glowStyle === "classic") {
+      if (this.glowCyanEl) {
+        this.glowCyanEl.style.opacity = String(opacity);
+        this.glowCyanEl.style.transform = `scale(${scale})`;
+      }
+      if (this.glowGreenEl) {
+        this.glowGreenEl.style.opacity = String(opacity);
+        this.glowGreenEl.style.transform = `scale(${scale})`;
+      }
+      if (this.glowFluidCanvas) this.glowFluidCanvas.style.opacity = "0";
+      return;
     }
-    if (this.glowGreenEl) {
-      this.glowGreenEl.style.opacity = String(opacity);
-      this.glowGreenEl.style.transform = `scale(${scale})`;
+
+    // Fluid style: hide the classic gradients, render + show the density
+    // canvas. Per-pixel alpha already bakes in `opacity` (renderFluidGlow),
+    // so the element opacity itself stays 1 and only scale animates here —
+    // consistent with the classic branch's "engine writes only opacity and
+    // transform" contract, just with opacity baked per-pixel instead.
+    if (this.glowCyanEl) this.glowCyanEl.style.opacity = "0";
+    if (this.glowGreenEl) this.glowGreenEl.style.opacity = "0";
+    if (this.glowFluidCanvas) {
+      this.glowFluidCanvas.style.opacity = ambient ? "1" : "0";
+      this.glowFluidCanvas.style.transform = `scale(${scale})`;
+      const fctx = this.glowFluidCanvas.getContext("2d");
+      if (fctx && ambient) {
+        renderFluidGlow(
+          fctx,
+          t,
+          this.presence.human * (0.4 + 0.6 * this.lastLevel.human),
+          this.presence.riff * (0.4 + 0.6 * this.lastLevel.riff),
+          {
+            humanColor: this.config.glowHumanColor,
+            riffColor: this.config.glowRiffColor,
+            mixSoftness: this.config.glowMixSoftness,
+            flowSpeed: this.config.glowFlowSpeed,
+            blobScale: this.config.glowBlobScale,
+            blobCount: this.config.glowBlobCount,
+            hueBias: preset.glow.hueBias,
+            opacity,
+          },
+        );
+      }
     }
   }
 

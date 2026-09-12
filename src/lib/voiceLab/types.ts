@@ -116,4 +116,21 @@ export type EngineConfig = {
   cinderConfig: CinderConfig;
   reducedMotion: boolean;
   realMicEnabled: boolean;
+  // Fluid "shader" glow (Canvas2D, no WebGL) — a CPU density field per role,
+  // pigment-mixed (not additive) so overlap reads green. "classic" keeps the
+  // original two-gradient wash. See docs/voice-lab-sequences.md "Fluid glow".
+  glowStyle: "fluid" | "classic";
+  glowHumanColor: string;
+  glowRiffColor: string;
+  glowMixSoftness: number;
+  glowFlowSpeed: number;
+  glowBlobScale: number;
+  glowBlobCount: number;
+  // Disc squash & stretch (Disney squash-and-stretch): target aspect comes
+  // from role presence (human -> vertical, riff -> horizontal), reached via
+  // an overshooting spring, composed multiplicatively with the existing
+  // anticipation squash and idle/silence breathe.
+  discStretchAmount: number;
+  discSquishBounce: number;
+  discWobble: number;
 };

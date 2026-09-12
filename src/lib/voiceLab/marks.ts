@@ -65,6 +65,38 @@ export function strokeChain(
 // Rolling buffer for the Doodled Waveform mark.
 let waveformBuf: number[] = [];
 
+// Shared outline geometry for the Amoeba mark — draw() and getTipEmitters()
+// both call this so the mark's visible bulges and its spark-spawn points are
+// guaranteed identical.
+function amoebaOutline(
+  g: MarkDrawArgs,
+  cfg: Record<string, number>,
+): { x: number; y: number; a: number; r: number }[] {
+  const { o, t, bands, onsetPulse } = g;
+  const segsPerBand = 6;
+  const totalSegs = bands.length * segsPerBand;
+  const pts: { x: number; y: number; a: number; r: number }[] = [];
+  for (let s = 0; s < totalSegs; s++) {
+    const frac = s / totalSegs;
+    const a = frac * Math.PI * 2;
+    const bandIdx = Math.floor(frac * bands.length) % bands.length;
+    const bandLevel = bands[bandIdx];
+    const bulge =
+      Math.sin(frac * cfg.bulgeCount * Math.PI * 2 + t / 380) *
+      cfg.wobble *
+      6 *
+      (0.4 + bandLevel);
+    const r =
+      cfg.baseRadius +
+      bandLevel * cfg.bulgeAmount +
+      bulge +
+      onsetPulse * cfg.onsetPunch * 10;
+    const [x, y] = polar(o.x, o.y - 30, r, a);
+    pts.push({ x, y, a, r });
+  }
+  return pts;
+}
+
 export const MARKS: MarkDef[] = [
   {
     id: "burst",
@@ -1064,6 +1096,92 @@ export const MARKS: MarkDef[] = [
           alpha,
         );
       }
+    },
+  },
+  {
+    // Single wobbly closed loop — "a little amoeba-like" — replacing Burst
+    // as the default human mark. Borrows the rough/boil stroke language of
+    // Riff Arcs (band-driven radius wobble) and Scribble Loop (rough,
+    // hand-drawn ellipse), but stays one clean loop instead of scribbling.
+    // draw() and getTipEmitters() both call amoebaOutline() so sketch-job
+    // sparks leave exactly the geometry that's on screen.
+    id: "amoeba",
+    num: 14,
+    name: "Amoeba",
+    params: [
+      {
+        key: "baseRadius",
+        label: "Base radius",
+        min: 16,
+        max: 50,
+        step: 1,
+        def: 30,
+      },
+      {
+        key: "bulgeAmount",
+        label: "Bulge amount",
+        min: 0,
+        max: 24,
+        step: 1,
+        def: 10,
+      },
+      {
+        key: "bulgeCount",
+        label: "Bulge count",
+        min: 2,
+        max: 6,
+        step: 1,
+        def: 3,
+      },
+      { key: "wobble", label: "Wobble", min: 0, max: 1, step: 0.05, def: 0.4 },
+      {
+        key: "thickness",
+        label: "Thickness",
+        min: 0.5,
+        max: 3,
+        step: 0.1,
+        def: 1.4,
+      },
+      {
+        key: "onsetPunch",
+        label: "Onset punch",
+        min: 0,
+        max: 2,
+        step: 0.1,
+        def: 1.0,
+      },
+    ],
+    draw(g: MarkDrawArgs) {
+      const { color, cfg, mode, level } = g;
+      const outline = amoebaOutline(g, cfg);
+      const pts: [number, number][] = outline.map((p) => [p.x, p.y]);
+      const alpha =
+        mode === "silence" ? 0.3 : Math.max(0.25, 0.6 + level * 0.3);
+      strokeChain(
+        pts,
+        color,
+        cfg.thickness,
+        hashSeed("amoeba") + Math.floor(g.t / 220),
+        alpha,
+        true,
+      );
+    },
+    getTipEmitters(g: MarkDrawArgs) {
+      const outline = amoebaOutline(g, g.cfg);
+      const n = outline.length;
+      const tips = [];
+      for (let i = 0; i < n; i++) {
+        const prev = outline[(i - 1 + n) % n].r;
+        const cur = outline[i].r;
+        const next = outline[(i + 1) % n].r;
+        if (cur >= prev && cur >= next)
+          tips.push({ x: outline[i].x, y: outline[i].y, angle: outline[i].a });
+      }
+      return tips.length
+        ? tips
+        : outline
+            .filter((_, i) => i % 5 === 0)
+            .map((p) => ({ x: p.x, y: p.y, angle: p.a }));
     },
   },
 ];

@@ -27,6 +27,48 @@ function persistKey(key: string) {
   return { key: `voiceLab.${key}`, storage: "localStorage" as const };
 }
 
+// One-time, version-gated migration: Amoeba replaces Ripple as the default
+// human mark (ask 3). Sean's saved DialKit state persists as
+// `{version:1, values:{mark,color}, baseValues:{...}, ...}` under
+// `voiceLab.voiceRole.human` (DialKit's own persistPanel/loadPersistedPanel,
+// node_modules/dialkit/dist/index.js). If he'd pinned it to the old default
+// ("ripple"), flip only `values.mark` (and `baseValues.mark`, kept in sync
+// so the panel doesn't show a false "modified" diff) to "amoeba" — every
+// other stored field, including his Ripple tuner values under
+// `voiceLab.mark.human.ripple` and the Riff mark/tuning, is untouched. Runs
+// once ever, gated by its own key, at module load — before RoleVoicePanel's
+// useDialKit reads persisted state on mount.
+function migrateHumanMarkToAmoeba() {
+  if (typeof window === "undefined") return;
+  const GATE_KEY = "voiceLab.migration.humanMarkAmoebaV1";
+  try {
+    if (window.localStorage.getItem(GATE_KEY)) return;
+    const raw = window.localStorage.getItem("voiceLab.voiceRole.human");
+    if (raw) {
+      const parsed = JSON.parse(raw) as {
+        version?: number;
+        values?: { mark?: string };
+        baseValues?: { mark?: string };
+      };
+      if (parsed?.version === 1 && parsed.values?.mark === "ripple") {
+        parsed.values.mark = "amoeba";
+        if (parsed.baseValues?.mark === "ripple")
+          parsed.baseValues.mark = "amoeba";
+        window.localStorage.setItem(
+          "voiceLab.voiceRole.human",
+          JSON.stringify(parsed),
+        );
+      }
+    }
+  } catch {
+    // Corrupt/unavailable storage — leave it alone; DialKit's own default
+    // (now Amoeba) applies to a fresh panel.
+  } finally {
+    window.localStorage.setItem(GATE_KEY, "1");
+  }
+}
+migrateHumanMarkToAmoeba();
+
 // New SequencePanel (spec §5) first — hotkeys 1-9/0 select + reset + play
 // from 0 also drive this same select/play pair, so the panel and keyboard
 // never fall out of sync.
@@ -242,6 +284,23 @@ function GlowPanel() {
       height: [GLOW_DEFAULT_HEIGHT, 60, 130, 5],
       colorMix: [GLOW_DEFAULT_COLOR_MIX, 0, 1, 0.01],
       edgeSoftness: [GLOW_DEFAULT_EDGE_SOFTNESS, 0.3, 2, 0.1],
+      // Fluid "shader" glow (ask 1) — new fields appended after the
+      // existing classic ones so persisted values for those never move or
+      // reset; DialKit reconciles missing keys against these defaults.
+      style: {
+        type: "select",
+        options: [
+          { value: "fluid", label: "Fluid" },
+          { value: "classic", label: "Classic" },
+        ],
+        default: "fluid",
+      },
+      fluidHumanColor: "#2F6FED",
+      fluidRiffColor: "#F5C518",
+      fluidMixSoftness: [0.4, 0, 1, 0.05],
+      fluidFlowSpeed: [1, 0, 2, 0.05],
+      fluidBlobScale: [1, 0.5, 2, 0.05],
+      fluidBlobCount: [3, 1, 4, 1],
     },
     { id: "glow", persist: persistKey("glow") },
   );
@@ -252,6 +311,13 @@ function GlowPanel() {
   const height = raw.height as number;
   const colorMix = raw.colorMix as number;
   const edgeSoftness = raw.edgeSoftness as number;
+  const style = raw.style as "fluid" | "classic";
+  const fluidHumanColor = raw.fluidHumanColor as string;
+  const fluidRiffColor = raw.fluidRiffColor as string;
+  const fluidMixSoftness = raw.fluidMixSoftness as number;
+  const fluidFlowSpeed = raw.fluidFlowSpeed as number;
+  const fluidBlobScale = raw.fluidBlobScale as number;
+  const fluidBlobCount = raw.fluidBlobCount as number;
 
   useEffect(() => {
     if (!handle) return;
@@ -282,6 +348,74 @@ function GlowPanel() {
     if (!handle) return;
     handle.engine.setGlowEdgeSoftness(edgeSoftness);
   }, [handle, edgeSoftness]);
+
+  useEffect(() => {
+    if (!handle) return;
+    handle.engine.config.glowStyle = style;
+  }, [handle, style]);
+
+  useEffect(() => {
+    if (!handle) return;
+    handle.engine.config.glowHumanColor = fluidHumanColor;
+  }, [handle, fluidHumanColor]);
+
+  useEffect(() => {
+    if (!handle) return;
+    handle.engine.config.glowRiffColor = fluidRiffColor;
+  }, [handle, fluidRiffColor]);
+
+  useEffect(() => {
+    if (!handle) return;
+    handle.engine.config.glowMixSoftness = fluidMixSoftness;
+  }, [handle, fluidMixSoftness]);
+
+  useEffect(() => {
+    if (!handle) return;
+    handle.engine.config.glowFlowSpeed = fluidFlowSpeed;
+  }, [handle, fluidFlowSpeed]);
+
+  useEffect(() => {
+    if (!handle) return;
+    handle.engine.config.glowBlobScale = fluidBlobScale;
+  }, [handle, fluidBlobScale]);
+
+  useEffect(() => {
+    if (!handle) return;
+    handle.engine.config.glowBlobCount = fluidBlobCount;
+  }, [handle, fluidBlobCount]);
+
+  return null;
+}
+
+// Disc squash & stretch (ask 4) — target aspect from role presence, reached
+// via an overshooting spring; dials only, the spring itself lives in the
+// engine (computeDiscSquash).
+function DiscPanel() {
+  const handle = useEngine();
+  const raw = useDialKit(
+    "Disc squash & stretch",
+    {
+      stretchAmount: [0.35, 0, 1, 0.05],
+      squishBounce: [0.35, 0, 0.9, 0.05],
+      wobble: [0.15, 0, 1, 0.05],
+    },
+    { persist: persistKey("disc") },
+  );
+
+  useEffect(() => {
+    if (!handle) return;
+    handle.engine.config.discStretchAmount = raw.stretchAmount as number;
+  }, [handle, raw.stretchAmount]);
+
+  useEffect(() => {
+    if (!handle) return;
+    handle.engine.config.discSquishBounce = raw.squishBounce as number;
+  }, [handle, raw.squishBounce]);
+
+  useEffect(() => {
+    if (!handle) return;
+    handle.engine.config.discWobble = raw.wobble as number;
+  }, [handle, raw.wobble]);
 
   return null;
 }
@@ -406,7 +540,7 @@ export default function VoiceLabPanels() {
       <RoleVoicePanel
         role="human"
         title="Human voice"
-        defaultMarkId="ripple"
+        defaultMarkId="amoeba"
         defaultColor={INK}
       />
       <RoleVoicePanel
@@ -416,6 +550,7 @@ export default function VoiceLabPanels() {
         defaultColor={RIFF_GREEN}
       />
       <CinderPanel />
+      <DiscPanel />
     </>
   );
 }
