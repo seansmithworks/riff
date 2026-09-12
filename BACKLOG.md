@@ -71,12 +71,12 @@
 
 **Carried (on-objective, `feat/voice-lab` @ `c230553`, pushed, preview Ready):**
 
-- [ ] **Glow hard edge:** the ambient glow still ends in a hard line at the stage card bottom (`tips-closeup.png`, `resp-800x600.png`). Make it fade out inside the canvas bounds.
-- [ ] **Riff Arcs over-wrap into scribble loops** (`arcs-flex-a/b.png`) and lose the three separate wavy lines Sean liked. Strawman: default sweep ~200°, 3 distinct arcs with a visible gap. Sean redlines in DialKit.
-- [ ] **DECIDE OR KILL: merge `feat/voice-lab` → main** (= prod deploy of `/voice-lab`). Preview: https://riff-git-feat-voice-lab-seansmithworks.vercel.app/voice-lab
+- [x] **Glow hard edge:** the ambient glow still ends in a hard line at the stage card bottom (`tips-closeup.png`, `resp-800x600.png`). Make it fade out inside the canvas bounds. Done: mask fade `f403a3e`.
+- [x] **Riff Arcs over-wrap into scribble loops** (`arcs-flex-a/b.png`) and lose the three separate wavy lines Sean liked. Strawman: default sweep ~200°, 3 distinct arcs with a visible gap. Sean redlines in DialKit. Done: strawman `8ec175e`.
+- [ ] **DECIDE OR KILL: merge `feat/voice-lab` → main** (= prod deploy of `/voice-lab`). Preview: https://riff-git-feat-voice-lab-seansmithworks.vercel.app/voice-lab. Sean (2026-09-11 late): yes, after his dial pass; still needs the per-deploy nod.
 - [ ] **DECIDE OR KILL: origin + controls forks.** Voice-mark origin bottom-center (built default) vs bottom-right; white pill (default) vs V10 disc. Canvas thread `7b739fff` stays open.
 - [ ] **Phases 1–3: bring the winning voice FX into the real voice UI.** Voice × job are concurrent channels. The plan lived in the session-06199eed scratchpad (`sketch-shader-research.md`, tmp); re-derive from the `/voice-lab` engine if it's gone.
-- [ ] **DECIDE OR KILL: `feat/load-logo` @ `0f52726`**, carried 3× since 2026-09-10.
+- [ ] **DECIDE OR KILL: `feat/load-logo` @ `0f52726`**, carried 4× since 2026-09-10.
 
 **Parked (off-objective):**
 
@@ -85,3 +85,13 @@
 - [ ] Root `layout.tsx` wraps every route in `<CopilotKit>`, so `/api/copilotkit` 500s on `/voice-lab` without keys and masks real errors while tuning.
 - [ ] `feat/voice-ui` Conversation Bar (`cdd7ddd`) is a baseline, unmerged.
 - [ ] Sean records the 60–90s cut from `docs/SHOT-LIST-90s.md` (original refresh objective).
+
+## 2026-09-11 (voice lab tuning session, wrap-continue)
+
+**Carried (on-objective, `feat/voice-lab` @ `6d9f8be`, pushed):**
+
+- [ ] **DialKit panel separation.** Sean: "the sparks/glow panel needs to be a bit better separated with…" (message cut off). Strawman: more space and bolder headings between panels, plus one Sparks panel directly under Glow (Cinders on/off, tip spark rate, cinder cap). Moving controls changes persist keys, so carry his saved values over.
+- [ ] **Bake Sean's dial pass in as defaults.** He pastes DialKit values. Saved localStorage values override code defaults, so check the new defaults in a clean browser.
+- [ ] **Riff Arcs 200° strawman** (`8ec175e`): no reaction yet. Sean redlines it in DialKit.
+
+Done this session: glow hard edge via mask (`f403a3e`), Glow slider set (Strength/Size/Height/Color Mix/Edge Softness) + working Ambient Glow toggle (`1065ab9`, `6d9f8be`), DialKit persist on every lab panel.
