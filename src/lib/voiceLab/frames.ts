@@ -421,6 +421,14 @@ export function easeOutBack(x: number): number {
 
 // ---- Frame + cinder rendering ----------------------------------------------
 
+// Stroke-bleed hook (voice-lab-dotgrid-addendum.md §4): fired once per
+// actively-inking path per frame, with the ink head's current world-space
+// point, so the caller (engine.ts) can bleed a faint wash onto nearby
+// dot-grid paper. A single callback — Phase B restructures this reveal
+// wholesale, so this stays the minimal integration point rather than a new
+// abstraction.
+export type InkAdvanceCallback = (x: number, y: number) => void;
+
 export function drawFrames(
   ctx: CanvasRenderingContext2D,
   frames: Frame[],
@@ -428,6 +436,8 @@ export function drawFrames(
   cfg: CinderConfig,
   inkStaggerMs = 0,
   impact: LandingImpact = { kind: "ticks" },
+  measurePath?: SVGPathElement,
+  onInkAdvance?: InkAdvanceCallback,
 ) {
   for (const f of frames) {
     const inkStart = f.landStartedAt
@@ -464,7 +474,13 @@ export function drawFrames(
     const inkMs = cfg.landDurationMs * (180 / 900);
     const outlineT = Math.max(0, Math.min(1, (t - inkStart) / inkMs));
     if (outlineT > 0) {
-      drawInkingReveal(ctx, f.paths.outline, outlineT);
+      drawInkingReveal(
+        ctx,
+        f.paths.outline,
+        outlineT,
+        measurePath,
+        onInkAdvance,
+      );
       // Per-element stagger (spec §3.8): each element starts inking a
       // fraction later than the last, capped at 600ms total across the set,
       // so the frame reads as hand-drawn rather than all lines at once.
@@ -474,7 +490,7 @@ export function drawFrames(
       f.paths.elements.forEach((el, i) => {
         const delay = n > 1 ? (i / (n - 1)) * staggerTotal : 0;
         const elT = Math.max(0, Math.min(1, (t - inkStart - delay) / inkMs));
-        if (elT > 0) drawInkingReveal(ctx, el, elT);
+        if (elT > 0) drawInkingReveal(ctx, el, elT, measurePath, onInkAdvance);
         if (elT < 1) allDone = false;
       });
       if (allDone) {
@@ -522,6 +538,8 @@ function drawInkingReveal(
   ctx: CanvasRenderingContext2D,
   src: BuiltPath,
   t: number,
+  measurePath?: SVGPathElement,
+  onInkAdvance?: InkAdvanceCallback,
 ) {
   const len = src.len;
   ctx.save();
@@ -533,6 +551,12 @@ function drawInkingReveal(
   ctx.lineJoin = "round";
   ctx.stroke(src.path2d);
   ctx.restore();
+  // Bleed hook: report the ink head's current world-space point, if asked.
+  if (measurePath && onInkAdvance && t > 0 && t < 1 && len > 0) {
+    measurePath.setAttribute("d", src.d);
+    const pt = measurePath.getPointAtLength(len * t);
+    onInkAdvance(pt.x, pt.y);
+  }
 }
 
 function drawImpactMarks(

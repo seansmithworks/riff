@@ -39,7 +39,8 @@ import {
   drawIdleSquiggle,
   strokeChain,
 } from "./marks";
-import { renderFluidGlow } from "./fluidGlow";
+import { renderFluidGlow, sampleFluidPixel } from "./fluidGlow";
+import { DotGrid } from "./dotGrid";
 import {
   createFrames,
   resetFrames,
@@ -77,6 +78,12 @@ import {
   REDUCED_MOTION_PRESET,
 } from "./sequences";
 
+function hexToRgbTuple(hex: string): [number, number, number] {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex.trim());
+  if (!m) return [63, 63, 70];
+  return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
+}
+
 export function defaultEngineConfig(): EngineConfig {
   return {
     voiceState: "idle",
@@ -110,13 +117,22 @@ export function defaultEngineConfig(): EngineConfig {
     },
     reducedMotion: false,
     realMicEnabled: false,
-    glowStyle: "fluid",
+    glowStyle: "both",
     glowHumanColor: "#2F6FED",
     glowRiffColor: "#F5C518",
     glowMixSoftness: 0.4,
     glowFlowSpeed: 1,
     glowBlobScale: 1,
     glowBlobCount: 3,
+    glowEdgeAmount: 0.35,
+    glowGrainAmount: 0.4,
+    glowLayers: 2,
+    glowRoleColor: 0.8,
+    glowBleedAmount: 0.5,
+    paperOn: true,
+    paperPitch: 16,
+    paperDotSize: 0.9,
+    paperBaseOpacity: 0.5,
     discStretchAmount: 0.35,
     discSquishBounce: 0.35,
     discWobble: 0.15,
@@ -188,7 +204,8 @@ export class VoiceLabEngine implements SequenceHost {
   private analyser: AnalyserNode | null = null;
   private micDataArray: Uint8Array | null = null;
   private audioCtx: AudioContext | null = null;
-  private dotGridCanvas: HTMLCanvasElement;
+  private dotGrid: DotGrid;
+  private lastPaperParams = { pitch: 16, dotSize: 0.9, baseOpacity: 0.5 };
   private mql: MediaQueryList;
   private statusListeners: Set<(s: EngineStatus) => void> = new Set();
   private destroyed = false;
@@ -271,13 +288,18 @@ export class VoiceLabEngine implements SequenceHost {
 
     this.frames = createFrames(this.measurePath);
 
-    this.dotGridCanvas = document.createElement("canvas");
-    this.dotGridCanvas.width = W;
-    this.dotGridCanvas.height = H;
-    const gctx = this.dotGridCanvas.getContext("2d")!;
-    gctx.fillStyle = "rgba(212,212,216,0.5)";
-    for (let x = 20; x < W; x += 28)
-      for (let y = 20; y < H; y += 28) gctx.fillRect(x, y, 1.4, 1.4);
+    this.dotGrid = new DotGrid(
+      W,
+      H,
+      this.config.paperPitch,
+      this.config.paperDotSize,
+      this.config.paperBaseOpacity,
+    );
+    this.lastPaperParams = {
+      pitch: this.config.paperPitch,
+      dotSize: this.config.paperDotSize,
+      baseOpacity: this.config.paperBaseOpacity,
+    };
 
     this.mql = window.matchMedia("(prefers-reduced-motion: reduce)");
     this.mql.addEventListener("change", this.onMqlChange);
@@ -359,6 +381,21 @@ export class VoiceLabEngine implements SequenceHost {
       job: rm.job,
       landing: rm.landing,
     };
+  }
+
+  // Fluid role-color dominance (voice-lab-dotgrid-addendum.md §3): the "Role
+  // color" dial is the actual dominance value; a preset's own hueBias only
+  // *scales* it, and only when that preset explicitly set one — BASE (most
+  // presets) counts as "no opinion", not "always green", so preset 1/4's
+  // default look reads role-distinct instead of collapsing to the shared
+  // green wash.
+  private roleColorDominance(): number {
+    const preset = this.effectivePreset();
+    const dial = Math.max(0, Math.min(1, this.config.glowRoleColor));
+    const scale = preset.glow.hueBiasExplicit
+      ? Math.max(0, Math.min(1, preset.glow.hueBias))
+      : 1;
+    return dial * scale;
   }
 
   private effectiveColorMix(): number {
@@ -973,11 +1010,43 @@ export class VoiceLabEngine implements SequenceHost {
     }
   }
 
-  private drawBackground() {
+  private drawBackground(dt: number) {
     this.ctx.fillStyle = "#f4f4f5";
     this.ctx.fillRect(0, 0, W, H);
-    this.ctx.drawImage(this.dotGridCanvas, 0, 0);
+    if (this.config.paperOn) {
+      this.dotGrid.decay(dt);
+      this.dotGrid.draw(this.ctx);
+    }
   }
+
+  // Rebuilds the dot grid when Pitch changes (count changes, so the typed
+  // arrays must be reallocated); Dot size/Base opacity are cheap in-place
+  // updates on the existing grid (DotGrid#setDotSize/#setBaseOpacity).
+  setPaperParams(pitch: number, dotSize: number, baseOpacity: number) {
+    this.config.paperPitch = pitch;
+    this.config.paperDotSize = dotSize;
+    this.config.paperBaseOpacity = baseOpacity;
+    if (pitch !== this.lastPaperParams.pitch) {
+      this.dotGrid = new DotGrid(W, H, pitch, dotSize, baseOpacity);
+    } else {
+      this.dotGrid.setDotSize(dotSize);
+      this.dotGrid.setBaseOpacity(baseOpacity);
+    }
+    this.lastPaperParams = { pitch, dotSize, baseOpacity };
+  }
+
+  // Stroke-bleed hook (voice-lab-dotgrid-addendum.md §4) — bound once so
+  // frames.ts's drawInkingReveal can call it without knowing about the dot
+  // grid or role colors; picks whichever role is presently active (or falls
+  // back to the human color, e.g. during a silence hold).
+  private onInkAdvance = (x: number, y: number) => {
+    const amount = this.config.glowBleedAmount;
+    if (amount <= 0) return;
+    const { role } = this.activeRoleAndMarkId();
+    const color =
+      role === "riff" ? this.config.riffColor : this.config.humanColor;
+    this.dotGrid.bleedAlongPath([{ x, y }], hexToRgbTuple(color), amount);
+  };
 
   private jobDuckEnvelope(preset: SequencePreset): number {
     // Sidechain ducking: cinders yield visually while a voice role is
@@ -1088,42 +1157,98 @@ export class VoiceLabEngine implements SequenceHost {
       return;
     }
 
-    // Fluid style: hide the classic gradients, render + show the density
-    // canvas. Per-pixel alpha already bakes in `opacity` (renderFluidGlow),
-    // so the element opacity itself stays 1 and only scale animates here —
-    // consistent with the classic branch's "engine writes only opacity and
-    // transform" contract, just with opacity baked per-pixel instead.
+    // Wash / Dots / Both: hide the classic gradients. The density field
+    // always renders (cheap, FLUID_W×FLUID_H) so "dots" can sample it even
+    // when the wash canvas itself stays hidden; "wash"/"both" show it too.
     if (this.glowCyanEl) this.glowCyanEl.style.opacity = "0";
     if (this.glowGreenEl) this.glowGreenEl.style.opacity = "0";
+    const showWash =
+      this.config.glowStyle === "fluid" || this.config.glowStyle === "both";
+    const showDots =
+      this.config.glowStyle === "dots" || this.config.glowStyle === "both";
     if (this.glowFluidCanvas) {
-      this.glowFluidCanvas.style.opacity = ambient ? "1" : "0";
+      this.glowFluidCanvas.style.opacity = ambient && showWash ? "1" : "0";
       this.glowFluidCanvas.style.transform = `scale(${scale})`;
-      const fctx = this.glowFluidCtx;
-      if (fctx && ambient) {
-        // Same anchor the classic glow used: origin.x for left/right, and
-        // glowHeight (% of card height, matching buildGlow's "at X% height%")
-        // for vertical placement — so Fluid occupies the classic glow's
-        // footprint instead of roaming the whole card.
-        const o = this.getOrigin();
-        renderFluidGlow(
-          fctx,
-          t,
-          this.presence.human * (0.4 + 0.6 * this.lastLevel.human),
-          this.presence.riff * (0.4 + 0.6 * this.lastLevel.riff),
-          {
-            humanColor: this.config.glowHumanColor,
-            riffColor: this.config.glowRiffColor,
-            mixSoftness: this.config.glowMixSoftness,
-            flowSpeed: this.config.glowFlowSpeed,
-            blobScale: this.config.glowBlobScale,
-            blobCount: this.config.glowBlobCount,
-            hueBias: preset.glow.hueBias,
-            opacity,
-            originX: o.x / W,
-            originY: this.config.glowHeight / 100,
-            glowSize: this.config.glowSize,
-          },
+    }
+    const fctx = this.glowFluidCtx;
+    if (fctx && ambient) {
+      // Same anchor the classic glow used: origin.x for left/right, and
+      // glowHeight (% of card height, matching buildGlow's "at X% height%")
+      // for vertical placement — so Fluid occupies the classic glow's
+      // footprint instead of roaming the whole card.
+      const o = this.getOrigin();
+      const t0 = performance.now();
+      renderFluidGlow(
+        fctx,
+        t,
+        this.presence.human * (0.4 + 0.6 * this.lastLevel.human),
+        this.presence.riff * (0.4 + 0.6 * this.lastLevel.riff),
+        {
+          humanColor: this.config.glowHumanColor,
+          riffColor: this.config.glowRiffColor,
+          mixSoftness: this.config.glowMixSoftness,
+          flowSpeed: this.config.glowFlowSpeed,
+          blobScale: this.config.glowBlobScale,
+          blobCount: this.config.glowBlobCount,
+          hueBias: this.roleColorDominance(),
+          opacity,
+          originX: o.x / W,
+          originY: this.config.glowHeight / 100,
+          glowSize: this.config.glowSize,
+          edgeAmount: this.config.glowEdgeAmount,
+          grainAmount: this.config.glowGrainAmount,
+          layers: this.config.glowLayers,
+        },
+      );
+      if (this.fieldMsLog) this.fieldMsLog(performance.now() - t0);
+      if (showDots && this.config.paperOn)
+        this.tintDotsFromField(
+          o,
+          opacity,
+          this.config.glowSize,
+          this.config.glowBlobScale,
         );
+    }
+  }
+
+  // Dev-only perf hook (spec acceptance §6/§2 "report ms/frame") — set from
+  // the browser console during evidence capture; no-op otherwise, never
+  // committed as a UI control.
+  fieldMsLog: ((ms: number) => void) | null = null;
+
+  // Style: Dots / Both (addendum §2) — the density field also tints and
+  // brightens dot-grid paper within its footprint, using the same finished
+  // pixels the wash canvas would show (sampleFluidPixel), so "the shader
+  // shows through the paper" whether or not the wash itself is drawn. Only
+  // walks dots inside the field's own footprint (an origin-centered box
+  // scaled by glowSize/blobScale), not the whole grid, to keep this bounded
+  // regardless of card size.
+  private tintDotsFromField(
+    o: { x: number; y: number },
+    opacity: number,
+    glowSize: number,
+    blobScale: number,
+  ) {
+    if (opacity <= 0.01) return;
+    const marginX = 0.4 * Math.max(0.1, glowSize) * Math.max(0.1, blobScale);
+    const marginY = 0.35 * Math.max(0.1, glowSize) * Math.max(0.1, blobScale);
+    const ox = o.x / W;
+    const oy = this.config.glowHeight / 100;
+    const x0 = Math.max(0, (ox - marginX) * W);
+    const x1 = Math.min(W, (ox + marginX) * W);
+    const y0 = Math.max(0, (oy - marginY) * H);
+    const y1 = Math.min(H, (oy + marginY) * H);
+    const dg = this.dotGrid;
+    const colStart = Math.max(0, Math.floor((x0 - 20) / dg.pitch));
+    const colEnd = Math.min(dg.cols - 1, Math.ceil((x1 - 20) / dg.pitch));
+    const rowStart = Math.max(0, Math.floor((y0 - 20) / dg.pitch));
+    const rowEnd = Math.min(dg.rows - 1, Math.ceil((y1 - 20) / dg.pitch));
+    for (let row = rowStart; row <= rowEnd; row++) {
+      for (let col = colStart; col <= colEnd; col++) {
+        const i = row * dg.cols + col;
+        const px = sampleFluidPixel(dg.x(i) / W, dg.y(i) / H);
+        if (!px) continue;
+        dg.setTint(i, [px[0], px[1], px[2]], px[3] * 0.6);
       }
     }
   }
@@ -1131,7 +1256,7 @@ export class VoiceLabEngine implements SequenceHost {
   private renderFrame(t: number) {
     const dt = Math.min(48, t - this.lastT);
     this.lastT = t;
-    this.drawBackground();
+    this.drawBackground(dt);
 
     const preset = this.effectivePreset();
     this.updateMarkClock(t, dt, preset);
@@ -1146,6 +1271,8 @@ export class VoiceLabEngine implements SequenceHost {
         this.config.cinderConfig,
         preset.landing.inkStaggerMs,
         preset.landing.impact,
+        this.config.paperOn ? this.measurePath : undefined,
+        this.config.paperOn ? this.onInkAdvance : undefined,
       );
     if (this.cindersEnabled()) {
       if (this.config.jobState === "sketching")

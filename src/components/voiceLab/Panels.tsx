@@ -287,13 +287,19 @@ function GlowPanel() {
       // Fluid "shader" glow (ask 1) — new fields appended after the
       // existing classic ones so persisted values for those never move or
       // reset; DialKit reconciles missing keys against these defaults.
+      // "fluid" keeps its stored value (relabeled "Wash" — voice-lab-
+      // dotgrid-addendum.md §2) so a previously-saved selection stays valid;
+      // "dots" and "both" are new options, "both" is the new default for
+      // fresh installs only.
       style: {
         type: "select",
         options: [
-          { value: "fluid", label: "Fluid" },
+          { value: "fluid", label: "Wash" },
+          { value: "dots", label: "Dots" },
+          { value: "both", label: "Both" },
           { value: "classic", label: "Classic" },
         ],
-        default: "fluid",
+        default: "both",
       },
       fluidHumanColor: "#2F6FED",
       fluidRiffColor: "#F5C518",
@@ -301,6 +307,14 @@ function GlowPanel() {
       fluidFlowSpeed: [1, 0, 2, 0.05],
       fluidBlobScale: [1, 0.5, 2, 0.05],
       fluidBlobCount: [3, 1, 4, 1],
+      // Ink-and-wash dials (addendum §4).
+      fluidEdge: [0.35, 0, 1, 0.05],
+      fluidGrain: [0.4, 0, 1, 0.05],
+      fluidLayers: [2, 1, 3, 1],
+      // Role-color dominance (addendum §3).
+      roleColor: [0.8, 0, 1, 0.05],
+      // Stroke-bleed (addendum §4 "ties to the drawing elements").
+      bleedAmount: [0.5, 0, 1, 0.05],
     },
     { id: "glow", persist: persistKey("glow") },
   );
@@ -318,6 +332,11 @@ function GlowPanel() {
   const fluidFlowSpeed = raw.fluidFlowSpeed as number;
   const fluidBlobScale = raw.fluidBlobScale as number;
   const fluidBlobCount = raw.fluidBlobCount as number;
+  const fluidEdge = raw.fluidEdge as number;
+  const fluidGrain = raw.fluidGrain as number;
+  const fluidLayers = raw.fluidLayers as number;
+  const roleColor = raw.roleColor as number;
+  const bleedAmount = raw.bleedAmount as number;
 
   useEffect(() => {
     if (!handle) return;
@@ -383,6 +402,63 @@ function GlowPanel() {
     if (!handle) return;
     handle.engine.config.glowBlobCount = fluidBlobCount;
   }, [handle, fluidBlobCount]);
+
+  useEffect(() => {
+    if (!handle) return;
+    handle.engine.config.glowEdgeAmount = fluidEdge;
+  }, [handle, fluidEdge]);
+
+  useEffect(() => {
+    if (!handle) return;
+    handle.engine.config.glowGrainAmount = fluidGrain;
+  }, [handle, fluidGrain]);
+
+  useEffect(() => {
+    if (!handle) return;
+    handle.engine.config.glowLayers = fluidLayers;
+  }, [handle, fluidLayers]);
+
+  useEffect(() => {
+    if (!handle) return;
+    handle.engine.config.glowRoleColor = roleColor;
+  }, [handle, roleColor]);
+
+  useEffect(() => {
+    if (!handle) return;
+    handle.engine.config.glowBleedAmount = bleedAmount;
+  }, [handle, bleedAmount]);
+
+  return null;
+}
+
+// Dot-grid sketchbook paper (voice-lab-dotgrid-addendum.md §1).
+function PaperPanel() {
+  const handle = useEngine();
+  const raw = useDialKit(
+    "Paper",
+    {
+      paperOn: true,
+      pitch: [16, 12, 24, 1],
+      dotSize: [0.9, 0.6, 1.6, 0.05],
+      baseOpacity: [0.5, 0.1, 1, 0.05],
+    },
+    { persist: persistKey("paper") },
+  );
+
+  const paperOn = raw.paperOn as boolean;
+  const pitch = raw.pitch as number;
+  const dotSize = raw.dotSize as number;
+  const baseOpacity = raw.baseOpacity as number;
+
+  useEffect(() => {
+    if (!handle) return;
+    handle.engine.config.paperOn = paperOn;
+  }, [handle, paperOn]);
+
+  useEffect(() => {
+    if (!handle) return;
+    handle.engine.setPaperParams(pitch, dotSize, baseOpacity);
+  }, [handle, pitch, dotSize, baseOpacity]);
 
   return null;
 }
@@ -536,6 +612,7 @@ export default function VoiceLabPanels() {
       <VoicePanel />
       <JobPanel />
       <TogglesPanel />
+      <PaperPanel />
       <GlowPanel />
       <RoleVoicePanel
         role="human"

@@ -5,6 +5,14 @@
 // with a pigment-style mix (routed explicitly through green at the
 // midpoint) rather than additive RGB, so equal human+riff density reads
 // green instead of gray. See docs/voice-lab-sequences.md "Fluid glow".
+//
+// Ink-and-wash pass (voice-lab-dotgrid-addendum.md §4): the same field is
+// composited from 1-3 translucent "glaze" layers (sampled at small spatial
+// offsets, each layer alpha-over'd onto the last) instead of one smooth
+// ramp, multiplied by a static paper-grain texture, and darkened at its own
+// gradient edge for a drying-wash rim. `sampleFluidPixel` exposes the final
+// per-pixel result so the engine can also tint/brighten dot-grid paper
+// (dotGrid.ts) within the wash's footprint.
 
 export const FLUID_W = 96;
 export const FLUID_H = 60;
@@ -85,9 +93,10 @@ function lerp(a: number, b: number, t: number) {
 type BlobPos = { x: number; y: number; sigma: number };
 
 // Reused every frame instead of allocated — ImageData, its backing buffer,
-// and the two roles' projected-blob-position arrays never change size
-// (fixed FLUID_W×FLUID_H field, ≤4 blobs/role), so there's nothing to
-// re-allocate per frame.
+// the two roles' projected-blob-position arrays, the layer accumulators, and
+// the static grain texture never change size (fixed FLUID_W×FLUID_H field,
+// ≤4 blobs/role, ≤3 glaze layers), so there's nothing to re-allocate per
+// frame.
 let cachedImg: ImageData | null = null;
 const humanPosBuf: BlobPos[] = [0, 1, 2, 3].map(() => ({
   x: 0,
@@ -99,6 +108,46 @@ const riffPosBuf: BlobPos[] = [0, 1, 2, 3].map(() => ({
   y: 0,
   sigma: 0,
 }));
+
+const FIELD_N = FLUID_W * FLUID_H;
+const accR = new Float32Array(FIELD_N);
+const accG = new Float32Array(FIELD_N);
+const accB = new Float32Array(FIELD_N);
+const accA = new Float32Array(FIELD_N);
+const alphaPre = new Float32Array(FIELD_N); // pre-grain/edge alpha, for edge-detect
+
+// Static paper-grain texture (granulation), generated once and box-blurred
+// slightly so pigment "settles" in soft clumps rather than per-pixel static.
+// Deliberately independent of the DOM dot grid's own pitch (it lives on the
+// small field canvas, upscaled) — "aligned to the grid" per the addendum
+// means it reads as consistent paper texture at the same footprint the dots
+// occupy, not a literal per-dot lookup.
+const GRAIN = (() => {
+  const raw = new Float32Array(FIELD_N);
+  const rnd = mulberry32(0xc0ffee);
+  for (let i = 0; i < FIELD_N; i++) raw[i] = rnd();
+  const out = new Float32Array(FIELD_N);
+  for (let y = 0; y < FLUID_H; y++) {
+    for (let x = 0; x < FLUID_W; x++) {
+      let sum = 0,
+        n = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= FLUID_H) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx;
+          if (xx < 0 || xx >= FLUID_W) continue;
+          sum += raw[yy * FLUID_W + xx];
+          n++;
+        }
+      }
+      // Bias toward [0.55, 1] so grain only ever darkens/mutes, never blows
+      // out — a drying wash never gets *brighter* from paper texture.
+      out[y * FLUID_W + x] = 0.55 + (sum / n) * 0.45;
+    }
+  }
+  return out;
+})();
 
 // Soft union (screen-blend), not a sum: overlapping blobs approach 1 but
 // never exceed it regardless of blob count, so density never plateaus into
@@ -137,8 +186,11 @@ export type FluidGlowParams = {
   flowSpeed: number; // 0-2ish: blob drift speed
   blobScale: number; // 0.5-2: multiplies each blob's radius
   blobCount: number; // 1-4 per role
-  // Reinterpreted preset glow.hueBias (docs §"Fluid glow"): 0 = always the
-  // shared green blend, 1 = pure role colors.
+  // Role-color dominance (docs §"Fluid glow" / dotgrid addendum §3): 0 =
+  // always the shared green blend, 1 = pure role colors. Computed by the
+  // engine from the "Role color" dial × the active preset's hueBias scale
+  // (see engine.ts roleColorDominance()) — this file just applies whatever
+  // number it's given.
   hueBias: number;
   opacity: number; // overall envelope — glowFollower × ambient × reducedMul
   // Anchor (mic-disc origin) in normalized field coords [0-1], same point
@@ -150,10 +202,23 @@ export type FluidGlowParams = {
   // the classic gradient ellipses, so Fluid/Classic occupy the same
   // footprint at a given dial setting.
   glowSize: number;
+  // Ink-and-wash dials (addendum §4).
+  edgeAmount: number; // 0-1: wet-edge/bloom darkening at the density rim
+  grainAmount: number; // 0-1: paper-grain multiply strength
+  layers: number; // 1-3: translucent glaze layers, composited not ramped
 };
 
+// Small, fixed per-layer spatial offsets (normalized field units) so glazes
+// read as separate translucent washes rather than one smooth alpha ramp.
+const LAYER_OFFSETS: [number, number][] = [
+  [0, 0],
+  [0.018, -0.012],
+  [-0.014, 0.02],
+];
+
 // Renders one frame of the density field directly onto a small canvas's 2D
-// context via putImageData. Cheap: FLUID_W × FLUID_H × ≤8 blobs per frame.
+// context via putImageData. Cheap: FLUID_W × FLUID_H × ≤8 blobs × ≤3 layers
+// per frame.
 export function renderFluidGlow(
   ctx: CanvasRenderingContext2D,
   t: number,
@@ -174,6 +239,9 @@ export function renderFluidGlow(
   const opacity = Math.max(0, Math.min(1.2, p.opacity));
   const timeSec = (t / 1000) * (0.3 + Math.max(0, p.flowSpeed) * 0.7);
   const minDim = Math.min(w, h);
+  const grainAmount = Math.max(0, Math.min(1, p.grainAmount));
+  const edgeAmount = Math.max(0, Math.min(1, p.edgeAmount));
+  const layers = Math.max(1, Math.min(3, Math.round(p.layers)));
   // glowSize scales blob radii the same way it scales the classic gradient
   // ellipses (buildGlow's rx/ry * size), so switching Fluid/Classic at a
   // given dial setting keeps the same footprint.
@@ -204,51 +272,142 @@ export function renderFluidGlow(
   const humanCount = humanBlobs.length;
   const riffCount = riffBlobs.length;
 
+  // Pass 1: composite `layers` translucent glazes into accR/accG/accB/accA,
+  // each glaze sampled at a small fixed spatial offset so the wash reads as
+  // layered washes, not a single smooth ramp (addendum "glazes").
   for (let y = 0; y < h; y++) {
-    const vy = y / h;
     for (let x = 0; x < w; x++) {
-      const vx = x / w;
-      const hDens =
-        softUnion(humanPosBuf, humanCount, vx, vy, w, h, minDim) *
-        humanActivity;
-      const rDens =
-        softUnion(riffPosBuf, riffCount, vx, vy, w, h, minDim) * riffActivity;
-      const total = hDens + rDens;
-      const i = (y * w + x) * 4;
-      if (total < 0.003) {
+      const idx = y * w + x;
+      let r = 0,
+        g = 0,
+        b = 0,
+        a = 0;
+      for (let l = 0; l < layers; l++) {
+        const [offX, offY] = LAYER_OFFSETS[l];
+        const vx = x / w + offX;
+        const vy = y / h + offY;
+        // Wet-in-wet: warp the sampling point along the static grain field
+        // so the human/riff boundary bleeds along an irregular edge instead
+        // of a linear crossfade. Scaled off Grain — no separate dial needed.
+        const warp = (GRAIN[idx] - 0.775) * 0.35 * grainAmount;
+        const hDens =
+          softUnion(
+            humanPosBuf,
+            humanCount,
+            vx + warp,
+            vy - warp,
+            w,
+            h,
+            minDim,
+          ) * humanActivity;
+        const rDens =
+          softUnion(riffPosBuf, riffCount, vx - warp, vy + warp, w, h, minDim) *
+          riffActivity;
+        const total = hDens + rDens;
+        if (total < 0.003) continue;
+        const density = densityCurve(total);
+        // frac: 0 = pure human, 1 = pure riff. Route explicitly through
+        // green at the midpoint (rather than a straight RGB or hue lerp) so
+        // equal densities read green, not gray or an arbitrary in-between
+        // hue.
+        const frac = rDens / (total + 1e-5);
+        const dist = Math.abs(frac - 0.5) * 2;
+        const remapped =
+          0.5 + Math.sign(frac - 0.5) * Math.pow(dist, softExp) * 0.5;
+        let lr: number, lg: number, lb: number;
+        if (remapped <= 0.5) {
+          const tt = remapped * 2;
+          lr = lerp(humanRgb[0], GREEN_RGB[0], tt);
+          lg = lerp(humanRgb[1], GREEN_RGB[1], tt);
+          lb = lerp(humanRgb[2], GREEN_RGB[2], tt);
+        } else {
+          const tt = (remapped - 0.5) * 2;
+          lr = lerp(GREEN_RGB[0], riffRgb[0], tt);
+          lg = lerp(GREEN_RGB[1], riffRgb[1], tt);
+          lb = lerp(GREEN_RGB[2], riffRgb[2], tt);
+        }
+        lr = lerp(GREEN_RGB[0], lr, hueBias);
+        lg = lerp(GREEN_RGB[1], lg, hueBias);
+        lb = lerp(GREEN_RGB[2], lb, hueBias);
+        const layerAlpha = (density / layers) * 1.3; // glazes stack toward densityCurve's peak
+        // Standard alpha-over compositing: each glaze is a translucent wash
+        // laid on top of the previous one.
+        const outA = layerAlpha + a * (1 - layerAlpha);
+        if (outA > 0) {
+          r = (lr * layerAlpha + r * a * (1 - layerAlpha)) / outA;
+          g = (lg * layerAlpha + g * a * (1 - layerAlpha)) / outA;
+          b = (lb * layerAlpha + b * a * (1 - layerAlpha)) / outA;
+        }
+        a = outA;
+      }
+      accR[idx] = r;
+      accG[idx] = g;
+      accB[idx] = b;
+      accA[idx] = Math.min(1, a);
+      alphaPre[idx] = accA[idx];
+    }
+  }
+
+  // Pass 2: wet-edge darkening (gradient-magnitude rim of the pre-grain
+  // alpha) + paper-grain multiply, then write final pixels.
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = y * w + x;
+      const i = idx * 4;
+      let a = accA[idx];
+      if (a < 0.003) {
         data[i + 3] = 0;
         continue;
       }
-      const density = densityCurve(total);
-      // frac: 0 = pure human, 1 = pure riff. Route explicitly through green
-      // at the midpoint (rather than a straight RGB or hue lerp) so equal
-      // densities read green, not gray or an arbitrary in-between hue.
-      const frac = rDens / (total + 1e-5);
-      const dist = Math.abs(frac - 0.5) * 2;
-      const remapped =
-        0.5 + Math.sign(frac - 0.5) * Math.pow(dist, softExp) * 0.5;
-      let r: number, g: number, b: number;
-      if (remapped <= 0.5) {
-        const tt = remapped * 2;
-        r = lerp(humanRgb[0], GREEN_RGB[0], tt);
-        g = lerp(humanRgb[1], GREEN_RGB[1], tt);
-        b = lerp(humanRgb[2], GREEN_RGB[2], tt);
-      } else {
-        const tt = (remapped - 0.5) * 2;
-        r = lerp(GREEN_RGB[0], riffRgb[0], tt);
-        g = lerp(GREEN_RGB[1], riffRgb[1], tt);
-        b = lerp(GREEN_RGB[2], riffRgb[2], tt);
-      }
-      r = lerp(GREEN_RGB[0], r, hueBias);
-      g = lerp(GREEN_RGB[1], g, hueBias);
-      b = lerp(GREEN_RGB[2], b, hueBias);
+      // Sobel-lite gradient magnitude on the alpha channel — a soft ring
+      // wherever density crosses its own boundary, like a drying wash's
+      // darker rim.
+      const xm = x > 0 ? alphaPre[idx - 1] : alphaPre[idx];
+      const xp = x < w - 1 ? alphaPre[idx + 1] : alphaPre[idx];
+      const ym = y > 0 ? alphaPre[idx - w] : alphaPre[idx];
+      const yp = y < h - 1 ? alphaPre[idx + w] : alphaPre[idx];
+      const grad = Math.hypot(xp - xm, yp - ym);
+      const edge = Math.min(1, grad * 6) * edgeAmount;
 
-      const alpha = density * opacity;
-      data[i] = r;
-      data[i + 1] = g;
-      data[i + 2] = b;
-      data[i + 3] = Math.round(alpha * 255);
+      let r = accR[idx];
+      let g = accG[idx];
+      let b = accB[idx];
+      // Darken (toward the pigment's own color, not black) at the rim.
+      const darken = 1 - edge * 0.4;
+      r *= darken;
+      g *= darken;
+      b *= darken;
+
+      // Granulation: multiply toward the static grain texture, biased so it
+      // only ever mutes.
+      const grainMul = lerp(1, GRAIN[idx], grainAmount);
+      a *= grainMul;
+
+      const alpha = a * opacity;
+      data[i] = Math.round(Math.max(0, Math.min(255, r)));
+      data[i + 1] = Math.round(Math.max(0, Math.min(255, g)));
+      data[i + 2] = Math.round(Math.max(0, Math.min(255, b)));
+      data[i + 3] = Math.round(Math.max(0, Math.min(255, alpha * 255)));
     }
   }
   ctx.putImageData(img, 0, 0);
+}
+
+// Samples the last-rendered field at a normalized [0-1] card position —
+// nearest pixel, no interpolation (the field is already coarse and
+// upscaled, so this is only used to tint dot-grid paper within the wash's
+// footprint, not for anything requiring sub-pixel accuracy). Returns null
+// before the first render, or fully transparent.
+export function sampleFluidPixel(
+  nx: number,
+  ny: number,
+): [number, number, number, number] | null {
+  if (!cachedImg) return null;
+  const x = Math.max(0, Math.min(FLUID_W - 1, Math.round(nx * FLUID_W)));
+  const y = Math.max(0, Math.min(FLUID_H - 1, Math.round(ny * FLUID_H)));
+  const i = (y * FLUID_W + x) * 4;
+  const data = cachedImg.data;
+  const a = data[i + 3] / 255;
+  if (a < 0.004) return null;
+  return [data[i], data[i + 1], data[i + 2], a];
 }

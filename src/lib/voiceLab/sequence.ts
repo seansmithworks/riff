@@ -53,6 +53,12 @@ export type SequencePreset = {
   glow: {
     level: Record<VoiceState, number>;
     hueBias: number;
+    // True when this preset's own overrides set `glow.hueBias` explicitly
+    // (as opposed to inheriting BASE's 0). Fluid role-color dominance
+    // (engine.ts#roleColorDominance, dotgrid addendum §3) only lets a
+    // preset's hueBias *scale* Sean's "Role color" dial when this is true —
+    // BASE counts as "no opinion", not "always green".
+    hueBiasExplicit: boolean;
     follow: number;
     swell: number;
   };

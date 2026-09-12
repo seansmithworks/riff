@@ -118,14 +118,35 @@ export type EngineConfig = {
   realMicEnabled: boolean;
   // Fluid "shader" glow (Canvas2D, no WebGL) — a CPU density field per role,
   // pigment-mixed (not additive) so overlap reads green. "classic" keeps the
-  // original two-gradient wash. See docs/voice-lab-sequences.md "Fluid glow".
-  glowStyle: "fluid" | "classic";
+  // original two-gradient wash. "fluid" (labeled "Wash" in Panels.tsx) paints
+  // the field itself; "dots" tints/brightens dot-grid paper in the field's
+  // footprint without drawing the wash canvas; "both" (default) does both.
+  // See docs/voice-lab-sequences.md "Fluid glow" and voice-lab-dotgrid-
+  // addendum.md §2.
+  glowStyle: "fluid" | "dots" | "both" | "classic";
   glowHumanColor: string;
   glowRiffColor: string;
   glowMixSoftness: number;
   glowFlowSpeed: number;
   glowBlobScale: number;
   glowBlobCount: number;
+  // Ink-and-wash dials (voice-lab-dotgrid-addendum.md §4).
+  glowEdgeAmount: number;
+  glowGrainAmount: number;
+  glowLayers: number;
+  // Role-color dominance dial (addendum §3) — 0-1, default 0.8. Scaled by
+  // the active preset's hueBias only when the preset explicitly sets one;
+  // BASE ("no opinion") leaves the dial untouched. See
+  // engine.ts#roleColorDominance.
+  glowRoleColor: number;
+  // Stroke-bleed dial (addendum §4 "ties to the drawing elements") — 0-1,
+  // default 0.5. Consumed by frames.ts's ink-reveal bleed hook.
+  glowBleedAmount: number;
+  // Dot-grid paper (addendum §1).
+  paperOn: boolean;
+  paperPitch: number;
+  paperDotSize: number;
+  paperBaseOpacity: number;
   // Disc squash & stretch (Disney squash-and-stretch): target aspect comes
   // from role presence (human -> vertical, riff -> horizontal), reached via
   // an overshooting spring, composed multiplicatively with the existing

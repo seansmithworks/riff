@@ -42,6 +42,7 @@ const BASE: Omit<
       "dead-mic": 1,
     },
     hueBias: 0,
+    hueBiasExplicit: false,
     follow: 0,
     swell: 1,
   },
@@ -114,6 +115,7 @@ function preset(o: Overrides): SequencePreset {
     glow: {
       level: { ...BASE.glow.level, ...o.glow?.level },
       hueBias: o.glow?.hueBias ?? BASE.glow.hueBias,
+      hueBiasExplicit: o.glow?.hueBias !== undefined,
       follow: o.glow?.follow ?? BASE.glow.follow,
       swell: o.glow?.swell ?? BASE.glow.swell,
     },
