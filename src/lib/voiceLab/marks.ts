@@ -72,7 +72,8 @@ function amoebaOutline(
   g: MarkDrawArgs,
   cfg: Record<string, number>,
 ): { x: number; y: number; a: number; r: number }[] {
-  const { o, t, bands, onsetPulse } = g;
+  const { o, t, bands, onsetPulse, smear } = g;
+  const smearMul = smear ?? 1;
   const segsPerBand = 6;
   const totalSegs = bands.length * segsPerBand;
   const pts: { x: number; y: number; a: number; r: number }[] = [];
@@ -86,11 +87,13 @@ function amoebaOutline(
       cfg.wobble *
       6 *
       (0.4 + bandLevel);
+    // Smear widening (matches Burst's reach ×1.6 during a handoff's
+    // smearFrames window, marks.ts ~148-175): only the reach *beyond* the
+    // base radius scales, so the loop's resting size stays put.
     const r =
       cfg.baseRadius +
-      bandLevel * cfg.bulgeAmount +
-      bulge +
-      onsetPulse * cfg.onsetPunch * 10;
+      (bandLevel * cfg.bulgeAmount + bulge + onsetPulse * cfg.onsetPunch * 10) *
+        smearMul;
     const [x, y] = polar(o.x, o.y - 30, r, a);
     pts.push({ x, y, a, r });
   }
