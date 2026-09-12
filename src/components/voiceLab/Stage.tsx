@@ -95,10 +95,13 @@ export default function Stage({ children }: { children: React.ReactNode }) {
       <div className="flex h-full min-h-0 min-w-0 flex-col gap-2">
         <div
           ref={outerRef}
-          className="relative flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden rounded-xl border border-[#d4d4d8] bg-[#f4f4f5] shadow-[0_1px_2px_rgba(0,0,0,0.06),0_4px_12px_rgba(0,0,0,0.06)]"
+          className="relative flex min-h-0 w-full flex-1 items-center justify-center"
         >
+          {/* The card hugs the fitted canvas exactly (no letterboxing), so
+              its bg/border/shadow bounds match the glow's bounds and there's
+              no hard edge where the glow gradient would otherwise end mid-card. */}
           <div
-            className="relative"
+            className="relative overflow-hidden rounded-xl border border-[#d4d4d8] bg-[#f4f4f5] shadow-[0_1px_2px_rgba(0,0,0,0.06),0_4px_12px_rgba(0,0,0,0.06)]"
             style={{ width: dispSize.w, height: dispSize.h }}
           >
             <canvas
