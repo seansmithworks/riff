@@ -66,3 +66,22 @@
 - [ ] CopilotKit chat throws `AI_MissingToolResultsError` when a `render_artifact` generate fails — the tool call never gets a result; the chat thread wedges.
 - [ ] Chat route has no model failover (streaming makes per-request failover impractical); it imports `MODEL_ID` so a retirement is a one-line fix.
 - [ ] Global model default: Sean said he switched to Fable this session; confirm it was session-only (`s`), not saved as default.
+
+## 2026-09-11 (voice lab session, wrap-continue)
+
+**Carried (on-objective, `feat/voice-lab` @ `c230553`, pushed, preview Ready):**
+
+- [ ] **Glow hard edge:** the ambient glow still ends in a hard line at the stage card bottom (`tips-closeup.png`, `resp-800x600.png`). Make it fade out inside the canvas bounds.
+- [ ] **Riff Arcs over-wrap into scribble loops** (`arcs-flex-a/b.png`) and lose the three separate wavy lines Sean liked. Strawman: default sweep ~200°, 3 distinct arcs with a visible gap. Sean redlines in DialKit.
+- [ ] **DECIDE OR KILL: merge `feat/voice-lab` → main** (= prod deploy of `/voice-lab`). Preview: https://riff-git-feat-voice-lab-seansmithworks.vercel.app/voice-lab
+- [ ] **DECIDE OR KILL: origin + controls forks.** Voice-mark origin bottom-center (built default) vs bottom-right; white pill (default) vs V10 disc. Canvas thread `7b739fff` stays open.
+- [ ] **Phases 1–3: bring the winning voice FX into the real voice UI.** Voice × job are concurrent channels. The plan lived in the session-06199eed scratchpad (`sketch-shader-research.md`, tmp); re-derive from the `/voice-lab` engine if it's gone.
+- [ ] **DECIDE OR KILL: `feat/load-logo` @ `0f52726`**, carried 3× since 2026-09-10.
+
+**Parked (off-objective):**
+
+- [ ] Human marks 04 Hatch EQ, 05 Speech Balloon, 07 Stipple Spray and 09 Orbit Ticks read thin. Sean's taste call.
+- [ ] Voice Marks Lab artifact `42d1b072` and canvas board 15 still use the old exclusive-sketching model. Superseded by `/voice-lab`.
+- [ ] Root `layout.tsx` wraps every route in `<CopilotKit>`, so `/api/copilotkit` 500s on `/voice-lab` without keys and masks real errors while tuning.
+- [ ] `feat/voice-ui` Conversation Bar (`cdd7ddd`) is a baseline, unmerged.
+- [ ] Sean records the 60–90s cut from `docs/SHOT-LIST-90s.md` (original refresh objective).
