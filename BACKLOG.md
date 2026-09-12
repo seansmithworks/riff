@@ -101,10 +101,10 @@ Done this session: glow hard edge via mask (`f403a3e`), Glow slider set (Strengt
 - [x] 10 sequence presets built
 - [x] recording of all 10 sent to Sean
 - [ ] Sean picks a preset direction
-- [ ] Fluid "shader" gradient glow (blue/green, tied to voice activity)
-- [ ] Color semantics: human = blue, Riff = yellow, overlap = green
-- [ ] New Amoeba mark, single wobbly loop (shipped as default human mark per Sean's correction; Riff keeps Burst)
-- [ ] Center disc squash & stretch (vertical for human, horizontal for Riff)
+- [x] Fluid "shader" gradient glow (blue/green, tied to voice activity) (`e9c2b94`, `83cff90`)
+- [x] Color semantics: human = blue, Riff = yellow, overlap = green (`88638d5` role-color dial)
+- [x] New Amoeba mark, single wobbly loop (shipped as default human mark per Sean's correction; Riff keeps Burst) (`e9c2b94`, `ee70469`)
+- [x] Center disc squash & stretch (vertical for human, horizontal for Riff) (`e9c2b94`)
 
 **Parked (off-objective):**
 
@@ -119,7 +119,19 @@ Done this session: glow hard edge via mask (`f403a3e`), Glow slider set (Strengt
 - [x] Stroke bleed primitive: `bleedAlongPath` + single ink-advance callback hook in `frames.ts`
 - [x] Reviewer nit: Amoeba's smear now widens outline reach like Burst's rays
 - [x] **Phase B: sparks build the sketch on the grid** — particle landing snaps to nearest grid dot, speculative tiers draw as lit-dot skeletons, dots fade to paper under finished ink (voice-lab-dotgrid-addendum.md §3). `src/lib/voiceLab/build.ts` (new) + `frames.ts`/`engine.ts` integration; docs/voice-lab-sequences.md §9.
-- [ ] Phase B deferred: no full acceptance-evidence capture (perf ms/frame profiling, per-preset build-vs-clear-beat log, before/after video recordings) — only spot-checked via screenshots and `tsc --noEmit`. Revisit if Sean wants the full evidence pass before shipping.
+- [x] Phase B deferred: no full acceptance-evidence capture (perf ms/frame profiling, per-preset build-vs-clear-beat log, before/after video recordings) — only spot-checked via screenshots and `tsc --noEmit`. Revisit if Sean wants the full evidence pass before shipping. (evidence pass done: build-vs-clear margins logged for 6 presets, 3.4ms avg/5.6ms max per frame at Juice, recordings in the orchestrator scratchpad)
 - [ ] Phase B deferred: build particles and drift cinders both render in plain ink color as short line segments — visually similar at a glance; a distinct spark color/shape would read the "sparks become the sketch" narrative more clearly.
 - [ ] Phase B deferred: nib highlight on tier 0/1 arrival (width ×1.6, 120ms fade) not implemented — heads currently draw with no extra highlight on arrival.
 - [ ] Phase B deferred: React Flow real-app integration (plan §6 risk 3) — Canvas2D build layer doesn't yet track live node screen coords through a `fitView` animation.
+
+### wrap-continue (2026-09-12 afternoon)
+
+**Carried (on-objective):**
+
+- [ ] Sean picks a base choreography — strawman in place: preset "B · Blend" (Mm-hm turn-taking + Catch sparks, `32b61be`, default on fresh installs). Next thread: apply his redlines, don't re-ask.
+- [ ] Sean's dial pass → bake DialKit values as code defaults (verify in a clean browser; saved localStorage overrides defaults).
+- [ ] Merge feat/voice-lab → main (= prod deploy; per-deploy nod), then Phases 1–3: bring the winning system into the real voice UI. Known blocker: React Flow node coords move during fitView; evolve = diff re-ink, not rebuild.
+- [ ] DECIDE OR KILL (carried 2× since 2026-09-11): voice-mark origin bottom-center (built default) vs bottom-right; white pill vs disc. Disc squash assumes the disc.
+- [ ] DECIDE OR KILL (carried 5× since 2026-09-10): feat/load-logo @ 0f52726 — clean SVG export, draw-in intro only, or kill.
+
+**Parked (off-objective):** see the Phase B deferred items above and the panel-separation item; not duplicated here.
