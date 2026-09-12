@@ -39,7 +39,11 @@ import {
   drawIdleSquiggle,
   strokeChain,
 } from "./marks";
-import { renderFluidGlow, sampleFluidPixel } from "./fluidGlow";
+import {
+  renderFluidGlow,
+  sampleFluidPixelBilinear,
+  sampleGrainAt,
+} from "./fluidGlow";
 import { DotGrid } from "./dotGrid";
 import {
   createFrames,
@@ -1201,13 +1205,7 @@ export class VoiceLabEngine implements SequenceHost {
         },
       );
       if (this.fieldMsLog) this.fieldMsLog(performance.now() - t0);
-      if (showDots && this.config.paperOn)
-        this.tintDotsFromField(
-          o,
-          opacity,
-          this.config.glowSize,
-          this.config.glowBlobScale,
-        );
+      if (showDots && this.config.paperOn) this.tintDotsFromField(opacity);
     }
   }
 
@@ -1218,38 +1216,40 @@ export class VoiceLabEngine implements SequenceHost {
 
   // Style: Dots / Both (addendum §2) — the density field also tints and
   // brightens dot-grid paper within its footprint, using the same finished
-  // pixels the wash canvas would show (sampleFluidPixel), so "the shader
-  // shows through the paper" whether or not the wash itself is drawn. Only
-  // walks dots inside the field's own footprint (an origin-centered box
-  // scaled by glowSize/blobScale), not the whole grid, to keep this bounded
-  // regardless of card size.
-  private tintDotsFromField(
-    o: { x: number; y: number },
-    opacity: number,
-    glowSize: number,
-    blobScale: number,
-  ) {
+  // pixels the wash canvas would show (sampleFluidPixelBilinear), so "the
+  // shader shows through the paper" whether or not the wash itself is drawn.
+  //
+  // Walks every dot rather than a footprint box: a box's own edge was the
+  // bug (see docs/evidence/paper) — every dot inside it got a tint amount
+  // every frame regardless of how faint the field was there, and setTint's
+  // additive model (built for bleedAlongPath's occasional impulses) then
+  // saturated it to solid color within a couple of frames, while dots just
+  // outside the box were never touched at all. That reads as a flat-filled
+  // rectangle, not pigment. tint amount is now the field's own bilinear
+  // alpha at that dot (0 with no clamping past the field's edge), assigned
+  // fresh each frame (setFieldTint), so it can only ever be as strong, and
+  // fall off exactly as softly, as the wash itself. Grid walk is a few
+  // thousand cheap dots at typical pitch — bounded regardless of card size.
+  private tintDotsFromField(opacity: number) {
     if (opacity <= 0.01) return;
-    const marginX = 0.4 * Math.max(0.1, glowSize) * Math.max(0.1, blobScale);
-    const marginY = 0.35 * Math.max(0.1, glowSize) * Math.max(0.1, blobScale);
-    const ox = o.x / W;
-    const oy = this.config.glowHeight / 100;
-    const x0 = Math.max(0, (ox - marginX) * W);
-    const x1 = Math.min(W, (ox + marginX) * W);
-    const y0 = Math.max(0, (oy - marginY) * H);
-    const y1 = Math.min(H, (oy + marginY) * H);
     const dg = this.dotGrid;
-    const colStart = Math.max(0, Math.floor((x0 - 20) / dg.pitch));
-    const colEnd = Math.min(dg.cols - 1, Math.ceil((x1 - 20) / dg.pitch));
-    const rowStart = Math.max(0, Math.floor((y0 - 20) / dg.pitch));
-    const rowEnd = Math.min(dg.rows - 1, Math.ceil((y1 - 20) / dg.pitch));
-    for (let row = rowStart; row <= rowEnd; row++) {
-      for (let col = colStart; col <= colEnd; col++) {
-        const i = row * dg.cols + col;
-        const px = sampleFluidPixel(dg.x(i) / W, dg.y(i) / H);
-        if (!px) continue;
-        dg.setTint(i, [px[0], px[1], px[2]], px[3] * 0.6);
+    for (let i = 0; i < dg.count; i++) {
+      const nx = dg.x(i) / W;
+      const ny = dg.y(i) / H;
+      const [r, g, b, a] = sampleFluidPixelBilinear(nx, ny);
+      if (a < 0.003) {
+        if (dg.fieldTintAmount[i] > 0.003) dg.setFieldTint(i, [0, 0, 0], 0);
+        continue;
       }
+      // Granulated pigment, not a flat fill: modulate by the same paper
+      // grain the wash multiplies against, biased so valleys (low grain
+      // value) take more pigment than peaks — and cap well short of a flat
+      // fill (~70% toward the role color) regardless of field strength.
+      const grain = sampleGrainAt(nx, ny);
+      const valley = 1 - Math.max(0, Math.min(1, (grain - 0.55) / 0.45));
+      const grainMod = 0.7 + 0.6 * valley;
+      const amount = Math.min(0.7, a * 0.6 * grainMod);
+      dg.setFieldTint(i, [Math.round(r), Math.round(g), Math.round(b)], amount);
     }
   }
 

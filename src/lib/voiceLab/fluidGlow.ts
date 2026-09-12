@@ -394,20 +394,53 @@ export function renderFluidGlow(
 }
 
 // Samples the last-rendered field at a normalized [0-1] card position —
-// nearest pixel, no interpolation (the field is already coarse and
-// upscaled, so this is only used to tint dot-grid paper within the wash's
-// footprint, not for anything requiring sub-pixel accuracy). Returns null
-// before the first render, or fully transparent.
-export function sampleFluidPixel(
+// bilinear, and *not* clamped to the nearest edge texel outside the field's
+// own [0,1] extent: a query past the edge blends toward transparent instead
+// of repeating the boundary pixel, so dot tinting (the only caller) inherits
+// the wash's own soft falloff instead of inventing a hard edge of its own.
+// Corners are premultiplied before interpolating so a fully-transparent
+// neighbor's stale (never-repainted-this-frame) RGB bytes can't bleed a
+// wrong color into the result. Returns fully transparent before the first
+// render.
+export function sampleFluidPixelBilinear(
   nx: number,
   ny: number,
-): [number, number, number, number] | null {
-  if (!cachedImg) return null;
+): [number, number, number, number] {
+  if (!cachedImg) return [0, 0, 0, 0];
+  const data = cachedImg.data;
+  const sample = (xx: number, yy: number): [number, number, number, number] => {
+    if (xx < 0 || xx >= FLUID_W || yy < 0 || yy >= FLUID_H) return [0, 0, 0, 0];
+    const i = (yy * FLUID_W + xx) * 4;
+    const a = data[i + 3] / 255;
+    return [data[i] * a, data[i + 1] * a, data[i + 2] * a, a];
+  };
+  const fx = nx * FLUID_W - 0.5;
+  const fy = ny * FLUID_H - 0.5;
+  const x0 = Math.floor(fx);
+  const y0 = Math.floor(fy);
+  const tx = fx - x0;
+  const ty = fy - y0;
+  const c00 = sample(x0, y0);
+  const c10 = sample(x0 + 1, y0);
+  const c01 = sample(x0, y0 + 1);
+  const c11 = sample(x0 + 1, y0 + 1);
+  const out: [number, number, number, number] = [0, 0, 0, 0];
+  for (let k = 0; k < 4; k++) {
+    const top = lerp(c00[k], c10[k], tx);
+    const bot = lerp(c01[k], c11[k], tx);
+    out[k] = lerp(top, bot, ty);
+  }
+  const a = out[3];
+  if (a < 0.003) return [0, 0, 0, 0];
+  return [out[0] / a, out[1] / a, out[2] / a, a];
+}
+
+// Static-grain lookup (the same texture the wash multiplies against, see
+// GRAIN above) at a normalized [0-1] card position — lets the dot tint
+// granulate with the identical paper texture the wash itself settles into,
+// instead of inventing a second noise field.
+export function sampleGrainAt(nx: number, ny: number): number {
   const x = Math.max(0, Math.min(FLUID_W - 1, Math.round(nx * FLUID_W)));
   const y = Math.max(0, Math.min(FLUID_H - 1, Math.round(ny * FLUID_H)));
-  const i = (y * FLUID_W + x) * 4;
-  const data = cachedImg.data;
-  const a = data[i + 3] / 255;
-  if (a < 0.004) return null;
-  return [data[i], data[i + 1], data[i + 2], a];
+  return GRAIN[y * FLUID_W + x];
 }

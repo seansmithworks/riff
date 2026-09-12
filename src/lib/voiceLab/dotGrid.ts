@@ -27,6 +27,19 @@ export class DotGrid {
   tintB: Uint8Array;
   tintAmount: Float32Array;
 
+  // Field-driven wash tint — a separate channel from tintR/G/B/tintAmount
+  // above. That channel is an additive impulse (bleedAlongPath: pigment
+  // pools and settles over several frames), so a live per-frame source like
+  // the fluid wash would saturate it to 1 within a couple of frames
+  // regardless of how faint the wash is there. setFieldTint instead assigns
+  // (never accumulates) — the engine calls it every frame with the wash's
+  // own current soft alpha, so the dot always mirrors the wash instead of
+  // drifting independently of it.
+  fieldTintR: Uint8Array;
+  fieldTintG: Uint8Array;
+  fieldTintB: Uint8Array;
+  fieldTintAmount: Float32Array;
+
   private dotX: Float32Array;
   private dotY: Float32Array;
   private base: HTMLCanvasElement;
@@ -53,6 +66,10 @@ export class DotGrid {
     this.tintG = new Uint8Array(this.count);
     this.tintB = new Uint8Array(this.count);
     this.tintAmount = new Float32Array(this.count);
+    this.fieldTintR = new Uint8Array(this.count);
+    this.fieldTintG = new Uint8Array(this.count);
+    this.fieldTintB = new Uint8Array(this.count);
+    this.fieldTintAmount = new Float32Array(this.count);
     this.dotX = new Float32Array(this.count);
     this.dotY = new Float32Array(this.count);
     for (let row = 0; row < this.rows; row++) {
@@ -124,17 +141,40 @@ export class DotGrid {
   }
 
   // Exponential decay of ink/tint toward 0, applied every frame. `dt` in ms.
+  // fieldTintAmount is deliberately not decayed here — engine.ts rewrites or
+  // clears it fresh every frame straight from the wash's own alpha (see
+  // setFieldTint above), so it always mirrors the wash rather than lingering
+  // on its own schedule.
   decay(dt: number) {
     const rate = Math.pow(0.985, dt / 16.7);
     for (const i of this.dirty) {
       this.ink[i] *= rate;
       this.tintAmount[i] *= rate;
-      if (this.ink[i] < 0.004 && this.tintAmount[i] < 0.004) {
+      if (
+        this.ink[i] < 0.004 &&
+        this.tintAmount[i] < 0.004 &&
+        this.fieldTintAmount[i] < 0.004
+      ) {
         this.ink[i] = 0;
         this.tintAmount[i] = 0;
+        this.fieldTintAmount[i] = 0;
         this.dirty.delete(i);
       }
     }
+  }
+
+  // Assigns (never accumulates) this dot's wash-tint for the current frame —
+  // see the fieldTintAmount fields' doc comment above for why this can't
+  // reuse setTint's additive model.
+  setFieldTint(i: number, rgb: [number, number, number], amount: number) {
+    if (i < 0 || i >= this.count) return;
+    const clamped = Math.max(0, Math.min(1, amount));
+    if (clamped < 0.003 && this.fieldTintAmount[i] < 0.003) return;
+    this.fieldTintR[i] = rgb[0];
+    this.fieldTintG[i] = rgb[1];
+    this.fieldTintB[i] = rgb[2];
+    this.fieldTintAmount[i] = clamped;
+    this.dirty.add(i);
   }
 
   // Stroke-bleed primitive (voice-lab-dotgrid-addendum.md §4): tints dots
@@ -186,15 +226,27 @@ export class DotGrid {
     if (this.dirty.size === 0) return;
     for (const i of this.dirty) {
       const ink = this.ink[i];
-      const tintAmount = this.tintAmount[i];
-      if (ink < 0.004 && tintAmount < 0.004) continue;
-      const r = Math.round(212 + (this.tintR[i] - 212) * tintAmount);
-      const g = Math.round(212 + (this.tintG[i] - 212) * tintAmount);
-      const b = Math.round(212 + (this.tintB[i] - 212) * tintAmount);
-      const size = this.dotSize * (1 + Math.max(ink, tintAmount) * 0.6);
+      const bleedAmount = this.tintAmount[i];
+      const fieldAmount = this.fieldTintAmount[i];
+      const totalTint = Math.min(1, bleedAmount + fieldAmount);
+      if (ink < 0.004 && totalTint < 0.004) continue;
+      // Blend the two tint sources' colors by their relative share of the
+      // total, so a dot touched by both an ink-bleed impulse and the live
+      // wash reads as one settled color instead of one silently overwriting
+      // the other.
+      const share = bleedAmount + fieldAmount;
+      const bleedShare = share > 0 ? bleedAmount / share : 0;
+      const fieldShare = share > 0 ? fieldAmount / share : 0;
+      const tr = this.tintR[i] * bleedShare + this.fieldTintR[i] * fieldShare;
+      const tg = this.tintG[i] * bleedShare + this.fieldTintG[i] * fieldShare;
+      const tb = this.tintB[i] * bleedShare + this.fieldTintB[i] * fieldShare;
+      const r = Math.round(212 + (tr - 212) * totalTint);
+      const g = Math.round(212 + (tg - 212) * totalTint);
+      const b = Math.round(212 + (tb - 212) * totalTint);
+      const size = this.dotSize * (1 + Math.max(ink, totalTint) * 0.6);
       const alpha = Math.min(
         1,
-        this.baseOpacity + Math.max(ink, tintAmount) * 0.7,
+        this.baseOpacity + Math.max(ink, totalTint) * 0.7,
       );
       ctx.beginPath();
       ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
