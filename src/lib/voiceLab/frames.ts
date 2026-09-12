@@ -77,7 +77,12 @@ export const FRAME_DEFS: FrameDef[] = [
   },
 ];
 
-type BuiltPath = { d: string; strokeWidth: number; path2d: Path2D };
+type BuiltPath = {
+  d: string;
+  strokeWidth: number;
+  path2d: Path2D;
+  len: number;
+};
 type BuiltElement = FrameElement & BuiltPath;
 type FramePaths = {
   outline: BuiltPath;
@@ -90,9 +95,11 @@ export type Frame = FrameDef & {
   paths: FramePaths;
 };
 
-const svgNS = "http://www.w3.org/2000/svg";
-
-function buildElementPath(frame: FrameDef, el: FrameElement): BuiltPath {
+function buildElementPath(
+  frame: FrameDef,
+  el: FrameElement,
+  measurePath: SVGPathElement,
+): BuiltPath {
   const ax = frame.x + (el.x ?? 0);
   const ay = frame.y + (el.y ?? 0);
   const seed = hashSeed(`${frame.id}:${el.id}`);
@@ -118,7 +125,9 @@ function buildElementPath(frame: FrameDef, el: FrameElement): BuiltPath {
     );
     strokeWidth = 1;
   }
-  return { d, strokeWidth, path2d: new Path2D(d) };
+  measurePath.setAttribute("d", d);
+  const len = measurePath.getTotalLength();
+  return { d, strokeWidth, path2d: new Path2D(d), len };
 }
 
 function samplePathPoints(measurePath: SVGPathElement, d: string, n: number) {
@@ -145,22 +154,22 @@ function buildFramePaths(
     roughness: SKETCH_ROUGHNESS,
     boil: 0,
   });
+  measurePath.setAttribute("d", outlineD);
   const outline: BuiltPath = {
     d: outlineD,
     strokeWidth: 1.75,
     path2d: new Path2D(outlineD),
+    len: measurePath.getTotalLength(),
   };
   const elements: BuiltElement[] = frame.elements.map((el) => ({
     ...el,
-    ...buildElementPath(frame, el),
+    ...buildElementPath(frame, el, measurePath),
   }));
   const allSources: BuiltPath[] = [outline, ...elements];
   const samples: { x: number; y: number; angle: number }[] = [];
   for (const src of allSources) {
-    measurePath.setAttribute("d", src.d);
-    const len = measurePath.getTotalLength();
-    if (len <= 0) continue;
-    const n = Math.max(2, Math.round(len / 14));
+    if (src.len <= 0) continue;
+    const n = Math.max(2, Math.round(src.len / 14));
     samples.push(...samplePathPoints(measurePath, src.d, n));
   }
   return { outline, elements, targetPoints: samples };
@@ -456,9 +465,7 @@ function drawInkingReveal(
   src: BuiltPath,
   t: number,
 ) {
-  const measurePath = document.createElementNS(svgNS, "path");
-  measurePath.setAttribute("d", src.d);
-  const len = measurePath.getTotalLength();
+  const len = src.len;
   ctx.save();
   ctx.setLineDash([len, len]);
   ctx.lineDashOffset = len * (1 - t);

@@ -2,7 +2,6 @@ import {
   roughLine,
   roughEllipse,
   roughRoundedRect,
-  roughCircle,
   mulberry32,
 } from "drawably";
 import { SKETCH_ROUGHNESS, hashSeed, polar, arcPts } from "./constants";
@@ -15,9 +14,18 @@ export function setMarksContext(c: CanvasRenderingContext2D) {
   ctx = c;
 }
 
+// Outer alpha multiplier, set by the engine once per role per frame (from
+// preset.markPeak × that role's presence) so a fading/crossfading role
+// actually fades — strokePath/strokeChain otherwise set a fixed globalAlpha
+// each call, which nothing outside marks.ts could scale.
+let alphaMul = 1;
+export function setAlphaMul(v: number) {
+  alphaMul = v;
+}
+
 function strokePath(path2d: Path2D, color: string, width: number, alpha = 1) {
   ctx.save();
-  ctx.globalAlpha = alpha;
+  ctx.globalAlpha = alpha * alphaMul;
   ctx.strokeStyle = color;
   ctx.lineWidth = width;
   ctx.lineCap = "round";
@@ -35,7 +43,7 @@ export function strokeChain(
   closed = false,
 ) {
   ctx.save();
-  ctx.globalAlpha = alpha;
+  ctx.globalAlpha = alpha * alphaMul;
   ctx.strokeStyle = color;
   ctx.lineWidth = width;
   ctx.lineCap = "round";
@@ -105,7 +113,8 @@ export const MARKS: MarkDef[] = [
       },
     ],
     draw(g: MarkDrawArgs) {
-      const { o, t, bands, onsetPulse, color, cfg } = g;
+      const { o, t, bands, onsetPulse, color, cfg, smear } = g;
+      const smearMul = smear ?? 1;
       const pool = Math.round(cfg.rayCount);
       const jitterBucket = Math.floor(t / 150);
       for (let i = 0; i < pool; i++) {
@@ -127,10 +136,11 @@ export const MARKS: MarkDef[] = [
         const angleJitter = (jitterRng() - 0.5) * 6;
         const a = ((angleDeg + angleJitter) * Math.PI) / 180;
         const len =
-          12 +
-          energyAbove * cfg.reach +
-          lenJitter * 18 +
-          onsetPulse * cfg.onsetPunch * 24;
+          (12 +
+            energyAbove * cfg.reach +
+            lenJitter * 18 +
+            onsetPulse * cfg.onsetPunch * 24) *
+          smearMul;
         const [x1, y1] = polar(o.x, o.y, 26, a),
           [x2, y2] = polar(o.x, o.y, 26 + len, a);
         const seed = hashSeed(`b-ray-${i}`) + Math.floor(t / 90);
@@ -153,7 +163,8 @@ export const MARKS: MarkDef[] = [
     // Mirrors the tip computation in draw() so sketch-job cinders can spawn
     // off the live ray ends instead of the disc origin.
     getTipEmitters(g: MarkDrawArgs) {
-      const { o, t, bands, onsetPulse, cfg } = g;
+      const { o, t, bands, onsetPulse, cfg, smear } = g;
+      const smearMul = smear ?? 1;
       const pool = Math.round(cfg.rayCount);
       const jitterBucket = Math.floor(t / 150);
       const tips = [];
@@ -176,10 +187,11 @@ export const MARKS: MarkDef[] = [
         const angleJitter = (jitterRng() - 0.5) * 6;
         const a = ((angleDeg + angleJitter) * Math.PI) / 180;
         const len =
-          12 +
-          energyAbove * cfg.reach +
-          lenJitter * 18 +
-          onsetPulse * cfg.onsetPunch * 24;
+          (12 +
+            energyAbove * cfg.reach +
+            lenJitter * 18 +
+            onsetPulse * cfg.onsetPunch * 24) *
+          smearMul;
         const [x2, y2] = polar(o.x, o.y, 26 + len, a);
         tips.push({ x: x2, y: y2, angle: a });
       }
@@ -596,7 +608,7 @@ export const MARKS: MarkDef[] = [
         const jr = (rng() - 0.5) * cfg.jitter * 10;
         const [x, y] = polar(o.x, o.y - 20, dist + jr, a);
         const size = cfg.dotSize * (0.5 + rng() * 0.7);
-        ctx.globalAlpha = 0.35 + rng() * 0.4;
+        ctx.globalAlpha = (0.35 + rng() * 0.4) * alphaMul;
         ctx.beginPath();
         ctx.arc(x, y, size, 0, Math.PI * 2);
         ctx.fill();
@@ -870,7 +882,8 @@ export const MARKS: MarkDef[] = [
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
         ctx.lineWidth = Math.max(1.5, width);
-        ctx.globalAlpha = Math.max(0.18, 0.6 - s * 0.12 + level * 0.2);
+        ctx.globalAlpha =
+          Math.max(0.18, 0.6 - s * 0.12 + level * 0.2) * alphaMul;
         ctx.beginPath();
         for (let i = 0; i <= segs; i++) {
           const frac = i / segs;
@@ -1068,9 +1081,16 @@ export function defaultMarkConfigs(): Record<string, Record<string, number>> {
   return out;
 }
 
-export function drawMicDisc(o: { x: number; y: number }, color: string) {
+// sx/sy squash the disc around its own center (anticipation, breathing,
+// landing impact all drive this from the engine) — 1/1 is the resting shape.
+export function drawMicDisc(
+  o: { x: number; y: number },
+  color: string,
+  sx = 1,
+  sy = 1,
+) {
   const seed = hashSeed("mic-disc");
-  const d = roughCircle(o.x, o.y, 22, {
+  const d = roughEllipse(o.x, o.y, 22 * sx, 22 * sy, {
     seed,
     roughness: SKETCH_ROUGHNESS,
     boil: 0,

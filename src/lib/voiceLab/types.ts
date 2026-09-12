@@ -50,6 +50,13 @@ export type MarkDrawArgs = {
   color: string;
   cfg: Record<string, number>;
   mode: "talking" | "silence";
+  // 0-1 role presence (crossfade/handoff progress) — marks that care can
+  // read it directly; most just get faded via marks.ts's alphaMul, which the
+  // engine sets from presence × preset.markPeak before each draw call.
+  presence?: number;
+  // Motion-smear multiplier applied to reach/length during a handoff's
+  // smearFrames window (1 = no smear, 1.6 = the spec's incoming reach ×1.6).
+  smear?: number;
 };
 
 export type MarkDef = {
