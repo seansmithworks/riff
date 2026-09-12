@@ -7,10 +7,14 @@ import { W, H } from "@/lib/voiceLab/constants";
 import { EngineContext, type EngineHandle } from "./EngineContext";
 import { VOICE_STATES, VOICE_STATE_LABELS } from "@/lib/voiceLab/types";
 
+// Positioned inside the card (not on its edge) so the "transparent" stop is
+// reached before the gradient hits any bound — a radial-gradient centered
+// exactly at 100% clips its brightest point against the box edge, which
+// reads as a hard line rather than a fade.
 const GLOW_CENTER =
-  "radial-gradient(ellipse 55% 60% at 50% 100%, rgba(0,245,241,0.35), transparent 55%), radial-gradient(ellipse 45% 50% at 60% 100%, rgba(183,255,0,0.28), transparent 60%)";
+  "radial-gradient(ellipse 55% 60% at 50% 88%, rgba(0,245,241,0.35), transparent 70%), radial-gradient(ellipse 45% 50% at 60% 88%, rgba(183,255,0,0.28), transparent 72%)";
 const GLOW_RIGHT =
-  "radial-gradient(ellipse 40% 55% at 88% 100%, rgba(0,245,241,0.35), transparent 55%), radial-gradient(ellipse 32% 45% at 94% 100%, rgba(183,255,0,0.28), transparent 60%)";
+  "radial-gradient(ellipse 40% 55% at 88% 88%, rgba(0,245,241,0.35), transparent 70%), radial-gradient(ellipse 32% 45% at 94% 88%, rgba(183,255,0,0.28), transparent 72%)";
 
 export default function Stage({ children }: { children: React.ReactNode }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
