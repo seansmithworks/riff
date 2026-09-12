@@ -10,6 +10,12 @@ export const SKETCH_LINE_ROUGHNESS = 0.55;
 export const INK = "#3f3f46";
 export const RIFF_GREEN = "#3FBA6A";
 
+// Ambient-glow strength dial default. The mask (Stage.tsx) fades the glow
+// out near the card's edges — including the band where the disc itself
+// sits — so this multiplier boosts the gradients' color alphas back up to
+// roughly the pre-mask visual weight around the disc.
+export const GLOW_DEFAULT_STRENGTH = 2.5;
+
 export function hashSeed(input: string): number {
   let hash = 5381;
   for (let i = 0; i < input.length; i++)

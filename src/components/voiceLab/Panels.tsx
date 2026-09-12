@@ -4,7 +4,11 @@ import { useEffect, useRef } from "react";
 import { useDialKit } from "dialkit";
 import { useEngine, type EngineHandle } from "./EngineContext";
 import { MARKS } from "@/lib/voiceLab/marks";
-import { INK, RIFF_GREEN } from "@/lib/voiceLab/constants";
+import {
+  INK,
+  RIFF_GREEN,
+  GLOW_DEFAULT_STRENGTH,
+} from "@/lib/voiceLab/constants";
 import { VOICE_STATE_LABELS, type Role } from "@/lib/voiceLab/types";
 
 function pad(n: number) {
@@ -86,6 +90,7 @@ function TogglesPanel() {
     centerCircle: true,
     onsetRings: true,
     ambientGlow: true,
+    glowStrength: [GLOW_DEFAULT_STRENGTH, 0, 3, 0.1],
     cinders: true,
     showFrames: true,
     realMic: false,
@@ -96,6 +101,7 @@ function TogglesPanel() {
   const centerCircle = raw.centerCircle as boolean;
   const onsetRings = raw.onsetRings as boolean;
   const ambientGlow = raw.ambientGlow as boolean;
+  const glowStrength = raw.glowStrength as number;
   const cinders = raw.cinders as boolean;
   const showFrames = raw.showFrames as boolean;
   const realMic = raw.realMic as boolean;
@@ -118,8 +124,13 @@ function TogglesPanel() {
 
   useEffect(() => {
     if (!handle) return;
-    handle.engine.config.ambientGlowOn = ambientGlow;
+    handle.engine.setAmbientGlow(ambientGlow);
   }, [handle, ambientGlow]);
+
+  useEffect(() => {
+    if (!handle) return;
+    handle.engine.setGlowStrength(glowStrength);
+  }, [handle, glowStrength]);
 
   useEffect(() => {
     if (!handle) return;

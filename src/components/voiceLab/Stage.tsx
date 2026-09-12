@@ -7,10 +7,27 @@ import { W, H } from "@/lib/voiceLab/constants";
 import { EngineContext, type EngineHandle } from "./EngineContext";
 import { VOICE_STATES, VOICE_STATE_LABELS } from "@/lib/voiceLab/types";
 
-const GLOW_CENTER =
-  "radial-gradient(ellipse 55% 60% at 50% 100%, rgba(0,245,241,0.35), transparent 55%), radial-gradient(ellipse 45% 50% at 60% 100%, rgba(183,255,0,0.28), transparent 60%)";
-const GLOW_RIGHT =
-  "radial-gradient(ellipse 40% 55% at 88% 100%, rgba(0,245,241,0.35), transparent 55%), radial-gradient(ellipse 32% 45% at 94% 100%, rgba(183,255,0,0.28), transparent 60%)";
+// Base alphas at strength 1. The strength dial (Toggles panel) multiplies
+// these — not the layer's CSS opacity, which caps at 1 and can't brighten
+// past the mask's attenuation near the disc — so alpha is clamped to 1 here.
+const GLOW_CYAN_ALPHA = 0.35;
+const GLOW_GREEN_ALPHA = 0.28;
+
+function glowAlpha(base: number, strength: number) {
+  return Math.max(0, Math.min(1, base * strength));
+}
+
+function buildGlowCenter(strength: number) {
+  const cyan = glowAlpha(GLOW_CYAN_ALPHA, strength);
+  const green = glowAlpha(GLOW_GREEN_ALPHA, strength);
+  return `radial-gradient(ellipse 55% 60% at 50% 100%, rgba(0,245,241,${cyan}), transparent 55%), radial-gradient(ellipse 45% 50% at 60% 100%, rgba(183,255,0,${green}), transparent 60%)`;
+}
+
+function buildGlowRight(strength: number) {
+  const cyan = glowAlpha(GLOW_CYAN_ALPHA, strength);
+  const green = glowAlpha(GLOW_GREEN_ALPHA, strength);
+  return `radial-gradient(ellipse 40% 55% at 88% 100%, rgba(0,245,241,${cyan}), transparent 55%), radial-gradient(ellipse 32% 45% at 94% 100%, rgba(183,255,0,${green}), transparent 60%)`;
+}
 
 // A mask, not the gradient's own geometry, is what guarantees the glow
 // clears every edge — retuning GLOW_CENTER/GLOW_RIGHT's radii or stops can
@@ -96,8 +113,10 @@ export default function Stage({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!glowRef.current || !status) return;
     glowRef.current.style.background =
-      status.originSide === "center" ? GLOW_CENTER : GLOW_RIGHT;
-  }, [status?.originSide]);
+      status.originSide === "center"
+        ? buildGlowCenter(status.glowStrength)
+        : buildGlowRight(status.glowStrength);
+  }, [status?.originSide, status?.glowStrength]);
 
   return (
     <EngineContext.Provider value={handle}>
@@ -122,7 +141,9 @@ export default function Stage({ children }: { children: React.ReactNode }) {
               ref={glowRef}
               className="pointer-events-none absolute inset-0 transition-opacity duration-200"
               style={{
-                opacity: status?.reducedMotion ? 0.4 : 1,
+                opacity:
+                  (status?.ambientGlowOn === false ? 0 : 1) *
+                  (status?.reducedMotion ? 0.4 : 1),
                 maskImage: GLOW_MASK,
                 WebkitMaskImage: GLOW_MASK,
                 maskComposite: "intersect",

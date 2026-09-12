@@ -12,6 +12,7 @@ import {
   H,
   INK,
   RIFF_GREEN,
+  GLOW_DEFAULT_STRENGTH,
   synthesizeLevelData,
   computeBands,
   BAR_ORDER,
@@ -58,6 +59,7 @@ export function defaultEngineConfig(): EngineConfig {
     centerCircleOn: true,
     onsetRingsOn: true,
     ambientGlowOn: true,
+    glowStrength: GLOW_DEFAULT_STRENGTH,
     cindersOn: true,
     showFramesOn: true,
     // Speaker -> mark assignment: Riff = Burst (green), Human = Ripple (ink).
@@ -88,6 +90,8 @@ export type EngineStatus = {
   originSide: string;
   realMic: boolean;
   reducedMotion: boolean;
+  ambientGlowOn: boolean;
+  glowStrength: number;
 };
 
 export class VoiceLabEngine {
@@ -190,6 +194,8 @@ export class VoiceLabEngine {
       originSide: this.config.originSide,
       realMic: this.config.realMicEnabled,
       reducedMotion: this.reducedMotionActive(),
+      ambientGlowOn: this.config.ambientGlowOn,
+      glowStrength: this.config.glowStrength,
     });
   }
 
@@ -569,6 +575,20 @@ export class VoiceLabEngine {
   setReducedMotion(on: boolean) {
     this.config.reducedMotion = on;
     this.scheduleLoop();
+  }
+
+  // The glow layer is a DOM element Stage draws outside the canvas, so both
+  // of these need to reach it through status (like originSide/reducedMotion
+  // above) rather than only living in config, which the canvas loop reads
+  // directly.
+  setAmbientGlow(on: boolean) {
+    this.config.ambientGlowOn = on;
+    this.emitStatus();
+  }
+
+  setGlowStrength(v: number) {
+    this.config.glowStrength = v;
+    this.emitStatus();
   }
 
   // Sizes the canvas backing store to the actual displayed (contain-fit)

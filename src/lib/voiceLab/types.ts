@@ -82,6 +82,9 @@ export type EngineConfig = {
   centerCircleOn: boolean;
   onsetRingsOn: boolean;
   ambientGlowOn: boolean;
+  // Multiplies the ambient glow's color alphas (not CSS opacity, which caps
+  // at 1 and can't brighten past it). 1 = the gradients' own base alphas.
+  glowStrength: number;
   cindersOn: boolean;
   showFramesOn: boolean;
   // Speaker -> mark assignment. Each role picks any mark from the shared
