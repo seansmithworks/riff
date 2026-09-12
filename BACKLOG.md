@@ -95,3 +95,13 @@
 - [ ] **Riff Arcs 200° strawman** (`8ec175e`): no reaction yet. Sean redlines it in DialKit.
 
 Done this session: glow hard edge via mask (`f403a3e`), Glow slider set (Strength/Size/Height/Color Mix/Edge Softness) + working Ambient Glow toggle (`1065ab9`, `6d9f8be`), DialKit persist on every lab panel.
+
+## 2026-09-12 (sequence exploration)
+
+- [x] 10 sequence presets built
+- [ ] recording of all 10 sent to Sean
+- [ ] Sean picks a direction
+
+**Parked (off-objective):**
+
+- [ ] DialKit panel separation — Sean's cut-off point ("sparks/glow panel needs to be better separated with…"), he no longer recalls it; revisit if it resurfaces.
