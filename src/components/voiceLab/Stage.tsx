@@ -37,13 +37,13 @@ const GLOW_SHAPES: Record<
 };
 
 // Single source of truth for the glow's background gradients AND its
-// clipping mask — both are a function of the same param set, so they can
-// never fork into a second copy that drifts out of sync.
-//
-// The mask, not the gradients' own geometry, is what guarantees the glow
-// clears every edge: its bands always land on an explicit 0%/100%
-// transparent stop, independent of size/height/strength, so retuning those
-// can never reintroduce a hard line.
+// clipping mask. Split into one background per hue so the engine can drive
+// each hue's opacity/scale directly every frame (attachGlow) without ever
+// touching the mask, which lives on a wrapper that never animates — the
+// mask, not the gradients' own geometry, is what guarantees the glow clears
+// every edge: its bands always land on an explicit 0%/100% transparent
+// stop, independent of size/height/strength, so retuning those can never
+// reintroduce a hard line.
 function buildGlow(origin: GlowOrigin, p: GlowParams) {
   const cyanAlpha = clamp(GLOW_TOTAL_BASE * p.colorMix * p.strength, 0, 1);
   const greenAlpha = clamp(
@@ -55,25 +55,32 @@ function buildGlow(origin: GlowOrigin, p: GlowParams) {
     cyan: `rgba(0,245,241,${cyanAlpha})`,
     green: `rgba(183,255,0,${greenAlpha})`,
   };
-  const background = GLOW_SHAPES[origin]
-    .map(
-      (s) =>
-        `radial-gradient(ellipse ${s.rx * p.size}% ${s.ry * p.size}% at ${s.x}% ${p.height}%, ${hueColor[s.hue]}, transparent ${s.cut}%)`,
-    )
-    .join(", ");
+  const backgroundFor = (hue: "cyan" | "green") =>
+    GLOW_SHAPES[origin]
+      .filter((s) => s.hue === hue)
+      .map(
+        (s) =>
+          `radial-gradient(ellipse ${s.rx * p.size}% ${s.ry * p.size}% at ${s.x}% ${p.height}%, ${hueColor[s.hue]}, transparent ${s.cut}%)`,
+      )
+      .join(", ");
 
   const bottomBand = clamp(25 * p.edgeSoftness, 1, 45);
   const topBand = clamp(10 * p.edgeSoftness, 0.5, 45);
   const sideBand = clamp(6 * p.edgeSoftness, 0.5, 45);
   const mask = `linear-gradient(to top, transparent 0%, black ${bottomBand}%, black ${100 - topBand}%, transparent 100%), linear-gradient(to right, transparent 0%, black ${sideBand}%, black ${100 - sideBand}%, transparent 100%)`;
 
-  return { background, mask };
+  return {
+    cyanBackground: backgroundFor("cyan"),
+    greenBackground: backgroundFor("green"),
+    mask,
+  };
 }
 
 export default function Stage({ children }: { children: React.ReactNode }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const outerRef = useRef<HTMLDivElement | null>(null);
-  const glowRef = useRef<HTMLDivElement | null>(null);
+  const glowCyanRef = useRef<HTMLDivElement | null>(null);
+  const glowGreenRef = useRef<HTMLDivElement | null>(null);
   const engineRef = useRef<VoiceLabEngine | null>(null);
   const [handle, setHandle] = useState<EngineHandle | null>(null);
   const [status, setStatus] = useState<EngineStatus | null>(null);
@@ -88,6 +95,11 @@ export default function Stage({ children }: { children: React.ReactNode }) {
     engineRef.current = engine;
     const autoplay = new Autoplay(engine);
     engine.onStatusChange(setStatus);
+    if (glowCyanRef.current && glowGreenRef.current)
+      engine.attachGlow({
+        cyan: glowCyanRef.current,
+        green: glowGreenRef.current,
+      });
     engine.scheduleLoop();
     const h: EngineHandle = { engine, autoplay };
     setHandle(h);
@@ -96,14 +108,34 @@ export default function Stage({ children }: { children: React.ReactNode }) {
       const target = e.target as HTMLElement | null;
       if (
         target &&
-        (target.tagName === "INPUT" || target.tagName === "TEXTAREA")
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT")
       )
         return;
-      const n = Number(e.key);
-      if (n >= 1 && n <= 5) {
+      // Sequence picker: 1-9, 0 select + reset + play from 0.
+      if (/^[0-9]$/.test(e.key) && !e.shiftKey) {
+        autoplay.start();
+        engine.selectSequence(e.key);
+        return;
+      }
+      // Manual voice-state override — Shift+1..5 (spec §5; digits moved to
+      // the sequence picker above). Pauses the player but keeps the active
+      // preset's transition style (presence tweening always reads it).
+      if (e.shiftKey && /^[1-5]$/.test(e.key)) {
         autoplay.stop();
-        engine.setVoiceState(VOICE_STATES[n - 1]);
-      } else if (e.key.toLowerCase() === "s") {
+        engine.setVoiceState(VOICE_STATES[Number(e.key) - 1]);
+        return;
+      }
+      if (e.key === "`") {
+        engine.flipToPreviousSequence();
+        return;
+      }
+      if (e.key.toLowerCase() === "z") {
+        engine.setSlowMotion(!engine.getSlowMotion());
+        return;
+      }
+      if (e.key.toLowerCase() === "s") {
         autoplay.stop();
         engine.startSketch();
       } else if (e.key.toLowerCase() === "l") {
@@ -119,6 +151,7 @@ export default function Stage({ children }: { children: React.ReactNode }) {
       engine.destroy();
       engineRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Contain-fit the logical 1440x900 stage inside whatever space the
@@ -142,27 +175,34 @@ export default function Stage({ children }: { children: React.ReactNode }) {
     return () => ro.disconnect();
   }, []);
 
+  // Static per-hue backgrounds + the never-animating mask. Opacity/scale are
+  // written every frame by the engine directly onto the two child refs
+  // (attachGlow) — they never touch this effect or React state.
   useEffect(() => {
-    if (!glowRef.current || !status) return;
-    const { background, mask } = buildGlow(
+    if (!glowCyanRef.current || !glowGreenRef.current || !status) return;
+    const { cyanBackground, greenBackground, mask } = buildGlow(
       status.originSide === "center" ? "center" : "right",
       {
         strength: status.glowStrength,
         size: status.glowSize,
         height: status.glowHeight,
-        colorMix: status.glowColorMix,
+        colorMix: status.effectiveColorMix,
         edgeSoftness: status.glowEdgeSoftness,
       },
     );
-    glowRef.current.style.background = background;
-    glowRef.current.style.maskImage = mask;
-    glowRef.current.style.setProperty("-webkit-mask-image", mask);
+    glowCyanRef.current.style.background = cyanBackground;
+    glowGreenRef.current.style.background = greenBackground;
+    const wrapper = glowCyanRef.current.parentElement;
+    if (wrapper) {
+      wrapper.style.maskImage = mask;
+      wrapper.style.setProperty("-webkit-mask-image", mask);
+    }
   }, [
     status?.originSide,
     status?.glowStrength,
     status?.glowSize,
     status?.glowHeight,
-    status?.glowColorMix,
+    status?.effectiveColorMix,
     status?.glowEdgeSoftness,
   ]);
 
@@ -185,23 +225,60 @@ export default function Stage({ children }: { children: React.ReactNode }) {
               className="absolute inset-0 block"
               style={{ width: dispSize.w, height: dispSize.h }}
             />
+            {/* Mask wrapper: owns maskImage only, never animates. Its two
+                children each carry one hue's gradient; the engine writes
+                only opacity/transform onto them, every frame, outside React. */}
             <div
-              ref={glowRef}
-              className="pointer-events-none absolute inset-0 transition-opacity duration-200"
+              className="pointer-events-none absolute inset-0"
               style={{
-                opacity:
-                  (status?.ambientGlowOn === false ? 0 : 1) *
-                  (status?.reducedMotion ? 0.4 : 1),
                 maskComposite: "intersect",
                 WebkitMaskComposite: "source-in",
               }}
-            />
+            >
+              <div
+                ref={glowCyanRef}
+                className="pointer-events-none absolute inset-0"
+                style={{ opacity: 0 }}
+              />
+              <div
+                ref={glowGreenRef}
+                className="pointer-events-none absolute inset-0"
+                style={{ opacity: 0 }}
+              />
+            </div>
           </div>
         </div>
-        <div className="flex min-h-[44px] shrink-0 items-center rounded-lg border border-[#e4e4e7] bg-white px-2.5 py-2 font-mono text-[11px] text-[#71717a]">
-          {status
-            ? `voice: ${VOICE_STATE_LABELS[status.voiceState]} — job: ${status.jobState} — mark: ${status.markName} — origin: ${status.originSide}${status.realMic ? " — real mic" : ""}${status.reducedMotion ? " — reduced motion" : ""}`
-            : "booting…"}
+        <div className="flex min-h-[44px] shrink-0 flex-col justify-center gap-1 rounded-lg border border-[#e4e4e7] bg-white px-2.5 py-1.5 font-mono text-[11px] text-[#71717a]">
+          {status ? (
+            <>
+              <div className="flex items-center justify-between gap-2">
+                <span>
+                  {status.sequenceHotkey} · {status.sequenceName} —{" "}
+                  {status.sequenceThesis}
+                </span>
+                <span className="shrink-0 text-[#a1a1aa]">
+                  {status.sequencePlaying ? "▶" : "❚❚"}
+                  {status.slowMo ? " 0.25×" : ""}
+                </span>
+              </div>
+              {/* Thin loop-progress bar with beat ticks. */}
+              <div className="relative h-[3px] w-full overflow-hidden rounded-full bg-[#e4e4e7]">
+                <div
+                  className="absolute inset-y-0 left-0 rounded-full bg-[#a1a1aa]"
+                  style={{ width: `${status.sequenceProgress * 100}%` }}
+                />
+              </div>
+              <div className="text-[#a1a1aa]">
+                voice: {VOICE_STATE_LABELS[status.voiceState]} — job:{" "}
+                {status.jobState} — mark: {status.markName} — origin:{" "}
+                {status.originSide}
+                {status.realMic ? " — real mic" : ""}
+                {status.reducedMotion ? " — reduced motion" : ""}
+              </div>
+            </>
+          ) : (
+            "booting…"
+          )}
         </div>
         {children}
       </div>

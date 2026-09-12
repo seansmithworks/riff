@@ -14,6 +14,7 @@ import {
   GLOW_DEFAULT_EDGE_SOFTNESS,
 } from "@/lib/voiceLab/constants";
 import { VOICE_STATE_LABELS, type Role } from "@/lib/voiceLab/types";
+import { SEQUENCE_PRESETS } from "@/lib/voiceLab/sequences";
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -26,7 +27,47 @@ function persistKey(key: string) {
   return { key: `voiceLab.${key}`, storage: "localStorage" as const };
 }
 
+// New SequencePanel (spec §5) first — hotkeys 1-9/0 select + reset + play
+// from 0 also drive this same select/play pair, so the panel and keyboard
+// never fall out of sync.
+function SequencePanel() {
+  const handle = useEngine();
+  const raw = useDialKit(
+    "Sequence",
+    {
+      preset: {
+        type: "select",
+        options: SEQUENCE_PRESETS.map((p) => ({
+          value: p.id,
+          label: `${p.hotkey} · ${p.name}`,
+        })),
+        default: SEQUENCE_PRESETS[0].id,
+      },
+      play: false,
+    },
+    { persist: persistKey("sequence") },
+  );
+  const preset = raw.preset as string;
+  const play = raw.play as boolean;
+
+  useEffect(() => {
+    if (!handle) return;
+    handle.engine.selectSequence(preset);
+  }, [handle, preset]);
+
+  useEffect(() => {
+    if (!handle) return;
+    if (play) handle.autoplay.start();
+    else handle.autoplay.stop();
+  }, [handle, play]);
+
+  return null;
+}
+
 // ---- Voice channel: idle / you-talking / riff-talking / silence / dead-mic
+// `autoplay` used to live here; it's now the Sequence panel's `play` toggle
+// above (spec §5) — everything else about manual voice-state selection is
+// unchanged.
 function VoicePanel() {
   const handle = useEngine();
   const raw = useDialKit(
@@ -40,24 +81,16 @@ function VoicePanel() {
         })),
         default: "idle",
       },
-      autoplay: false,
     },
     { persist: persistKey("voice") },
   );
   const state = raw.state as string;
-  const autoplay = raw.autoplay as boolean;
 
   useEffect(() => {
     if (!handle) return;
     handle.autoplay.stop();
     handle.engine.setVoiceState(state as never);
   }, [handle, state]);
-
-  useEffect(() => {
-    if (!handle) return;
-    if (autoplay) handle.autoplay.start();
-    else handle.autoplay.stop();
-  }, [handle, autoplay]);
 
   return null;
 }
@@ -331,6 +364,7 @@ function CinderPanel() {
 export default function VoiceLabPanels() {
   return (
     <>
+      <SequencePanel />
       <VoicePanel />
       <JobPanel />
       <TogglesPanel />
