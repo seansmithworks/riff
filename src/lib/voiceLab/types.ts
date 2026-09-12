@@ -59,6 +59,21 @@ export type MarkDrawArgs = {
   smear?: number;
 };
 
+// Sparks-build-the-sketch dials (build-plan.md §4, dotgrid addendum §3).
+export type BuildConfig = {
+  flightSpeed: number; // 0.5-2, divides the base flight duration
+  arc: number; // 0-0.5, arc bow as a fraction of chord length
+  densityFrame: number; // particles per 100px, tier 0 (outline)
+  densityBlocks: number; // tier 1 (rect/circle)
+  densityDetails: number; // tier 2 (line/cross)
+  tierGapMs: number; // -200..300, gap (negative = overlap) between tiers
+  speculativeFrame: "off" | "construction" | "full";
+  guideDots: "off" | "dots" | "dotsLines";
+  arrival: "dotsLead" | "comet";
+  snapToGrid: boolean;
+  dotPop: number; // 0-1
+};
+
 export type MarkDef = {
   id: string;
   num: number;
@@ -147,6 +162,9 @@ export type EngineConfig = {
   paperPitch: number;
   paperDotSize: number;
   paperBaseOpacity: number;
+  // Sparks-build-the-sketch dials (voice-lab-build-plan.md §4 / dotgrid
+  // addendum §3). Consumed by build.ts's planBuild/updateBuild.
+  buildConfig: BuildConfig;
   // Disc squash & stretch (Disney squash-and-stretch): target aspect comes
   // from role presence (human -> vertical, riff -> horizontal), reached via
   // an overshooting spring, composed multiplicatively with the existing

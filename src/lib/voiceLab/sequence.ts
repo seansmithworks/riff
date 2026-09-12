@@ -215,6 +215,30 @@ export class SequencePlayer {
     }
   }
 
+  // Absolute time (same clock as `t`) of the next beat matching `pred`, at or
+  // after the current loop position — wrapping into the next loop if none
+  // remain in this one. Used by build.ts's fitBuildToBeats to clamp a build
+  // so it ends before the preset's own "clear" beat. Null if this preset has
+  // no matching beat at all, or no preset/player is active.
+  nextBeatAt(
+    t: number,
+    timeScale: number,
+    pred: (b: Beat) => boolean,
+  ): number | null {
+    if (!this.preset) return null;
+    const elapsed = (t - this.startedAt) * timeScale;
+    const loopMs = this.preset.loopMs;
+    const loopPos = ((elapsed % loopMs) + loopMs) % loopMs;
+    const loopStartAbs = t - loopPos / timeScale;
+    for (const b of this.preset.beats) {
+      if (b.at >= loopPos && pred(b)) return loopStartAbs + b.at / timeScale;
+    }
+    for (const b of this.preset.beats) {
+      if (pred(b)) return loopStartAbs + (loopMs + b.at) / timeScale;
+    }
+    return null;
+  }
+
   // Loop progress 0..1 for the picker's beat-tick progress bar.
   progress(t: number, timeScale: number): number {
     if (!this.preset) return 0;

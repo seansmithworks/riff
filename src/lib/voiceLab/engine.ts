@@ -59,6 +59,12 @@ import {
   type Cinder,
   type DustPuff,
 } from "./frames";
+import {
+  planBuild,
+  updateBuild,
+  drawBuildParticles,
+  type BuildPlan,
+} from "./build";
 import type {
   EngineConfig,
   VoiceState,
@@ -137,6 +143,19 @@ export function defaultEngineConfig(): EngineConfig {
     paperPitch: 16,
     paperDotSize: 0.9,
     paperBaseOpacity: 0.5,
+    buildConfig: {
+      flightSpeed: 1,
+      arc: 0.18,
+      densityFrame: 2.5,
+      densityBlocks: 2.0,
+      densityDetails: 1.2,
+      tierGapMs: -100,
+      speculativeFrame: "construction",
+      guideDots: "dots",
+      arrival: "dotsLead",
+      snapToGrid: true,
+      dotPop: 0.6,
+    },
     discStretchAmount: 0.35,
     discSquishBounce: 0.35,
     discWobble: 0.15,
@@ -210,6 +229,7 @@ export class VoiceLabEngine implements SequenceHost {
   private audioCtx: AudioContext | null = null;
   private dotGrid: DotGrid;
   private lastPaperParams = { pitch: 16, dotSize: 0.9, baseOpacity: 0.5 };
+  private buildPlan: BuildPlan | null = null;
   private mql: MediaQueryList;
   private statusListeners: Set<(s: EngineStatus) => void> = new Set();
   private destroyed = false;
@@ -627,6 +647,7 @@ export class VoiceLabEngine implements SequenceHost {
       resetFrames(this.frames);
       this.cinders = [];
       this.dustPuffs = [];
+      this.buildPlan = null;
       this.sketchStartTime = performance.now();
       if (this.cindersEnabled())
         spawnDustPuff(
@@ -645,7 +666,10 @@ export class VoiceLabEngine implements SequenceHost {
       }
     }
     if (next === "landing") this.beginLanding();
-    if (next === "none") resetFrames(this.frames);
+    if (next === "none") {
+      resetFrames(this.frames);
+      this.buildPlan = null;
+    }
     this.emitStatus();
   }
 
@@ -662,15 +686,30 @@ export class VoiceLabEngine implements SequenceHost {
     if (!this.cindersEnabled()) {
       resetFrames(this.frames);
       this.cinders = [];
+      this.buildPlan = null;
       return;
     }
+    const now = performance.now();
+    // Recruit drift cinders (bearing-sorted from the origin) as the pooled
+    // spark particles' launch points (build-plan.md §2/§3) — this happens
+    // before ensuring the drift floor below so a fast landing (few cinders
+    // yet) still gets *some* launch points rather than none.
+    const origin = this.getOrigin();
+    const launchPoints = [...this.cinders]
+      .filter((c) => c.phase === "drift")
+      .sort(
+        (a, b) =>
+          Math.atan2(a.y - origin.y, a.x - origin.x) -
+          Math.atan2(b.y - origin.y, b.x - origin.x),
+      )
+      .map((c) => ({ x: c.x, y: c.y }));
     this.cinders = beginLandingImpl(
       this.frames,
       this.cinders,
       this.config.cinderConfig,
     );
     if (preset.landing.hitStopMs > 0)
-      this.hitStopUntil = performance.now() + preset.landing.hitStopMs;
+      this.hitStopUntil = now + preset.landing.hitStopMs;
     if (preset.landing.riffNod) this.riffOnsetPulse = 1;
     if (preset.landing.tipBurst > 0) {
       const emitters = this.lastMarkContext?.mark.getTipEmitters
@@ -683,6 +722,22 @@ export class VoiceLabEngine implements SequenceHost {
         this.dustPuffs,
       );
     }
+    const clearAt = this.player.nextBeatAt(
+      now,
+      this.timeScale,
+      (b) => b.kind === "job" && b.event === "clear",
+    );
+    this.buildPlan = planBuild(
+      this.frames,
+      now,
+      this.config.buildConfig,
+      this.config.cinderConfig,
+      preset.landing.inkStaggerMs,
+      clearAt,
+      { x: W / 2, y: H / 2 },
+      launchPoints.length ? launchPoints : [origin],
+      this.reducedMotionActive(),
+    );
   }
 
   // ---- Real mic ----
@@ -1031,7 +1086,34 @@ export class VoiceLabEngine implements SequenceHost {
     this.config.paperDotSize = dotSize;
     this.config.paperBaseOpacity = baseOpacity;
     if (pitch !== this.lastPaperParams.pitch) {
-      this.dotGrid = new DotGrid(W, H, pitch, dotSize, baseOpacity);
+      // Reallocating discards live ink/tint state (Phase A reviewer
+      // should-fix) — resample each new dot from its nearest dot on the old
+      // grid so an in-flight build or wash survives a mid-frame Pitch change
+      // instead of visibly resetting.
+      const old = this.dotGrid;
+      const next = new DotGrid(W, H, pitch, dotSize, baseOpacity);
+      for (let i = 0; i < next.count; i++) {
+        const oldIdx = old.nearestDot(next.x(i), next.y(i));
+        if (oldIdx < 0) continue;
+        if (old.ink[oldIdx] > 0.004) next.lightDot(i, old.ink[oldIdx]);
+        if (old.tintAmount[oldIdx] > 0.004)
+          next.setTint(
+            i,
+            [old.tintR[oldIdx], old.tintG[oldIdx], old.tintB[oldIdx]],
+            old.tintAmount[oldIdx],
+          );
+        if (old.fieldTintAmount[oldIdx] > 0.004)
+          next.setFieldTint(
+            i,
+            [
+              old.fieldTintR[oldIdx],
+              old.fieldTintG[oldIdx],
+              old.fieldTintB[oldIdx],
+            ],
+            old.fieldTintAmount[oldIdx],
+          );
+      }
+      this.dotGrid = next;
     } else {
       this.dotGrid.setDotSize(dotSize);
       this.dotGrid.setBaseOpacity(baseOpacity);
@@ -1062,12 +1144,17 @@ export class VoiceLabEngine implements SequenceHost {
 
   private updateSketchSpawning(t: number, dt: number, preset: SequencePreset) {
     const elapsed = t - this.sketchStartTime;
-    if (elapsed > 11000) return;
     if (this.cinders.length >= this.config.cinderConfig.cinderCap) return;
     if (preset.job.emit === "none") return;
     if (preset.job.emit === "gaps" && !this.isVoiceGap()) return;
     const duck = this.jobDuckEnvelope(preset);
-    const rate = Math.max(0, 30 * (1 - elapsed / 11000)) * duck;
+    // Ember floor (build-plan.md §2): the wait can run 11-19s real, so
+    // instead of emission dying at 11s and leaving the canvas dead for the
+    // rest of the hold, it decays to a steady 4/s floor.
+    const rate =
+      elapsed > 11000
+        ? 4 * duck
+        : Math.max(4, 30 * (1 - elapsed / 11000)) * duck;
     this.spawnAccumulator += (rate * dt) / 1000;
     // Sparks off ray tips: if the active speaker mark exposes an emitter
     // (e.g. Burst), a fraction of spawns fly off its live tip points instead
@@ -1263,16 +1350,35 @@ export class VoiceLabEngine implements SequenceHost {
     this.player.tick(t, this.timeScale);
 
     // Job channel — cinders + landing frames render independent of voice.
+    if (this.buildPlan) {
+      updateBuild(
+        this.buildPlan,
+        t,
+        this.config.paperOn ? this.dotGrid : null,
+        this.config.buildConfig.snapToGrid,
+        this.config.buildConfig.dotPop,
+      );
+    }
     if (this.config.showFramesOn)
       drawFrames(
         this.ctx,
         this.frames,
         t,
         this.config.cinderConfig,
-        preset.landing.inkStaggerMs,
         preset.landing.impact,
-        this.config.paperOn ? this.measurePath : undefined,
         this.config.paperOn ? this.onInkAdvance : undefined,
+        this.buildPlan,
+        {
+          speculativeFrame: this.config.buildConfig.speculativeFrame,
+          guideDots: this.config.buildConfig.guideDots,
+          dotGrid: this.config.paperOn ? this.dotGrid : null,
+          reducedMotion: this.reducedMotionActive(),
+        },
+        {
+          dotGrid: this.config.paperOn ? this.dotGrid : null,
+          snapToGrid: this.config.buildConfig.snapToGrid,
+          dotPop: this.config.buildConfig.dotPop,
+        },
       );
     if (this.cindersEnabled()) {
       if (this.config.jobState === "sketching")
@@ -1296,6 +1402,21 @@ export class VoiceLabEngine implements SequenceHost {
         t,
         this.jobDuckEnvelope(preset),
       );
+      // Frames → drift cinders → build particles → voice (build-plan.md §3
+      // draw-order note), so the sparks read on top of the ambient drift.
+      if (this.buildPlan) {
+        const role = this.activeRoleAndMarkId().role;
+        const color =
+          role === "riff" ? this.config.riffColor : this.config.humanColor;
+        drawBuildParticles(
+          this.ctx,
+          this.buildPlan,
+          t,
+          color,
+          this.config.buildConfig.arrival,
+          this.jobDuckEnvelope(preset),
+        );
+      }
     }
 
     // Voice channel — always renders, regardless of job state.

@@ -5,10 +5,16 @@ import {
   INK,
   hashSeed,
   firstStroke,
+  secondStroke,
   roundRectPath,
 } from "./constants";
 import type { CinderConfig } from "./types";
 import type { LandingImpact } from "./sequence";
+import type { DotGrid } from "./dotGrid";
+// Type-only: build.ts type-imports Frame/BuiltPath from here, so this stays
+// type-only to avoid a runtime circular module dependency.
+import type { BuildPlan, BuildPath } from "./build";
+import { sampleAt, BUILD_PASS_B_TRAIL } from "./build";
 
 type FrameElement = {
   id: string;
@@ -20,6 +26,8 @@ type FrameElement = {
   r?: number;
   cx?: number;
   cy?: number;
+  // Optional override of the derived tier (build-plan.md §2).
+  tier?: 0 | 1 | 2;
 };
 
 type FrameDef = {
@@ -78,23 +86,111 @@ export const FRAME_DEFS: FrameDef[] = [
   },
 ];
 
-type BuiltPath = {
+export type PathSample = { x: number; y: number; angle: number; cum: number };
+
+export type BuiltPath = {
   d: string;
   strokeWidth: number;
   path2d: Path2D;
   len: number;
+  // Load-bearing-bug fix (build-plan.md §3): every drawably path is two
+  // subpaths ("hand passes"). Pass A/B are split at the second `M` so a
+  // dash-based reveal can time them independently instead of both finishing
+  // by t=0.5. `samples` is pass A only, fixed ~8px spacing with cumulative
+  // arclength, computed once here (never via getPointAtLength per frame).
+  passA: Path2D;
+  passB: Path2D | null;
+  lenA: number;
+  lenB: number;
+  samples: PathSample[];
 };
-type BuiltElement = FrameElement & BuiltPath;
+export type BuiltElement = FrameElement & BuiltPath & { tier: 0 | 1 | 2 };
+export type BuiltGuide = BuiltPath & { id: string };
 type FramePaths = {
   outline: BuiltPath;
+  // Tier 0.5 construction guides, generated from the frame rect — honest at
+  // any platform (dotgrid-addendum.md §3): header/footer bands, side
+  // margins.
+  guides: BuiltGuide[];
   elements: BuiltElement[];
-  targetPoints: { x: number; y: number; angle: number }[];
 };
 export type Frame = FrameDef & {
   landed: boolean;
   landStartedAt: number;
   paths: FramePaths;
 };
+
+function deriveTier(el: FrameElement): 0 | 1 | 2 {
+  if (el.tier !== undefined) return el.tier;
+  return el.kind === "rect" || el.kind === "circle" ? 1 : 2;
+}
+
+// World-space anchor used to order tier 1/2 paths "y then x" (build-plan.md
+// §2) — build.ts calls this rather than duplicating frame-element geometry.
+export function elementWorldPos(
+  frame: FrameDef,
+  el: FrameElement,
+): { x: number; y: number } {
+  if (el.kind === "circle") return { x: frame.x + el.cx!, y: frame.y + el.cy! };
+  return { x: frame.x + (el.x ?? 0), y: frame.y + (el.y ?? 0) };
+}
+
+function sampleFixedSpacing(
+  measurePath: SVGPathElement,
+  d: string,
+  len: number,
+  spacing: number,
+): PathSample[] {
+  if (!d || len <= 0) return [{ x: 0, y: 0, angle: 0, cum: 0 }];
+  measurePath.setAttribute("d", d);
+  const n = Math.max(1, Math.round(len / spacing));
+  const samples: PathSample[] = [];
+  for (let i = 0; i <= n; i++) {
+    const l0 = Math.min(len, (i / n) * len);
+    const l1 = Math.min(len, l0 + 1);
+    const p0 = measurePath.getPointAtLength(l0);
+    const p1 = measurePath.getPointAtLength(l1);
+    samples.push({
+      x: p0.x,
+      y: p0.y,
+      angle: Math.atan2(p1.y - p0.y, p1.x - p0.x),
+      cum: l0,
+    });
+  }
+  return samples;
+}
+
+function buildPathParts(
+  d: string,
+  strokeWidth: number,
+  measurePath: SVGPathElement,
+): BuiltPath {
+  measurePath.setAttribute("d", d);
+  const len = measurePath.getTotalLength();
+  const dA = firstStroke(d);
+  const dB = secondStroke(d);
+  measurePath.setAttribute("d", dA);
+  const lenA = measurePath.getTotalLength();
+  let lenB = 0;
+  let passB: Path2D | null = null;
+  if (dB) {
+    measurePath.setAttribute("d", dB);
+    lenB = measurePath.getTotalLength();
+    passB = new Path2D(dB);
+  }
+  const samples = sampleFixedSpacing(measurePath, dA, lenA, 8);
+  return {
+    d,
+    strokeWidth,
+    path2d: new Path2D(d),
+    len,
+    passA: new Path2D(dA),
+    passB,
+    lenA,
+    lenB,
+    samples,
+  };
+}
 
 function buildElementPath(
   frame: FrameDef,
@@ -126,23 +222,65 @@ function buildElementPath(
     );
     strokeWidth = 1;
   }
-  measurePath.setAttribute("d", d);
-  const len = measurePath.getTotalLength();
-  return { d, strokeWidth, path2d: new Path2D(d), len };
+  return buildPathParts(d, strokeWidth, measurePath);
 }
 
-function samplePathPoints(measurePath: SVGPathElement, d: string, n: number) {
-  measurePath.setAttribute("d", d);
-  const len = measurePath.getTotalLength();
-  const pts: { x: number; y: number; angle: number }[] = [];
-  for (let i = 0; i < n; i++) {
-    const l0 = (i / n) * len;
-    const l1 = Math.min(len, l0 + 1);
-    const p0 = measurePath.getPointAtLength(l0);
-    const p1 = measurePath.getPointAtLength(l1);
-    pts.push({ x: p0.x, y: p0.y, angle: Math.atan2(p1.y - p0.y, p1.x - p0.x) });
-  }
-  return pts;
+// Tier 0.5 — construction guides generated from the frame rect: a header
+// band, a footer/bottom-bar band, and two side margins. Honest at any
+// platform guess since they never encode the real layout (build-plan.md §1).
+function buildGuides(
+  frame: FrameDef,
+  measurePath: SVGPathElement,
+): BuiltGuide[] {
+  const seedBase = hashSeed(`${frame.id}:guide`);
+  const inset = 18;
+  const bandY = 64;
+  const specs: {
+    id: string;
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+  }[] = [
+    {
+      id: "guide-header",
+      x1: frame.x + inset,
+      y1: frame.y + bandY,
+      x2: frame.x + frame.w - inset,
+      y2: frame.y + bandY,
+    },
+    {
+      id: "guide-footer",
+      x1: frame.x + inset,
+      y1: frame.y + frame.h - bandY,
+      x2: frame.x + frame.w - inset,
+      y2: frame.y + frame.h - bandY,
+    },
+    {
+      id: "guide-left",
+      x1: frame.x + inset,
+      y1: frame.y + bandY,
+      x2: frame.x + inset,
+      y2: frame.y + frame.h - bandY,
+    },
+    {
+      id: "guide-right",
+      x1: frame.x + frame.w - inset,
+      y1: frame.y + bandY,
+      x2: frame.x + frame.w - inset,
+      y2: frame.y + frame.h - bandY,
+    },
+  ];
+  return specs.map((s, i) => {
+    const d = firstStroke(
+      roughLine(s.x1, s.y1, s.x2, s.y2, {
+        seed: seedBase + i,
+        roughness: SKETCH_LINE_ROUGHNESS,
+        boil: 0,
+      }),
+    );
+    return { id: s.id, ...buildPathParts(d, 1, measurePath) };
+  });
 }
 
 function buildFramePaths(
@@ -155,25 +293,14 @@ function buildFramePaths(
     roughness: SKETCH_ROUGHNESS,
     boil: 0,
   });
-  measurePath.setAttribute("d", outlineD);
-  const outline: BuiltPath = {
-    d: outlineD,
-    strokeWidth: 1.75,
-    path2d: new Path2D(outlineD),
-    len: measurePath.getTotalLength(),
-  };
+  const outline = buildPathParts(outlineD, 1.75, measurePath);
+  const guides = buildGuides(frame, measurePath);
   const elements: BuiltElement[] = frame.elements.map((el) => ({
     ...el,
+    tier: deriveTier(el),
     ...buildElementPath(frame, el, measurePath),
   }));
-  const allSources: BuiltPath[] = [outline, ...elements];
-  const samples: { x: number; y: number; angle: number }[] = [];
-  for (const src of allSources) {
-    if (src.len <= 0) continue;
-    const n = Math.max(2, Math.round(src.len / 14));
-    samples.push(...samplePathPoints(measurePath, src.d, n));
-  }
-  return { outline, elements, targetPoints: samples };
+  return { outline, guides, elements };
 }
 
 export function createFrames(measurePath: SVGPathElement): Frame[] {
@@ -355,6 +482,11 @@ export function updateCinderDrift(
   c.y += c.vy * dt * 0.06;
 }
 
+// Ensures a floor of orbiting "drift" cinders exists at landing, for build.ts
+// to recruit (by bearing sort) as spark launch points — resets frames'
+// landed flags/timestamp so the white-card fade-in and build reveal restart
+// cleanly. No longer assigns per-cinder landing targets: the pooled
+// BuildParticle system (build.ts) owns all landing motion now.
 export function beginLanding(
   frames: Frame[],
   cinders: Cinder[],
@@ -363,52 +495,32 @@ export function beginLanding(
   const t = performance.now();
   resetFrames(frames);
   for (const f of frames) f.landStartedAt = t;
-  let next = cinders;
-  if (cinders.filter((c) => c.phase === "drift").length < 20) {
-    next = [];
-    for (const f of frames) {
-      const n = Math.min(160, cfg.cinderCap / frames.length);
-      for (let i = 0; i < n; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const pad = 16 + Math.random() * 40;
-        const rx = f.w / 2 + pad,
-          ry = f.h / 2 + pad;
-        next.push({
-          x: f.x + f.w / 2 + Math.cos(angle) * rx,
-          y: f.y + f.h / 2 + Math.sin(angle) * ry,
-          vx: 0,
-          vy: 0,
-          born: t,
-          len: 3 + Math.random() * 3,
-          frameId: f.id,
-          phase: "drift",
-          startX: 0,
-          startY: 0,
-          targetX: 0,
-          targetY: 0,
-          targetAngle: 0,
-          landStart: 0,
-        });
-      }
-    }
-  }
-  const flightMs = cfg.landDurationMs * (520 / 900);
+  if (cinders.filter((c) => c.phase === "drift").length >= 20) return cinders;
+  const next: Cinder[] = [...cinders];
   for (const f of frames) {
-    const targets = f.paths.targetPoints;
-    const myCinders = next.filter((c) => c.frameId === f.id);
-    myCinders.forEach((c, i) => {
-      const pt = targets.length
-        ? targets[i % targets.length]
-        : { x: f.x + f.w / 2, y: f.y + f.h / 2, angle: 0 };
-      c.phase = "snap";
-      c.startX = c.x;
-      c.startY = c.y;
-      c.targetX = pt.x;
-      c.targetY = pt.y;
-      c.targetAngle = pt.angle;
-      c.landStart = t + Math.random() * 120;
-      c.flightMs = flightMs;
-    });
+    const n = Math.min(160, cfg.cinderCap / frames.length);
+    for (let i = 0; i < n; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const pad = 16 + Math.random() * 40;
+      const rx = f.w / 2 + pad,
+        ry = f.h / 2 + pad;
+      next.push({
+        x: f.x + f.w / 2 + Math.cos(angle) * rx,
+        y: f.y + f.h / 2 + Math.sin(angle) * ry,
+        vx: 0,
+        vy: 0,
+        born: t,
+        len: 3 + Math.random() * 3,
+        frameId: f.id,
+        phase: "drift",
+        startX: 0,
+        startY: 0,
+        targetX: 0,
+        targetY: 0,
+        targetAngle: 0,
+        landStart: 0,
+      });
+    }
   }
   return next;
 }
@@ -419,105 +531,30 @@ export function easeOutBack(x: number): number {
   return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
 }
 
+function clamp01(v: number): number {
+  return Math.max(0, Math.min(1, v));
+}
+
 // ---- Frame + cinder rendering ----------------------------------------------
 
 // Stroke-bleed hook (voice-lab-dotgrid-addendum.md §4): fired once per
 // actively-inking path per frame, with the ink head's current world-space
 // point, so the caller (engine.ts) can bleed a faint wash onto nearby
-// dot-grid paper. A single callback — Phase B restructures this reveal
-// wholesale, so this stays the minimal integration point rather than a new
-// abstraction.
+// dot-grid paper.
 export type InkAdvanceCallback = (x: number, y: number) => void;
 
-export function drawFrames(
-  ctx: CanvasRenderingContext2D,
-  frames: Frame[],
-  t: number,
-  cfg: CinderConfig,
-  inkStaggerMs = 0,
-  impact: LandingImpact = { kind: "ticks" },
-  measurePath?: SVGPathElement,
-  onInkAdvance?: InkAdvanceCallback,
-) {
-  for (const f of frames) {
-    const inkStart = f.landStartedAt
-      ? f.landStartedAt + cfg.landDurationMs * (520 / 900)
-      : 0;
-    if (!f.landed && (f.landStartedAt === 0 || t < inkStart)) {
-      ctx.save();
-      ctx.globalAlpha = 0.4;
-      ctx.setLineDash([4, 6]);
-      ctx.strokeStyle = "#d4d4d8";
-      ctx.lineWidth = 1.5;
-      ctx.stroke(f.paths.outline.path2d);
-      for (const el of f.paths.elements) ctx.stroke(el.path2d);
-      ctx.restore();
-      continue;
-    }
-    ctx.save();
-    ctx.globalAlpha = f.landed
-      ? 1
-      : Math.min(1, (t - f.landStartedAt) / cfg.landDurationMs);
-    ctx.shadowColor = "rgba(0,0,0,0.12)";
-    ctx.shadowBlur = 16;
-    ctx.shadowOffsetY = 4;
-    ctx.fillStyle = "#ffffff";
-    roundRectPath(ctx, f.x, f.y, f.w, f.h, 26);
-    ctx.fill();
-    ctx.restore();
-    if (f.landed) {
-      strokeShape(ctx, f.paths.outline.path2d, f.paths.outline.strokeWidth);
-      for (const el of f.paths.elements)
-        strokeShape(ctx, el.path2d, el.strokeWidth);
-      continue;
-    }
-    const inkMs = cfg.landDurationMs * (180 / 900);
-    const outlineT = Math.max(0, Math.min(1, (t - inkStart) / inkMs));
-    if (outlineT > 0) {
-      drawInkingReveal(
-        ctx,
-        f.paths.outline,
-        outlineT,
-        measurePath,
-        onInkAdvance,
-      );
-      // Per-element stagger (spec §3.8): each element starts inking a
-      // fraction later than the last, capped at 600ms total across the set,
-      // so the frame reads as hand-drawn rather than all lines at once.
-      const staggerTotal = Math.min(600, inkStaggerMs);
-      const n = f.paths.elements.length;
-      let allDone = outlineT >= 1;
-      f.paths.elements.forEach((el, i) => {
-        const delay = n > 1 ? (i / (n - 1)) * staggerTotal : 0;
-        const elT = Math.max(0, Math.min(1, (t - inkStart - delay) / inkMs));
-        if (elT > 0) drawInkingReveal(ctx, el, elT, measurePath, onInkAdvance);
-        if (elT < 1) allDone = false;
-      });
-      if (allDone) {
-        const settleMs = cfg.landDurationMs * (160 / 900);
-        const settleT = Math.max(
-          0,
-          Math.min(1, (t - inkStart - inkMs - staggerTotal) / settleMs),
-        );
-        const squashScale =
-          impact.kind === "squash"
-            ? 1 + (easeOutBack(settleT) - 1) * 0.12 * impact.bounce
-            : 1;
-        if (squashScale !== 1) {
-          ctx.save();
-          const cx = f.x + f.w / 2,
-            cy = f.y + f.h / 2;
-          ctx.translate(cx, cy);
-          ctx.scale(squashScale, squashScale);
-          ctx.translate(-cx, -cy);
-        }
-        if (impact.kind !== "none") drawImpactMarks(ctx, f, settleT);
-        if (squashScale !== 1) ctx.restore();
-        if (settleT >= 1) f.landed = true;
-      }
-    }
-  }
-}
+export type SpeculativeOpts = {
+  speculativeFrame: "off" | "construction" | "full";
+  guideDots: "off" | "dots" | "dotsLines";
+  dotGrid: DotGrid | null;
+  reducedMotion: boolean;
+};
+
+export type BuildRenderOpts = {
+  dotGrid: DotGrid | null;
+  snapToGrid: boolean;
+  dotPop: number;
+};
 
 function strokeShape(
   ctx: CanvasRenderingContext2D,
@@ -534,28 +571,180 @@ function strokeShape(
   ctx.restore();
 }
 
-function drawInkingReveal(
+function drawPassReveal(
   ctx: CanvasRenderingContext2D,
-  src: BuiltPath,
+  path2d: Path2D,
+  len: number,
   t: number,
-  measurePath?: SVGPathElement,
-  onInkAdvance?: InkAdvanceCallback,
+  strokeWidth: number,
 ) {
-  const len = src.len;
+  if (len <= 0 || t <= 0) return;
+  const clamped = Math.min(1, t);
   ctx.save();
   ctx.setLineDash([len, len]);
-  ctx.lineDashOffset = len * (1 - t);
+  ctx.lineDashOffset = len * (1 - clamped);
   ctx.strokeStyle = INK;
-  ctx.lineWidth = src.strokeWidth;
+  ctx.lineWidth = strokeWidth;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.stroke(src.path2d);
+  ctx.stroke(path2d);
   ctx.restore();
-  // Bleed hook: report the ink head's current world-space point, if asked.
-  if (measurePath && onInkAdvance && t > 0 && t < 1 && len > 0) {
-    measurePath.setAttribute("d", src.d);
-    const pt = measurePath.getPointAtLength(len * t);
-    onInkAdvance(pt.x, pt.y);
+}
+
+// Draws one build-plan path's ink reveal at fraction `prog` (0-1 across its
+// own startMs/durMs window) — pass A sweeps the full window, pass B trails
+// by BUILD_PASS_B_TRAIL (build-plan.md's "second hand-pass"). Reads the
+// current head position from the path's cached samples (sampleAt, binary
+// search) rather than measurePath.getPointAtLength, so this is safe to call
+// every frame for every in-flight path.
+function drawBuildPathInk(
+  ctx: CanvasRenderingContext2D,
+  bp: BuildPath,
+  prog: number,
+  onInkAdvance: InkAdvanceCallback | undefined,
+  opts: BuildRenderOpts,
+  reducedMotion: boolean,
+) {
+  // Reduced motion: tiers crossfade in (plain alpha, full shape) rather than
+  // sweeping a dash reveal — no traveling stroke to draw.
+  if (reducedMotion) {
+    ctx.save();
+    ctx.globalAlpha = prog;
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = bp.strokeWidth;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.stroke(bp.passA);
+    if (bp.passB) ctx.stroke(bp.passB);
+    ctx.restore();
+    return;
+  }
+  const tA = prog;
+  const tB = clamp01((prog - BUILD_PASS_B_TRAIL) / (1 - BUILD_PASS_B_TRAIL));
+  drawPassReveal(ctx, bp.passA, bp.lenA, tA, bp.strokeWidth);
+  if (bp.passB && bp.lenB > 0)
+    drawPassReveal(ctx, bp.passB, bp.lenB, tB, bp.strokeWidth);
+  if (bp.samples.length === 0 || bp.lenA <= 0) return;
+  const headLen = bp.lenA * Math.min(1, tA);
+  const head = sampleAt(bp.samples, headLen);
+  if (onInkAdvance && tA > 0 && tA < 1) onInkAdvance(head.x, head.y);
+  if (opts.dotGrid && opts.snapToGrid) {
+    const idx = opts.dotGrid.nearestDot(head.x, head.y);
+    opts.dotGrid.lightDot(idx, 0.5 + opts.dotPop * 0.5);
+  }
+}
+
+// Honest speculative layer during the wait (build-plan.md §1): device
+// outline + construction guides, never element geometry. Off draws nothing;
+// Construction lights dot-grid dots along the outline/guide paths (plus an
+// optional faint line read); Full ink strokes them outright.
+function drawSpeculativeFrame(
+  ctx: CanvasRenderingContext2D,
+  f: Frame,
+  opts: SpeculativeOpts,
+) {
+  if (opts.speculativeFrame === "off") return;
+  if (opts.speculativeFrame === "full") {
+    strokeShape(ctx, f.paths.outline.path2d, f.paths.outline.strokeWidth);
+    for (const g of f.paths.guides) strokeShape(ctx, g.path2d, 1);
+    return;
+  }
+  if (opts.guideDots === "off" || !opts.dotGrid) return;
+  const dg = opts.dotGrid;
+  const allPaths: BuiltPath[] = [f.paths.outline, ...f.paths.guides];
+  for (const p of allPaths) {
+    for (const s of p.samples) {
+      const idx = dg.nearestDot(s.x, s.y);
+      dg.lightDot(idx, opts.reducedMotion ? 0.5 : 0.35);
+    }
+  }
+  if (opts.guideDots === "dotsLines") {
+    ctx.save();
+    ctx.globalAlpha = 0.18;
+    ctx.strokeStyle = "#a1a1aa";
+    ctx.lineWidth = 1;
+    ctx.stroke(f.paths.outline.path2d);
+    for (const g of f.paths.guides) ctx.stroke(g.path2d);
+    ctx.restore();
+  }
+}
+
+export function drawFrames(
+  ctx: CanvasRenderingContext2D,
+  frames: Frame[],
+  t: number,
+  cfg: CinderConfig,
+  impact: LandingImpact,
+  onInkAdvance: InkAdvanceCallback | undefined,
+  plan: BuildPlan | null,
+  speculative: SpeculativeOpts,
+  buildOpts: BuildRenderOpts,
+) {
+  for (const f of frames) {
+    if (!plan) {
+      drawSpeculativeFrame(ctx, f, speculative);
+      continue;
+    }
+    const framePaths = plan.paths.filter((p) => p.frameId === f.id);
+    ctx.save();
+    ctx.globalAlpha = f.landed
+      ? 1
+      : Math.min(1, (t - f.landStartedAt) / cfg.landDurationMs);
+    ctx.shadowColor = "rgba(0,0,0,0.12)";
+    ctx.shadowBlur = 16;
+    ctx.shadowOffsetY = 4;
+    ctx.fillStyle = "#ffffff";
+    roundRectPath(ctx, f.x, f.y, f.w, f.h, 26);
+    ctx.fill();
+    ctx.restore();
+
+    if (f.landed) {
+      strokeShape(ctx, f.paths.outline.path2d, f.paths.outline.strokeWidth);
+      for (const el of f.paths.elements)
+        strokeShape(ctx, el.path2d, el.strokeWidth);
+      continue;
+    }
+
+    let allDone = framePaths.length > 0;
+    for (const bp of framePaths) {
+      const prog = clamp01((t - (plan.startAt + bp.startMs)) / bp.durMs);
+      if (prog <= 0) {
+        allDone = false;
+        continue;
+      }
+      drawBuildPathInk(
+        ctx,
+        bp,
+        prog,
+        onInkAdvance,
+        buildOpts,
+        plan.reducedMotion,
+      );
+      if (prog >= 1) bp.landed = true;
+      else allDone = false;
+    }
+
+    const tier2Paths = framePaths.filter((p) => p.tier === 2);
+    if (tier2Paths.length > 0 && tier2Paths.every((p) => p.landed)) {
+      const lastEnd = Math.max(...tier2Paths.map((p) => p.startMs + p.durMs));
+      const settleMs = cfg.landDurationMs * (160 / 900);
+      const settleT = clamp01((t - (plan.startAt + lastEnd)) / settleMs);
+      const squashScale =
+        impact.kind === "squash"
+          ? 1 + (easeOutBack(settleT) - 1) * 0.12 * impact.bounce
+          : 1;
+      if (squashScale !== 1) {
+        ctx.save();
+        const cx = f.x + f.w / 2,
+          cy = f.y + f.h / 2;
+        ctx.translate(cx, cy);
+        ctx.scale(squashScale, squashScale);
+        ctx.translate(-cx, -cy);
+      }
+      if (impact.kind !== "none") drawImpactMarks(ctx, f, settleT);
+      if (squashScale !== 1) ctx.restore();
+      if (settleT >= 1) f.landed = allDone;
+    }
   }
 }
 

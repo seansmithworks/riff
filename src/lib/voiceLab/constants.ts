@@ -42,6 +42,14 @@ export function firstStroke(doubledPath: string): string {
     : doubledPath.slice(0, secondMoveIndex);
 }
 
+// Complement of firstStroke: everything from the path's second subpath
+// onward (drawably's own "second hand pass" over the same shape). Empty
+// string when there is no second subpath (e.g. an already-trimmed line).
+export function secondStroke(doubledPath: string): string {
+  const secondMoveIndex = doubledPath.indexOf("M", 1);
+  return secondMoveIndex === -1 ? "" : doubledPath.slice(secondMoveIndex);
+}
+
 export function synthesizeLevelData(t: number): Uint8Array {
   const data = new Uint8Array(1024);
   for (let i = 0; i < 410; i++) {

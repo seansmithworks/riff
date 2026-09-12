@@ -53,7 +53,9 @@ const BASE: Omit<
     hitStopMs: 0,
     tipBurst: 0,
     riffNod: false,
-    inkStaggerMs: 0,
+    // Per-path stagger within a build tier (build-plan.md §3); was a no-op
+    // per-element stagger before Phase B, defaulting to 0.
+    inkStaggerMs: 40,
     impact: { kind: "ticks" },
   },
 };
