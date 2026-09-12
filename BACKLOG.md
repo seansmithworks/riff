@@ -118,4 +118,8 @@ Done this session: glow hard edge via mask (`f403a3e`), Glow slider set (Strengt
 - [x] Role-color dominance fix: "Role color" dial + `hueBiasExplicit` so presets 1/4 read blue/yellow/green by default
 - [x] Stroke bleed primitive: `bleedAlongPath` + single ink-advance callback hook in `frames.ts`
 - [x] Reviewer nit: Amoeba's smear now widens outline reach like Burst's rays
-- [ ] **Phase B: sparks build the sketch on the grid** — particle landing snaps to nearest grid dot, speculative tiers draw as lit-dot skeletons, dots fade to paper under finished ink (voice-lab-dotgrid-addendum.md §3). Separate builder.
+- [x] **Phase B: sparks build the sketch on the grid** — particle landing snaps to nearest grid dot, speculative tiers draw as lit-dot skeletons, dots fade to paper under finished ink (voice-lab-dotgrid-addendum.md §3). `src/lib/voiceLab/build.ts` (new) + `frames.ts`/`engine.ts` integration; docs/voice-lab-sequences.md §9.
+- [ ] Phase B deferred: no full acceptance-evidence capture (perf ms/frame profiling, per-preset build-vs-clear-beat log, before/after video recordings) — only spot-checked via screenshots and `tsc --noEmit`. Revisit if Sean wants the full evidence pass before shipping.
+- [ ] Phase B deferred: build particles and drift cinders both render in plain ink color as short line segments — visually similar at a glance; a distinct spark color/shape would read the "sparks become the sketch" narrative more clearly.
+- [ ] Phase B deferred: nib highlight on tier 0/1 arrival (width ×1.6, 120ms fade) not implemented — heads currently draw with no extra highlight on arrival.
+- [ ] Phase B deferred: React Flow real-app integration (plan §6 risk 3) — Canvas2D build layer doesn't yet track live node screen coords through a `fitView` animation.
