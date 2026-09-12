@@ -19,14 +19,14 @@ export const RIFF_GREEN = "#3FBA6A";
 export const GLOW_CYAN_BASE = 0.35;
 export const GLOW_GREEN_BASE = 0.28;
 export const GLOW_TOTAL_BASE = GLOW_CYAN_BASE + GLOW_GREEN_BASE;
-export const GLOW_DEFAULT_COLOR_MIX = GLOW_CYAN_BASE / GLOW_TOTAL_BASE;
+export const GLOW_DEFAULT_COLOR_MIX = 0.62;
 // The mask (Stage.tsx) fades the glow out near the card's edges — including
 // the band where the disc itself sits — so this multiplier boosts the
 // gradients' color alphas back up to roughly the pre-mask visual weight.
-export const GLOW_DEFAULT_STRENGTH = 2.5;
-export const GLOW_DEFAULT_SIZE = 1;
-export const GLOW_DEFAULT_HEIGHT = 100;
-export const GLOW_DEFAULT_EDGE_SOFTNESS = 1;
+export const GLOW_DEFAULT_STRENGTH = 1.9;
+export const GLOW_DEFAULT_SIZE = 0.8;
+export const GLOW_DEFAULT_HEIGHT = 95;
+export const GLOW_DEFAULT_EDGE_SOFTNESS = 1.6;
 
 export function hashSeed(input: string): number {
   let hash = 5381;

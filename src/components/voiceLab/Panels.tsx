@@ -92,7 +92,7 @@ function SequencePanel() {
         // Hard Cut control (spec §4 row 11).
         default: "blend",
       },
-      play: false,
+      play: true,
     },
     { persist: persistKey("sequence") },
   );
@@ -217,8 +217,8 @@ function TogglesPanel() {
         ],
         default: "center",
       },
-      centerCircle: true,
-      onsetRings: true,
+      centerCircle: false,
+      onsetRings: false,
       cinders: true,
       showFrames: true,
       realMic: false,
@@ -306,18 +306,18 @@ function GlowPanel() {
       },
       fluidHumanColor: "#2F6FED",
       fluidRiffColor: "#F5C518",
-      fluidMixSoftness: [0.4, 0, 1, 0.05],
-      fluidFlowSpeed: [1, 0, 2, 0.05],
-      fluidBlobScale: [1, 0.5, 2, 0.05],
+      fluidMixSoftness: [0.6, 0, 1, 0.05],
+      fluidFlowSpeed: [1.1, 0, 2, 0.05],
+      fluidBlobScale: [1.25, 0.5, 2, 0.05],
       fluidBlobCount: [3, 1, 4, 1],
       // Ink-and-wash dials (addendum §4).
-      fluidEdge: [0.35, 0, 1, 0.05],
-      fluidGrain: [0.4, 0, 1, 0.05],
-      fluidLayers: [2, 1, 3, 1],
+      fluidEdge: [0.7, 0, 1, 0.05],
+      fluidGrain: [0.6, 0, 1, 0.05],
+      fluidLayers: [3, 1, 3, 1],
       // Role-color dominance (addendum §3).
-      roleColor: [0.8, 0, 1, 0.05],
+      roleColor: [0.75, 0, 1, 0.05],
       // Stroke-bleed (addendum §4 "ties to the drawing elements").
-      bleedAmount: [0.5, 0, 1, 0.05],
+      bleedAmount: [0.6, 0, 1, 0.05],
     },
     { id: "glow", persist: persistKey("glow") },
   );
@@ -585,11 +585,11 @@ function CinderPanel() {
   const raw = useDialKit(
     "Cinders & land",
     {
-      cinderCap: [500, 100, 800, 25],
-      windStrength: [1.0, 0, 3, 0.1],
-      burstSize: [40, 0, 120, 5],
-      landDurationMs: [900, 400, 1800, 50],
-      tipSparkRate: [0.8, 0, 1, 0.05],
+      cinderCap: [800, 100, 800, 25],
+      windStrength: [3, 0, 3, 0.1],
+      burstSize: [120, 0, 120, 5],
+      landDurationMs: [600, 400, 1800, 50],
+      tipSparkRate: [1, 0, 1, 0.05],
     },
     { persist: persistKey("cinders") },
   );
@@ -616,12 +616,12 @@ function BuildPanel() {
   const raw = useDialKit(
     "Build",
     {
-      flightSpeed: [1, 0.5, 2, 0.05],
-      arc: [0.18, 0, 0.5, 0.01],
-      densityFrame: [2.5, 0.5, 6, 0.1],
-      densityBlocks: [2.0, 0.5, 6, 0.1],
-      densityDetails: [1.2, 0.5, 6, 0.1],
-      tierGapMs: [-100, -200, 300, 10],
+      flightSpeed: [1.3, 0.5, 2, 0.05],
+      arc: [0.27, 0, 0.5, 0.01],
+      densityFrame: [3.6, 0.5, 6, 0.1],
+      densityBlocks: [3.8, 0.5, 6, 0.1],
+      densityDetails: [3.9, 0.5, 6, 0.1],
+      tierGapMs: [180, -200, 300, 10],
       speculativeFrame: {
         type: "select",
         options: [
@@ -649,8 +649,8 @@ function BuildPanel() {
         default: "dotsLead",
       },
       snapToGrid: true,
-      dotPop: [0.6, 0, 1, 0.05],
-      waitEmberRate: [12, 4, 24, 1],
+      dotPop: [0.8, 0, 1, 0.05],
+      waitEmberRate: [18, 4, 24, 1],
     },
     { persist: persistKey("build") },
   );

@@ -112,7 +112,7 @@ export const MARKS: MarkDef[] = [
         min: 12,
         max: 30,
         step: 1,
-        def: 22,
+        def: 28,
       },
       {
         key: "spread",
@@ -120,7 +120,7 @@ export const MARKS: MarkDef[] = [
         min: 120,
         max: 260,
         step: 5,
-        def: 200,
+        def: 225,
       },
       {
         key: "reach",
@@ -128,7 +128,7 @@ export const MARKS: MarkDef[] = [
         min: 60,
         max: 200,
         step: 5,
-        def: 130,
+        def: 155,
       },
       {
         key: "thickness",
@@ -136,7 +136,7 @@ export const MARKS: MarkDef[] = [
         min: 0.5,
         max: 3,
         step: 0.1,
-        def: 1.0,
+        def: 1.5,
       },
       {
         key: "onsetPunch",
@@ -1118,7 +1118,7 @@ export const MARKS: MarkDef[] = [
         min: 16,
         max: 50,
         step: 1,
-        def: 30,
+        def: 37,
       },
       {
         key: "bulgeAmount",
@@ -1126,7 +1126,7 @@ export const MARKS: MarkDef[] = [
         min: 0,
         max: 24,
         step: 1,
-        def: 10,
+        def: 12,
       },
       {
         key: "bulgeCount",
@@ -1134,16 +1134,16 @@ export const MARKS: MarkDef[] = [
         min: 2,
         max: 6,
         step: 1,
-        def: 3,
+        def: 4,
       },
-      { key: "wobble", label: "Wobble", min: 0, max: 1, step: 0.05, def: 0.4 },
+      { key: "wobble", label: "Wobble", min: 0, max: 1, step: 0.05, def: 1 },
       {
         key: "thickness",
         label: "Thickness",
         min: 0.5,
         max: 3,
         step: 0.1,
-        def: 1.4,
+        def: 1.5,
       },
       {
         key: "onsetPunch",
@@ -1151,7 +1151,7 @@ export const MARKS: MarkDef[] = [
         min: 0,
         max: 2,
         step: 0.1,
-        def: 1.0,
+        def: 2,
       },
     ],
     draw(g: MarkDrawArgs) {
