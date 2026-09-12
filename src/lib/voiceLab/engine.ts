@@ -131,7 +131,6 @@ export type EngineStatus = {
   sequenceName: string;
   sequenceThesis: string;
   sequencePlaying: boolean;
-  sequenceProgress: number;
   slowMo: boolean;
   // Effective colorMix (Sean's dial x preset hueBias) — Stage's buildGlow
   // needs this in its dep list so a preset switch retunes the glow shape.
@@ -180,7 +179,7 @@ export class VoiceLabEngine implements SequenceHost {
   private audioCtx: AudioContext | null = null;
   private dotGridCanvas: HTMLCanvasElement;
   private mql: MediaQueryList;
-  private onStatus: ((s: EngineStatus) => void) | null = null;
+  private statusListeners: Set<(s: EngineStatus) => void> = new Set();
   private destroyed = false;
   private onMqlChange = () => this.scheduleLoop();
   private onVisibilityChange = () => this.scheduleLoop();
@@ -219,6 +218,7 @@ export class VoiceLabEngine implements SequenceHost {
   private glowCyanEl: HTMLElement | null = null;
   private glowGreenEl: HTMLElement | null = null;
   private glowFollower = 0;
+  private progressEl: HTMLElement | null = null;
 
   constructor(canvas: HTMLCanvasElement, config?: EngineConfig) {
     this.canvas = canvas;
@@ -259,8 +259,14 @@ export class VoiceLabEngine implements SequenceHost {
     this.player.setPreset(this.activeSequence, performance.now());
   }
 
-  onStatusChange(cb: (s: EngineStatus) => void) {
-    this.onStatus = cb;
+  // Multiple listeners: Stage mirrors status for the caption/UI, Panels
+  // mirrors it to sync DialKit controls with engine-driven changes (hotkeys,
+  // `, Z). Returns an unsubscribe fn.
+  onStatusChange(cb: (s: EngineStatus) => void): () => void {
+    this.statusListeners.add(cb);
+    return () => {
+      this.statusListeners.delete(cb);
+    };
   }
 
   private activeRoleAndMarkId(): { role: Role; markId: string } {
@@ -270,9 +276,9 @@ export class VoiceLabEngine implements SequenceHost {
   }
 
   private emitStatus() {
-    if (!this.onStatus) return;
+    if (this.statusListeners.size === 0) return;
     const { markId } = this.activeRoleAndMarkId();
-    this.onStatus({
+    const status: EngineStatus = {
       voiceState: this.config.voiceState,
       jobState: this.config.jobState,
       markName: MARK_BY_ID[markId]?.name ?? "",
@@ -290,10 +296,10 @@ export class VoiceLabEngine implements SequenceHost {
       sequenceName: this.activeSequence.name,
       sequenceThesis: this.activeSequence.thesis,
       sequencePlaying: this.player.playing,
-      sequenceProgress: this.player.progress(performance.now(), this.timeScale),
       slowMo: this.timeScale !== 1,
       effectiveColorMix: this.effectiveColorMix(),
-    });
+    };
+    for (const cb of this.statusListeners) cb(status);
   }
 
   getOrigin() {
@@ -341,8 +347,12 @@ export class VoiceLabEngine implements SequenceHost {
   selectSequence(idOrHotkey: string, t = performance.now()) {
     const next =
       SEQUENCE_BY_ID[idOrHotkey] ?? SEQUENCE_BY_HOTKEY[idOrHotkey] ?? null;
-    if (!next || next.id === this.activeSequence.id) return;
-    this.prevSequenceId = this.activeSequence.id;
+    if (!next) return;
+    // Re-pressing the active preset's hotkey must still reset + restart from
+    // 0 (spec §5) — only skip touching prevSequenceId (the A/B flip target)
+    // when it's a genuine no-op reselect.
+    if (next.id !== this.activeSequence.id)
+      this.prevSequenceId = this.activeSequence.id;
     this.activeSequence = next;
     this.resetSequenceState();
     this.player.setPreset(next, t);
@@ -355,6 +365,12 @@ export class VoiceLabEngine implements SequenceHost {
   }
 
   playSequence() {
+    // The player now drives job landing itself; a pending manual auto-land
+    // timer (armed by a paused-player `S`) would otherwise race it.
+    if (this.autoLandTimer) {
+      clearTimeout(this.autoLandTimer);
+      this.autoLandTimer = null;
+    }
     this.player.play();
     this.emitStatus();
   }
@@ -547,9 +563,15 @@ export class VoiceLabEngine implements SequenceHost {
           this.config.cinderConfig,
           this.dustPuffs,
         );
-      this.autoLandTimer = setTimeout(() => {
-        if (this.config.jobState === "sketching") this.setJobState("landing");
-      }, 14000);
+      // Skip the wall-clock auto-land while the player drives (spec §3.1):
+      // its own landing.policy (immediate/nextGap) decides when `ready`
+      // lands, and under slow-mo this timer would force-land before that.
+      // Manual `S` with the player paused still auto-lands as before.
+      if (!this.player.playing) {
+        this.autoLandTimer = setTimeout(() => {
+          if (this.config.jobState === "sketching") this.setJobState("landing");
+        }, 14000);
+      }
     }
     if (next === "landing") this.beginLanding();
     if (next === "none") resetFrames(this.frames);
@@ -934,6 +956,12 @@ export class VoiceLabEngine implements SequenceHost {
     this.glowGreenEl = els.green;
   }
 
+  // Loop progress bar, driven the same way as glow: written directly onto a
+  // DOM element every frame, never through setState (spec item 2).
+  attachProgress(el: HTMLElement) {
+    this.progressEl = el;
+  }
+
   private updateGlow(
     t: number,
     dt: number,
@@ -1022,7 +1050,15 @@ export class VoiceLabEngine implements SequenceHost {
         : 0;
     this.updateGlow(t, dt, preset, voiceLevel);
 
-    if (this.onStatus && this.player.playing) this.emitStatus();
+    // Progress bar: written directly, every frame, never through setState.
+    // Everything else in EngineStatus only changes on real beats/state
+    // transitions, each of which already calls emitStatus() itself (voice
+    // and job state, preset select, play/pause, slow-mo) — no blanket
+    // per-frame emit needed.
+    if (this.progressEl) {
+      const progress = this.player.progress(t, this.timeScale);
+      this.progressEl.style.transform = `scaleX(${progress})`;
+    }
   }
 
   scheduleLoop() {

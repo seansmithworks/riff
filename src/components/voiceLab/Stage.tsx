@@ -81,6 +81,7 @@ export default function Stage({ children }: { children: React.ReactNode }) {
   const outerRef = useRef<HTMLDivElement | null>(null);
   const glowCyanRef = useRef<HTMLDivElement | null>(null);
   const glowGreenRef = useRef<HTMLDivElement | null>(null);
+  const progressRef = useRef<HTMLDivElement | null>(null);
   const engineRef = useRef<VoiceLabEngine | null>(null);
   const [handle, setHandle] = useState<EngineHandle | null>(null);
   const [status, setStatus] = useState<EngineStatus | null>(null);
@@ -100,6 +101,7 @@ export default function Stage({ children }: { children: React.ReactNode }) {
         cyan: glowCyanRef.current,
         green: glowGreenRef.current,
       });
+    if (progressRef.current) engine.attachProgress(progressRef.current);
     engine.scheduleLoop();
     const h: EngineHandle = { engine, autoplay };
     setHandle(h);
@@ -261,11 +263,14 @@ export default function Stage({ children }: { children: React.ReactNode }) {
                   {status.slowMo ? " 0.25×" : ""}
                 </span>
               </div>
-              {/* Thin loop-progress bar with beat ticks. */}
+              {/* Thin loop-progress bar with beat ticks. Written directly by
+                  the engine every frame (transform: scaleX), same as the
+                  glow — never through setState. */}
               <div className="relative h-[3px] w-full overflow-hidden rounded-full bg-[#e4e4e7]">
                 <div
-                  className="absolute inset-y-0 left-0 rounded-full bg-[#a1a1aa]"
-                  style={{ width: `${status.sequenceProgress * 100}%` }}
+                  ref={progressRef}
+                  className="absolute inset-y-0 left-0 w-full origin-left rounded-full bg-[#a1a1aa]"
+                  style={{ transform: "scaleX(0)" }}
                 />
               </div>
               <div className="text-[#a1a1aa]">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useDialKit } from "dialkit";
+import { useDialKit, useDialKitController } from "dialkit";
 import { useEngine, type EngineHandle } from "./EngineContext";
 import { MARKS } from "@/lib/voiceLab/marks";
 import {
@@ -32,7 +32,11 @@ function persistKey(key: string) {
 // never fall out of sync.
 function SequencePanel() {
   const handle = useEngine();
-  const raw = useDialKit(
+  // Controller (not the plain useDialKit values) because this is the one
+  // sanctioned setValue use in the file: hotkeys, `, and Z drive the engine
+  // directly, and this panel must mirror that back into the Preset select
+  // and Play toggle so they never fall out of sync (spec §5).
+  const controller = useDialKitController(
     "Sequence",
     {
       preset: {
@@ -47,11 +51,28 @@ function SequencePanel() {
     },
     { persist: persistKey("sequence") },
   );
-  const preset = raw.preset as string;
-  const play = raw.play as boolean;
+  const preset = controller.values.preset as string;
+  const play = controller.values.play as boolean;
+
+  // Latest values/controller for the status-sync effect below, which must
+  // only subscribe once (not resubscribe on every value change).
+  const stateRef = useRef({ preset, play, controller });
+  useEffect(() => {
+    stateRef.current = { preset, play, controller };
+  }, [preset, play, controller]);
+
+  // Set when this panel is about to push an engine-driven value into
+  // DialKit, so the select-effect below doesn't treat it as a user pick and
+  // re-call selectSequence (which always restarts the loop — that would
+  // create a sync → reselect → restart → sync feedback loop).
+  const skipNextPresetSelect = useRef(false);
 
   useEffect(() => {
     if (!handle) return;
+    if (skipNextPresetSelect.current) {
+      skipNextPresetSelect.current = false;
+      return;
+    }
     handle.engine.selectSequence(preset);
   }, [handle, preset]);
 
@@ -60,6 +81,24 @@ function SequencePanel() {
     if (play) handle.autoplay.start();
     else handle.autoplay.stop();
   }, [handle, play]);
+
+  useEffect(() => {
+    if (!handle) return;
+    return handle.engine.onStatusChange((status) => {
+      const {
+        preset: curPreset,
+        play: curPlay,
+        controller: c,
+      } = stateRef.current;
+      if (status.sequenceId !== curPreset) {
+        skipNextPresetSelect.current = true;
+        c.setValue("preset", status.sequenceId);
+      }
+      if (status.sequencePlaying !== curPlay) {
+        c.setValue("play", status.sequencePlaying);
+      }
+    });
+  }, [handle]);
 
   return null;
 }
