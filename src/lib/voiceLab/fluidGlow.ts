@@ -37,19 +37,24 @@ function mulberry32(seed: number) {
   };
 }
 
+// bx/by are offsets from the anchor (mic-disc origin), not absolute field
+// coordinates — this is what keeps the fluid layer pinned to the same
+// footprint the classic glow occupied instead of roaming the whole card.
+// by is biased negative (up, toward the sketch) since the anchor already
+// sits near the card's bottom edge.
 function makeBlobs(seed: number, count: number): Blob[] {
   const rnd = mulberry32(seed);
   const blobs: Blob[] = [];
   for (let i = 0; i < count; i++) {
     blobs.push({
-      bx: 0.25 + rnd() * 0.5,
-      by: 0.3 + rnd() * 0.5,
+      bx: (rnd() - 0.5) * 0.3,
+      by: -0.06 - rnd() * 0.16,
       freqX: 0.15 + rnd() * 0.25,
       freqY: 0.13 + rnd() * 0.22,
       phaseX: rnd() * Math.PI * 2,
       phaseY: rnd() * Math.PI * 2,
-      driftR: 0.12 + rnd() * 0.16,
-      sigma: 0.22 + rnd() * 0.16,
+      driftR: 0.05 + rnd() * 0.07,
+      sigma: 0.1 + rnd() * 0.07,
     });
   }
   return blobs;
@@ -77,6 +82,54 @@ function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
 }
 
+type BlobPos = { x: number; y: number; sigma: number };
+
+// Reused every frame instead of allocated — ImageData, its backing buffer,
+// and the two roles' projected-blob-position arrays never change size
+// (fixed FLUID_W×FLUID_H field, ≤4 blobs/role), so there's nothing to
+// re-allocate per frame.
+let cachedImg: ImageData | null = null;
+const humanPosBuf: BlobPos[] = [0, 1, 2, 3].map(() => ({
+  x: 0,
+  y: 0,
+  sigma: 0,
+}));
+const riffPosBuf: BlobPos[] = [0, 1, 2, 3].map(() => ({
+  x: 0,
+  y: 0,
+  sigma: 0,
+}));
+
+// Soft union (screen-blend), not a sum: overlapping blobs approach 1 but
+// never exceed it regardless of blob count, so density never plateaus into
+// a flat box the way `min(1, sum)` did.
+function softUnion(
+  pos: BlobPos[],
+  count: number,
+  vx: number,
+  vy: number,
+  w: number,
+  h: number,
+  minDim: number,
+): number {
+  let keep = 1;
+  for (let i = 0; i < count; i++) {
+    const b = pos[i];
+    const dx = (vx - b.x) * (w / minDim);
+    const dy = (vy - b.y) * (h / minDim);
+    const contrib = Math.exp(-(dx * dx + dy * dy) / (2 * b.sigma * b.sigma));
+    keep *= 1 - contrib;
+  }
+  return 1 - keep;
+}
+
+// Peak-density curve: maps the combined (0-~2) union density through a soft
+// exponential so a fully-overlapped, full-activity peak lands around 0.78 —
+// ambient light behind the sketch, never a saturated fill.
+function densityCurve(total: number): number {
+  return 1 - Math.exp(-1.4 * total);
+}
+
 export type FluidGlowParams = {
   humanColor: string;
   riffColor: string;
@@ -88,6 +141,15 @@ export type FluidGlowParams = {
   // shared green blend, 1 = pure role colors.
   hueBias: number;
   opacity: number; // overall envelope — glowFollower × ambient × reducedMul
+  // Anchor (mic-disc origin) in normalized field coords [0-1], same point
+  // the classic glow's gradients were centered on. Blobs drift around this,
+  // not the whole card.
+  originX: number;
+  originY: number;
+  // Classic glow's own size dial — scales blob radii the same way it scaled
+  // the classic gradient ellipses, so Fluid/Classic occupy the same
+  // footprint at a given dial setting.
+  glowSize: number;
 };
 
 // Renders one frame of the density field directly onto a small canvas's 2D
@@ -102,7 +164,8 @@ export function renderFluidGlow(
   ensureBlobCount(p.blobCount);
   const w = FLUID_W;
   const h = FLUID_H;
-  const img = ctx.createImageData(w, h);
+  if (!cachedImg) cachedImg = ctx.createImageData(w, h);
+  const img = cachedImg;
   const data = img.data;
   const humanRgb = hexToRgb(p.humanColor);
   const riffRgb = hexToRgb(p.riffColor);
@@ -111,47 +174,52 @@ export function renderFluidGlow(
   const opacity = Math.max(0, Math.min(1.2, p.opacity));
   const timeSec = (t / 1000) * (0.3 + Math.max(0, p.flowSpeed) * 0.7);
   const minDim = Math.min(w, h);
-  const blobScale = Math.max(0.1, p.blobScale);
+  // glowSize scales blob radii the same way it scales the classic gradient
+  // ellipses (buildGlow's rx/ry * size), so switching Fluid/Classic at a
+  // given dial setting keeps the same footprint.
+  const blobScale = Math.max(0.1, p.blobScale) * Math.max(0.1, p.glowSize);
+  const ox = p.originX;
+  const oy = p.originY;
 
-  const projectRole = (blobs: Blob[], phaseOffset: number) =>
-    blobs.map((b) => ({
-      x:
+  // Project each role's blobs into the reused position buffers in place —
+  // no per-frame array/object allocation.
+  const projectRole = (blobs: Blob[], buf: BlobPos[], phaseOffset: number) => {
+    for (let i = 0; i < blobs.length; i++) {
+      const b = blobs[i];
+      buf[i].x =
+        ox +
         b.bx +
         Math.sin(timeSec * b.freqX * 2 * Math.PI + b.phaseX + phaseOffset) *
-          b.driftR,
-      y:
+          b.driftR;
+      buf[i].y =
+        oy +
         b.by +
         Math.cos(timeSec * b.freqY * 2 * Math.PI + b.phaseY + phaseOffset) *
-          b.driftR,
-      sigma: b.sigma * blobScale,
-    }));
-  const humanPos = projectRole(humanBlobs, 0);
-  const riffPos = projectRole(riffBlobs, 1.7);
+          b.driftR;
+      buf[i].sigma = b.sigma * blobScale;
+    }
+  };
+  projectRole(humanBlobs, humanPosBuf, 0);
+  projectRole(riffBlobs, riffPosBuf, 1.7);
+  const humanCount = humanBlobs.length;
+  const riffCount = riffBlobs.length;
 
   for (let y = 0; y < h; y++) {
     const vy = y / h;
     for (let x = 0; x < w; x++) {
       const vx = x / w;
-      let hDens = 0;
-      for (const b of humanPos) {
-        const dx = (vx - b.x) * (w / minDim);
-        const dy = (vy - b.y) * (h / minDim);
-        hDens += Math.exp(-(dx * dx + dy * dy) / (2 * b.sigma * b.sigma));
-      }
-      let rDens = 0;
-      for (const b of riffPos) {
-        const dx = (vx - b.x) * (w / minDim);
-        const dy = (vy - b.y) * (h / minDim);
-        rDens += Math.exp(-(dx * dx + dy * dy) / (2 * b.sigma * b.sigma));
-      }
-      hDens = Math.min(1, hDens) * humanActivity;
-      rDens = Math.min(1, rDens) * riffActivity;
+      const hDens =
+        softUnion(humanPosBuf, humanCount, vx, vy, w, h, minDim) *
+        humanActivity;
+      const rDens =
+        softUnion(riffPosBuf, riffCount, vx, vy, w, h, minDim) * riffActivity;
       const total = hDens + rDens;
       const i = (y * w + x) * 4;
       if (total < 0.003) {
         data[i + 3] = 0;
         continue;
       }
+      const density = densityCurve(total);
       // frac: 0 = pure human, 1 = pure riff. Route explicitly through green
       // at the midpoint (rather than a straight RGB or hue lerp) so equal
       // densities read green, not gray or an arbitrary in-between hue.
@@ -175,7 +243,7 @@ export function renderFluidGlow(
       g = lerp(GREEN_RGB[1], g, hueBias);
       b = lerp(GREEN_RGB[2], b, hueBias);
 
-      const alpha = Math.max(0, Math.min(1, total)) * opacity;
+      const alpha = density * opacity;
       data[i] = r;
       data[i + 1] = g;
       data[i + 2] = b;

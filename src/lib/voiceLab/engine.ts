@@ -229,6 +229,7 @@ export class VoiceLabEngine implements SequenceHost {
   private glowCyanEl: HTMLElement | null = null;
   private glowGreenEl: HTMLElement | null = null;
   private glowFluidCanvas: HTMLCanvasElement | null = null;
+  private glowFluidCtx: CanvasRenderingContext2D | null = null;
   private glowFollower = 0;
   private progressEl: HTMLElement | null = null;
 
@@ -1041,6 +1042,7 @@ export class VoiceLabEngine implements SequenceHost {
   // pattern as attachGlow above.
   attachGlowFluid(canvas: HTMLCanvasElement) {
     this.glowFluidCanvas = canvas;
+    this.glowFluidCtx = canvas.getContext("2d");
   }
 
   // Loop progress bar, driven the same way as glow: written directly onto a
@@ -1096,8 +1098,13 @@ export class VoiceLabEngine implements SequenceHost {
     if (this.glowFluidCanvas) {
       this.glowFluidCanvas.style.opacity = ambient ? "1" : "0";
       this.glowFluidCanvas.style.transform = `scale(${scale})`;
-      const fctx = this.glowFluidCanvas.getContext("2d");
+      const fctx = this.glowFluidCtx;
       if (fctx && ambient) {
+        // Same anchor the classic glow used: origin.x for left/right, and
+        // glowHeight (% of card height, matching buildGlow's "at X% height%")
+        // for vertical placement — so Fluid occupies the classic glow's
+        // footprint instead of roaming the whole card.
+        const o = this.getOrigin();
         renderFluidGlow(
           fctx,
           t,
@@ -1112,6 +1119,9 @@ export class VoiceLabEngine implements SequenceHost {
             blobCount: this.config.glowBlobCount,
             hueBias: preset.glow.hueBias,
             opacity,
+            originX: o.x / W,
+            originY: this.config.glowHeight / 100,
+            glowSize: this.config.glowSize,
           },
         );
       }
