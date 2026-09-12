@@ -685,7 +685,7 @@ export function drawFrames(
       drawSpeculativeFrame(ctx, f, speculative);
       continue;
     }
-    const framePaths = plan.paths.filter((p) => p.frameId === f.id);
+    const framePaths = plan.pathsByFrame.get(f.id) ?? [];
     ctx.save();
     ctx.globalAlpha = f.landed
       ? 1
@@ -724,9 +724,9 @@ export function drawFrames(
       else allDone = false;
     }
 
-    const tier2Paths = framePaths.filter((p) => p.tier === 2);
-    if (tier2Paths.length > 0 && tier2Paths.every((p) => p.landed)) {
-      const lastEnd = Math.max(...tier2Paths.map((p) => p.startMs + p.durMs));
+    const tier2 = plan.tier2ByFrame.get(f.id);
+    if (tier2 && tier2.paths.every((p) => p.landed)) {
+      const { lastEnd } = tier2;
       const settleMs = cfg.landDurationMs * (160 / 900);
       const settleT = clamp01((t - (plan.startAt + lastEnd)) / settleMs);
       const squashScale =
@@ -798,8 +798,11 @@ export function drawCinders(
   ctx.lineCap = "round";
   for (const c of cinders) {
     if (c.phase === "drift") {
+      // Wait embers (build-plan.md §2): fade over a longer travel distance
+      // so the raised wait-floor spawn rate reads as longer-lived embers,
+      // not just more of them dying at the same pace.
       const distFromOrigin = Math.hypot(c.x - origin.x, c.y - origin.y);
-      const fade = Math.max(0.15, 1 - distFromOrigin / 900);
+      const fade = Math.max(0.15, 1 - distFromOrigin / 1200);
       const angle = Math.atan2(c.vy, c.vx);
       const hl = c.len / 2;
       ctx.globalAlpha = fade * 0.8 * duckAlpha;

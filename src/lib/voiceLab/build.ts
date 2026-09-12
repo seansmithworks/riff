@@ -57,6 +57,10 @@ type ParticleBlock = {
 export type BuildPlan = {
   startAt: number;
   paths: BuildPath[];
+  // Precomputed once here (not per-render-frame) so frames.ts's draw loop
+  // never re-filters/re-derives plan.paths at 60/s.
+  pathsByFrame: Map<string, BuildPath[]>;
+  tier2ByFrame: Map<string, { paths: BuildPath[]; lastEnd: number }>;
   particles: ParticleBlock;
   center: { x: number; y: number };
   arc: number;
@@ -126,6 +130,9 @@ export function planBuild(
   center: { x: number; y: number },
   driftLaunchPoints: { x: number; y: number }[],
   reducedMotion = false,
+  // Still Water etc. ("nothing travels", build-plan.md §2): ink-only landing,
+  // mirrors the reducedMotion → emptyParticleBlock() branch below.
+  noParticles = false,
 ): BuildPlan {
   // Reduced motion (build-plan.md §3): tiers crossfade in order at a flat
   // 300ms each, no stagger, no particles — enforced here (durations) and in
@@ -194,13 +201,33 @@ export function planBuild(
   }
   const endAt = now + rawEnd * scale;
 
-  const particles = reducedMotion
-    ? emptyParticleBlock()
-    : scheduleParticles(paths, cfg, now, driftLaunchPoints);
+  const particles =
+    reducedMotion || noParticles
+      ? emptyParticleBlock()
+      : scheduleParticles(paths, cfg, now, driftLaunchPoints);
+
+  const pathsByFrame = new Map<string, BuildPath[]>();
+  for (const p of paths) {
+    const arr = pathsByFrame.get(p.frameId);
+    if (arr) arr.push(p);
+    else pathsByFrame.set(p.frameId, [p]);
+  }
+  const tier2ByFrame = new Map<
+    string,
+    { paths: BuildPath[]; lastEnd: number }
+  >();
+  for (const [frameId, framePaths] of pathsByFrame) {
+    const tier2Paths = framePaths.filter((p) => p.tier === 2);
+    if (tier2Paths.length === 0) continue;
+    const lastEnd = Math.max(...tier2Paths.map((p) => p.startMs + p.durMs));
+    tier2ByFrame.set(frameId, { paths: tier2Paths, lastEnd });
+  }
 
   return {
     startAt: now,
     paths,
+    pathsByFrame,
+    tier2ByFrame,
     particles,
     center,
     arc: cfg.arc,

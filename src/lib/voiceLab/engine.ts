@@ -155,6 +155,7 @@ export function defaultEngineConfig(): EngineConfig {
       arrival: "dotsLead",
       snapToGrid: true,
       dotPop: 0.6,
+      waitEmberRate: 12,
     },
     discStretchAmount: 0.35,
     discSquishBounce: 0.35,
@@ -683,35 +684,45 @@ export class VoiceLabEngine implements SequenceHost {
 
   private beginLanding() {
     const preset = this.effectivePreset();
-    if (!this.cindersEnabled()) {
-      resetFrames(this.frames);
-      this.cinders = [];
-      this.buildPlan = null;
-      return;
-    }
     const now = performance.now();
+    // The ink/crossfade build always runs on landing (build-plan.md §3's
+    // reduced-motion tier crossfade included) — only particle scheduling
+    // (drift-cinder recruitment, pooled sparks) depends on cinders being
+    // enabled. Cinders off (or reduced motion, folded into cindersEnabled())
+    // must not stall the frame on guide dots forever.
+    const cindersOn = this.cindersEnabled();
+    resetFrames(this.frames);
     // Recruit drift cinders (bearing-sorted from the origin) as the pooled
     // spark particles' launch points (build-plan.md §2/§3) — this happens
     // before ensuring the drift floor below so a fast landing (few cinders
     // yet) still gets *some* launch points rather than none.
     const origin = this.getOrigin();
-    const launchPoints = [...this.cinders]
-      .filter((c) => c.phase === "drift")
-      .sort(
-        (a, b) =>
-          Math.atan2(a.y - origin.y, a.x - origin.x) -
-          Math.atan2(b.y - origin.y, b.x - origin.x),
-      )
-      .map((c) => ({ x: c.x, y: c.y }));
-    this.cinders = beginLandingImpl(
-      this.frames,
-      this.cinders,
-      this.config.cinderConfig,
-    );
+    let launchPoints: { x: number; y: number }[] = [];
+    if (cindersOn) {
+      launchPoints = [...this.cinders]
+        .filter((c) => c.phase === "drift")
+        .sort(
+          (a, b) =>
+            Math.atan2(a.y - origin.y, a.x - origin.x) -
+            Math.atan2(b.y - origin.y, b.x - origin.x),
+        )
+        .map((c) => ({ x: c.x, y: c.y }));
+      this.cinders = beginLandingImpl(
+        this.frames,
+        this.cinders,
+        this.config.cinderConfig,
+      );
+    } else {
+      this.cinders = [];
+    }
     if (preset.landing.hitStopMs > 0)
       this.hitStopUntil = now + preset.landing.hitStopMs;
+    // Build clock starts after hit-stop (build-plan.md §2): hitStopUntil only
+    // freezes the mark clock, so without this the build's own clock (t below)
+    // would already be hitStopMs into tier 0's sweep when the freeze reads.
+    const buildStartAt = now + preset.landing.hitStopMs;
     if (preset.landing.riffNod) this.riffOnsetPulse = 1;
-    if (preset.landing.tipBurst > 0) {
+    if (cindersOn && preset.landing.tipBurst > 0) {
       const emitters = this.lastMarkContext?.mark.getTipEmitters
         ? this.lastMarkContext.mark.getTipEmitters(this.lastMarkContext.g)
         : [];
@@ -729,7 +740,7 @@ export class VoiceLabEngine implements SequenceHost {
     );
     this.buildPlan = planBuild(
       this.frames,
-      now,
+      buildStartAt,
       this.config.buildConfig,
       this.config.cinderConfig,
       preset.landing.inkStaggerMs,
@@ -737,6 +748,7 @@ export class VoiceLabEngine implements SequenceHost {
       { x: W / 2, y: H / 2 },
       launchPoints.length ? launchPoints : [origin],
       this.reducedMotionActive(),
+      preset.job.emit === "none" || !cindersOn,
     );
   }
 
@@ -1139,7 +1151,7 @@ export class VoiceLabEngine implements SequenceHost {
     // active (research point 9) — duck is a preset gate on top of Sean's own
     // cinder settings, never a suppression of voice.
     const active = this.presence.human > 0.3 || this.presence.riff > 0.3;
-    return active ? 1 - preset.job.duck : 1;
+    return active ? Math.max(0.4, 1 - preset.job.duck) : 1;
   }
 
   private updateSketchSpawning(t: number, dt: number, preset: SequencePreset) {
@@ -1150,11 +1162,14 @@ export class VoiceLabEngine implements SequenceHost {
     const duck = this.jobDuckEnvelope(preset);
     // Ember floor (build-plan.md §2): the wait can run 11-19s real, so
     // instead of emission dying at 11s and leaving the canvas dead for the
-    // rest of the hold, it decays to a steady 4/s floor.
+    // rest of the hold, it decays to a steady floor (Sean's "Wait embers"
+    // dial in the Build panel — default raised from 4/s so a 744×465 canvas
+    // still visibly reads as alive during a long hold).
+    const emberFloor = this.config.buildConfig.waitEmberRate;
     const rate =
       elapsed > 11000
-        ? 4 * duck
-        : Math.max(4, 30 * (1 - elapsed / 11000)) * duck;
+        ? emberFloor * duck
+        : Math.max(emberFloor, 30 * (1 - elapsed / 11000)) * duck;
     this.spawnAccumulator += (rate * dt) / 1000;
     // Sparks off ray tips: if the active speaker mark exposes an emitter
     // (e.g. Burst), a fraction of spawns fly off its live tip points instead

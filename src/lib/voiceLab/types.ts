@@ -72,6 +72,7 @@ export type BuildConfig = {
   arrival: "dotsLead" | "comet";
   snapToGrid: boolean;
   dotPop: number; // 0-1
+  waitEmberRate: number; // sparks/sec floor during a long pre-landing hold
 };
 
 export type MarkDef = {

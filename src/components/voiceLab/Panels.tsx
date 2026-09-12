@@ -647,6 +647,7 @@ function BuildPanel() {
       },
       snapToGrid: true,
       dotPop: [0.6, 0, 1, 0.05],
+      waitEmberRate: [12, 4, 24, 1],
     },
     { persist: persistKey("build") },
   );
@@ -665,6 +666,7 @@ function BuildPanel() {
       arrival: raw.arrival as "dotsLead" | "comet",
       snapToGrid: raw.snapToGrid as boolean,
       dotPop: raw.dotPop as number,
+      waitEmberRate: raw.waitEmberRate as number,
     };
   }, [handle, raw]);
 
