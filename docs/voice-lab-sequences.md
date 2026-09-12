@@ -123,6 +123,8 @@ BASE (every preset starts from this): handoff `cut`, all tweens 0, smearFrames 0
 
 **10 · Still Water (reduced-motion by construction)** — identity through hue and opacity only; nothing travels. Axis: calm / glow-led. Handoff crossfade: humanIn 150 EASE, humanOut 300 EASE, riffIn 300 EASE, riffOut 150 EASE. markPeak .8; stepFps 3 (≤3Hz boil). Glow envelope 300/600; levels idle .4, you .8, riff .8, silence .5, dead .2; hueBias .6. Job emit `none`. Landing nextGap, maxHold 1500, impact none.
 
+**B · Blend (strawman, orchestrator's recommendation)** — Mm-hm's turn-taking with Catch's sparks. All of 4 · Mm-hm's beats, handoff, anticipation, backchannel, silenceHolder `riff`, glow, and landing policy `nextGap`/maxHold 2000/riffNod, kept as-is (including duck .4) — with 7 · Catch's job emit `onsets`/underlay .3 and Catch's landing punch (tipBurst 40, impact squash(.2), stagger 40) merged in. Composed directly from the Mm-hm and Catch preset objects, not retyped, so it tracks either if they change. Fresh installs (no persisted Sequence panel value) default here.
+
 ## 5. Picker UX
 
 - **Panel.** New `SequencePanel` first in Panels.tsx: select labeled "1 · Hard Cut" etc. + `play` toggle, persisted under `persistKey("sequence")`. `play` replaces the Voice panel's `autoplay` (Panels.tsx:43) — loses only a play/pause boolean, no tuning.

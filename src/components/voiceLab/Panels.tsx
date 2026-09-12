@@ -87,7 +87,10 @@ function SequencePanel() {
           value: p.id,
           label: `${p.hotkey} · ${p.name}`,
         })),
-        default: SEQUENCE_PRESETS[0].id,
+        // Fresh install (no persisted Sequence value) opens on the Blend
+        // strawman — the orchestrator's recommended combination — not the
+        // Hard Cut control (spec §4 row 11).
+        default: "blend",
       },
       play: false,
     },

@@ -1,4 +1,4 @@
-// The 10 choreography presets (spec §4), each built from BASE as pure data.
+// The 11 choreography presets (spec §4), each built from BASE as pure data.
 // No engine or player code ever branches on `id`/`hotkey` — every difference
 // between presets lives here as numbers.
 import type { VoiceState } from "./types";
@@ -141,6 +141,91 @@ const STD_BEATS: Beat[] = [
   { at: 13200, kind: "job", event: "clear" },
 ];
 
+const MM_HM = preset({
+  id: "mm-hm",
+  hotkey: "4",
+  name: "Mm-hm",
+  thesis:
+    "turn-taking science made visible: backchannels, overlap, a polite landing",
+  loopMs: 15000,
+  beats: [
+    { at: 600, kind: "voice", state: "you-talking" },
+    { at: 1700, kind: "backchannel" },
+    { at: 2900, kind: "backchannel" },
+    { at: 3800, kind: "yield" },
+    { at: 3950, kind: "voice", state: "riff-talking" },
+    { at: 4600, kind: "job", event: "start" },
+    { at: 6500, kind: "voice", state: "you-talking" },
+    { at: 7600, kind: "backchannel" },
+    { at: 8700, kind: "yield" },
+    { at: 9100, kind: "voice", state: "riff-talking" },
+    { at: 9800, kind: "job", event: "ready" },
+    { at: 11600, kind: "voice", state: "silence" },
+    { at: 14000, kind: "job", event: "clear" },
+  ],
+  handoff: {
+    style: "crossfade",
+    humanIn: { ms: 100, ease: EASE_OUT },
+    humanOut: { ms: 320, ease: EASE_OUT },
+    riffIn: { ms: 200, ease: EASE_OUT },
+    riffOut: { ms: 110, ease: EASE_OUT },
+  },
+  anticipation: { depth: 0.05, ms: 150 },
+  backchannel: { presence: 0.35, ms: 260 },
+  silenceHolder: "riff",
+  envelope: { attackMs: 80, releaseMs: 500 },
+  glow: { level: glowLevels(0.6, 0.85, 1, 0.7, 0.3), follow: 0.25 },
+  job: { duck: 0.4, burstUnderlay: 0.2, emit: "stream" },
+  landing: { policy: "nextGap", maxHoldMs: 2000, riffNod: true },
+});
+
+const CATCH = preset({
+  id: "catch",
+  hotkey: "7",
+  name: "Catch",
+  thesis: "your words become the sparks that become the sketch",
+  loopMs: 14000,
+  beats: STD_BEATS,
+  handoff: {
+    style: "crossfade",
+    humanIn: { ms: 100, ease: EASE_OUT },
+    humanOut: { ms: 200, ease: EASE_OUT },
+    riffIn: { ms: 240, ease: EASE_ARRIVE },
+    riffOut: { ms: 120, ease: EASE_OUT },
+  },
+  backchannel: { presence: 0.25, ms: 220 },
+  job: { emit: "onsets", burstUnderlay: 0.3 },
+  landing: {
+    tipBurst: 40,
+    riffNod: true,
+    impact: { kind: "squash", bounce: 0.2 },
+    inkStaggerMs: 40,
+  },
+});
+
+// Strawman preset 11 (orchestrator's recommendation, spec §4 row 11): merges
+// Mm-hm's turn-taking choreography with Catch's spark job + landing punch.
+// Built from the two presets above via spread, not retyped values, so it
+// tracks them if either changes.
+const BLEND: SequencePreset = {
+  ...MM_HM,
+  id: "blend",
+  hotkey: "B",
+  name: "Blend",
+  thesis: "Mm-hm's turn-taking with Catch's sparks — the recommended base.",
+  job: {
+    ...MM_HM.job,
+    emit: CATCH.job.emit,
+    burstUnderlay: CATCH.job.burstUnderlay,
+  },
+  landing: {
+    ...MM_HM.landing,
+    tipBurst: CATCH.landing.tipBurst,
+    impact: CATCH.landing.impact,
+    inkStaggerMs: CATCH.landing.inkStaggerMs,
+  },
+};
+
 export const SEQUENCE_PRESETS: SequencePreset[] = [
   preset({
     id: "hard-cut",
@@ -195,43 +280,7 @@ export const SEQUENCE_PRESETS: SequencePreset[] = [
     landing: { inkStaggerMs: 30 },
   }),
 
-  preset({
-    id: "mm-hm",
-    hotkey: "4",
-    name: "Mm-hm",
-    thesis:
-      "turn-taking science made visible: backchannels, overlap, a polite landing",
-    loopMs: 15000,
-    beats: [
-      { at: 600, kind: "voice", state: "you-talking" },
-      { at: 1700, kind: "backchannel" },
-      { at: 2900, kind: "backchannel" },
-      { at: 3800, kind: "yield" },
-      { at: 3950, kind: "voice", state: "riff-talking" },
-      { at: 4600, kind: "job", event: "start" },
-      { at: 6500, kind: "voice", state: "you-talking" },
-      { at: 7600, kind: "backchannel" },
-      { at: 8700, kind: "yield" },
-      { at: 9100, kind: "voice", state: "riff-talking" },
-      { at: 9800, kind: "job", event: "ready" },
-      { at: 11600, kind: "voice", state: "silence" },
-      { at: 14000, kind: "job", event: "clear" },
-    ],
-    handoff: {
-      style: "crossfade",
-      humanIn: { ms: 100, ease: EASE_OUT },
-      humanOut: { ms: 320, ease: EASE_OUT },
-      riffIn: { ms: 200, ease: EASE_OUT },
-      riffOut: { ms: 110, ease: EASE_OUT },
-    },
-    anticipation: { depth: 0.05, ms: 150 },
-    backchannel: { presence: 0.35, ms: 260 },
-    silenceHolder: "riff",
-    envelope: { attackMs: 80, releaseMs: 500 },
-    glow: { level: glowLevels(0.6, 0.85, 1, 0.7, 0.3), follow: 0.25 },
-    job: { duck: 0.4, burstUnderlay: 0.2, emit: "stream" },
-    landing: { policy: "nextGap", maxHoldMs: 2000, riffNod: true },
-  }),
+  MM_HM,
 
   preset({
     id: "sidechain",
@@ -302,29 +351,7 @@ export const SEQUENCE_PRESETS: SequencePreset[] = [
     },
   }),
 
-  preset({
-    id: "catch",
-    hotkey: "7",
-    name: "Catch",
-    thesis: "your words become the sparks that become the sketch",
-    loopMs: 14000,
-    beats: STD_BEATS,
-    handoff: {
-      style: "crossfade",
-      humanIn: { ms: 100, ease: EASE_OUT },
-      humanOut: { ms: 200, ease: EASE_OUT },
-      riffIn: { ms: 240, ease: EASE_ARRIVE },
-      riffOut: { ms: 120, ease: EASE_OUT },
-    },
-    backchannel: { presence: 0.25, ms: 220 },
-    job: { emit: "onsets", burstUnderlay: 0.3 },
-    landing: {
-      tipBurst: 40,
-      riffNod: true,
-      impact: { kind: "squash", bounce: 0.2 },
-      inkStaggerMs: 40,
-    },
-  }),
+  CATCH,
 
   preset({
     id: "juice",
@@ -422,6 +449,8 @@ export const SEQUENCE_PRESETS: SequencePreset[] = [
     job: { emit: "none" },
     landing: { policy: "nextGap", maxHoldMs: 1500, impact: { kind: "none" } },
   }),
+
+  BLEND,
 ];
 
 export const SEQUENCE_BY_ID: Record<string, SequencePreset> =

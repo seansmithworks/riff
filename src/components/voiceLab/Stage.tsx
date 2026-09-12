@@ -124,6 +124,13 @@ export default function Stage({ children }: { children: React.ReactNode }) {
         engine.selectSequence(e.key);
         return;
       }
+      // Blend strawman — B selects hotkey "B" (spec §4 row 11), same
+      // select+reset+play behavior as the 1-9/0 picker above.
+      if (e.key.toLowerCase() === "b" && !e.shiftKey) {
+        autoplay.start();
+        engine.selectSequence("B");
+        return;
+      }
       // Manual voice-state override — Shift+1..5 (spec §5; digits moved to
       // the sequence picker above). Pauses the player but keeps the active
       // preset's transition style (presence tweening always reads it).
