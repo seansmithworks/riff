@@ -344,6 +344,10 @@ export class VoiceLabEngine implements SequenceHost {
   }
 
   // ---- Sequence picker ----
+  getActiveSequenceId(): string {
+    return this.activeSequence.id;
+  }
+
   selectSequence(idOrHotkey: string, t = performance.now()) {
     const next =
       SEQUENCE_BY_ID[idOrHotkey] ?? SEQUENCE_BY_HOTKEY[idOrHotkey] ?? null;

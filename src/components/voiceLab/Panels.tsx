@@ -54,25 +54,24 @@ function SequencePanel() {
   const preset = controller.values.preset as string;
   const play = controller.values.play as boolean;
 
-  // Latest values/controller for the status-sync effect below, which must
-  // only subscribe once (not resubscribe on every value change).
-  const stateRef = useRef({ preset, play, controller });
+  // Latest controller for the status-sync effect below, which must only
+  // subscribe once (not resubscribe on every value change). The controller
+  // itself is stable across renders; its `getValues()` always reads the
+  // live DialKit store, so this never goes stale the way a plain ref keyed
+  // off a closed-over value would.
+  const controllerRef = useRef(controller);
   useEffect(() => {
-    stateRef.current = { preset, play, controller };
-  }, [preset, play, controller]);
+    controllerRef.current = controller;
+  }, [controller]);
 
-  // Set when this panel is about to push an engine-driven value into
-  // DialKit, so the select-effect below doesn't treat it as a user pick and
-  // re-call selectSequence (which always restarts the loop — that would
-  // create a sync → reselect → restart → sync feedback loop).
-  const skipNextPresetSelect = useRef(false);
-
+  // Idempotent against engine truth: only reselect when the DialKit pick
+  // actually differs from what the engine already has active. This is what
+  // stops an engine→DialKit status sync from re-triggering selectSequence
+  // (which always restarts the loop) — no separate "skip" flag needed, and
+  // it can't go stale the way a ref keyed off a render could.
   useEffect(() => {
     if (!handle) return;
-    if (skipNextPresetSelect.current) {
-      skipNextPresetSelect.current = false;
-      return;
-    }
+    if (preset === handle.engine.getActiveSequenceId()) return;
     handle.engine.selectSequence(preset);
   }, [handle, preset]);
 
@@ -85,16 +84,12 @@ function SequencePanel() {
   useEffect(() => {
     if (!handle) return;
     return handle.engine.onStatusChange((status) => {
-      const {
-        preset: curPreset,
-        play: curPlay,
-        controller: c,
-      } = stateRef.current;
-      if (status.sequenceId !== curPreset) {
-        skipNextPresetSelect.current = true;
+      const c = controllerRef.current;
+      const live = c.getValues();
+      if (status.sequenceId !== live.preset) {
         c.setValue("preset", status.sequenceId);
       }
-      if (status.sequencePlaying !== curPlay) {
+      if (status.sequencePlaying !== live.play) {
         c.setValue("play", status.sequencePlaying);
       }
     });
