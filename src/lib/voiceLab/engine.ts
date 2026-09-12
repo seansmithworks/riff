@@ -7,6 +7,12 @@
 // times. render_artifact is fire-and-forget in the real app, so a sketch job
 // must never suppress or replace the voice layer — both channels draw in the
 // same frame, independently.
+//
+// A `SequencePreset` (sequences.ts) layers choreography on top of both
+// channels: per-role presence envelopes (so a handoff crossfades instead of
+// cutting), disc squash, glow follow/swell, job ducking, and landing
+// theatrics. Presets only ever multiply/gate Sean's own tuned values — see
+// docs/voice-lab-sequences.md §5 precedence.
 import {
   W,
   H,
@@ -27,6 +33,7 @@ import {
   MARK_BY_ID,
   defaultMarkConfigs,
   setMarksContext,
+  setAlphaMul,
   drawMicDisc,
   drawFlatline,
   drawIdleSquiggle,
@@ -39,6 +46,7 @@ import {
   drawCinders,
   spawnDustPuff,
   spawnCinder,
+  spawnTipSparks,
   updateCinderDrift,
   beginLanding as beginLandingImpl,
   type Frame,
@@ -54,6 +62,19 @@ import type {
   MarkDrawArgs,
 } from "./types";
 import { VOICE_STATES } from "./types";
+import {
+  evalEase,
+  SequencePlayer,
+  type SequenceHost,
+  type SequencePreset,
+  type Tween,
+} from "./sequence";
+import {
+  SEQUENCE_BY_HOTKEY,
+  SEQUENCE_BY_ID,
+  SEQUENCE_PRESETS,
+  REDUCED_MOTION_PRESET,
+} from "./sequences";
 
 export function defaultEngineConfig(): EngineConfig {
   return {
@@ -104,9 +125,25 @@ export type EngineStatus = {
   glowHeight: number;
   glowColorMix: number;
   glowEdgeSoftness: number;
+  // Sequence picker state (spec §5 UX).
+  sequenceId: string;
+  sequenceHotkey: string;
+  sequenceName: string;
+  sequenceThesis: string;
+  sequencePlaying: boolean;
+  sequenceProgress: number;
+  slowMo: boolean;
+  // Effective colorMix (Sean's dial x preset hueBias) — Stage's buildGlow
+  // needs this in its dep list so a preset switch retunes the glow shape.
+  effectiveColorMix: number;
 };
 
-export class VoiceLabEngine {
+const ZERO_TWEEN: Tween = {
+  ms: 0,
+  ease: { kind: "bezier", p: [0.25, 0.1, 0.25, 1] },
+};
+
+export class VoiceLabEngine implements SequenceHost {
   config: EngineConfig;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -148,6 +185,41 @@ export class VoiceLabEngine {
   private onMqlChange = () => this.scheduleLoop();
   private onVisibilityChange = () => this.scheduleLoop();
 
+  // ---- Choreography state ----
+  private activeSequence: SequencePreset = SEQUENCE_PRESETS[0];
+  private prevSequenceId: string = this.activeSequence.id;
+  private timeScale = 1; // Z = 0.25x slow motion
+  player: SequencePlayer = new SequencePlayer(this);
+
+  private presence: Record<Role, number> = { human: 0, riff: 0 };
+  private presenceTween: Record<
+    Role,
+    { from: number; to: number; start: number; tween: Tween }
+  > = {
+    human: { from: 0, to: 0, start: 0, tween: ZERO_TWEEN },
+    riff: { from: 0, to: 0, start: 0, tween: ZERO_TWEEN },
+  };
+  private smearFramesLeft: Record<Role, number> = { human: 0, riff: 0 };
+  private backchannelTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private anticipationStart = 0;
+  private anticipationMs = 0;
+  private anticipationDepth = 0;
+
+  // Mark clock: dt x timeScale, frozen during hit-stop, quantized when the
+  // effective preset's stepFps > 0. Mic sampling stays on the real clock.
+  private markClock = 0;
+  private markT = 0;
+  private hitStopUntil = 0;
+
+  // Glow — engine writes opacity/transform directly onto these two elements
+  // every frame; it never triggers a React re-render (Stage attaches them
+  // once via attachGlow()). The wrapper that owns them (and the mask) never
+  // animates.
+  private glowCyanEl: HTMLElement | null = null;
+  private glowGreenEl: HTMLElement | null = null;
+  private glowFollower = 0;
+
   constructor(canvas: HTMLCanvasElement, config?: EngineConfig) {
     this.canvas = canvas;
     this.config = config ?? defaultEngineConfig();
@@ -184,6 +256,7 @@ export class VoiceLabEngine {
     this.mql = window.matchMedia("(prefers-reduced-motion: reduce)");
     this.mql.addEventListener("change", this.onMqlChange);
     document.addEventListener("visibilitychange", this.onVisibilityChange);
+    this.player.setPreset(this.activeSequence, performance.now());
   }
 
   onStatusChange(cb: (s: EngineStatus) => void) {
@@ -212,6 +285,14 @@ export class VoiceLabEngine {
       glowHeight: this.config.glowHeight,
       glowColorMix: this.config.glowColorMix,
       glowEdgeSoftness: this.config.glowEdgeSoftness,
+      sequenceId: this.activeSequence.id,
+      sequenceHotkey: this.activeSequence.hotkey,
+      sequenceName: this.activeSequence.name,
+      sequenceThesis: this.activeSequence.thesis,
+      sequencePlaying: this.player.playing,
+      sequenceProgress: this.player.progress(performance.now(), this.timeScale),
+      slowMo: this.timeScale !== 1,
+      effectiveColorMix: this.effectiveColorMix(),
     });
   }
 
@@ -229,13 +310,223 @@ export class VoiceLabEngine {
     return this.config.cindersOn && !this.reducedMotionActive();
   }
 
+  // Reduced motion (toggle or OS) swaps the active preset's *motion*
+  // settings for preset 10's (spec §5 precedence #3). Beats, glow levels,
+  // and hueBias are untouched.
+  private effectivePreset(): SequencePreset {
+    const base = this.activeSequence;
+    if (!this.reducedMotionActive()) return base;
+    const rm = REDUCED_MOTION_PRESET;
+    return {
+      ...base,
+      handoff: rm.handoff,
+      anticipation: rm.anticipation,
+      breathe: rm.breathe,
+      stepFps: rm.stepFps,
+      glow: { ...base.glow, follow: rm.glow.follow, swell: rm.glow.swell },
+      job: rm.job,
+      landing: rm.landing,
+    };
+  }
+
+  private effectiveColorMix(): number {
+    const preset = this.effectivePreset();
+    return Math.max(
+      0,
+      Math.min(1, this.config.glowColorMix * (1 - preset.glow.hueBias)),
+    );
+  }
+
+  // ---- Sequence picker ----
+  selectSequence(idOrHotkey: string, t = performance.now()) {
+    const next =
+      SEQUENCE_BY_ID[idOrHotkey] ?? SEQUENCE_BY_HOTKEY[idOrHotkey] ?? null;
+    if (!next || next.id === this.activeSequence.id) return;
+    this.prevSequenceId = this.activeSequence.id;
+    this.activeSequence = next;
+    this.resetSequenceState();
+    this.player.setPreset(next, t);
+    this.emitStatus();
+  }
+
+  // `` ` `` — flip to the previously-selected preset (A/B).
+  flipToPreviousSequence() {
+    this.selectSequence(this.prevSequenceId);
+  }
+
+  playSequence() {
+    this.player.play();
+    this.emitStatus();
+  }
+
+  pauseSequence() {
+    this.player.pause();
+    this.emitStatus();
+  }
+
+  setSlowMotion(on: boolean) {
+    this.timeScale = on ? 0.25 : 1;
+    this.emitStatus();
+  }
+
+  getSlowMotion(): boolean {
+    return this.timeScale !== 1;
+  }
+
+  // Full reset for a fresh preset run: job cleared, presences at 0, cinders
+  // cleared (spec §5 "reset, play from 0").
+  private resetSequenceState() {
+    resetFrames(this.frames);
+    this.cinders = [];
+    this.dustPuffs = [];
+    this.config.jobState = "none";
+    this.config.voiceState = "idle";
+    const t = performance.now();
+    this.presence.human = 0;
+    this.presence.riff = 0;
+    this.presenceTween.human = { from: 0, to: 0, start: t, tween: ZERO_TWEEN };
+    this.presenceTween.riff = { from: 0, to: 0, start: t, tween: ZERO_TWEEN };
+    this.smearFramesLeft.human = 0;
+    this.smearFramesLeft.riff = 0;
+    this.onsetPulse = 0;
+    this.riffOnsetPulse = 0;
+    if (this.autoLandTimer) {
+      clearTimeout(this.autoLandTimer);
+      this.autoLandTimer = null;
+    }
+    if (this.backchannelTimer) {
+      clearTimeout(this.backchannelTimer);
+      this.backchannelTimer = null;
+    }
+  }
+
+  // ---- SequenceHost surface (driven by SequencePlayer, no id branching) ----
+  getVoiceState(): VoiceState {
+    return this.config.voiceState;
+  }
+
+  isVoiceGap(): boolean {
+    return (
+      this.config.voiceState === "idle" || this.config.voiceState === "silence"
+    );
+  }
+
+  triggerAnticipation(depth: number, ms: number) {
+    this.anticipationStart = performance.now();
+    this.anticipationMs = ms;
+    this.anticipationDepth = depth;
+  }
+
+  // Riff "mm-hm": bumps Riff's presence briefly without taking the floor
+  // from the human (research point 4) — voiceState is untouched.
+  triggerBackchannel(presence: number, ms: number) {
+    if (presence <= 0) return;
+    const t = performance.now();
+    const preset = this.effectivePreset();
+    this.retargetPresence(
+      "riff",
+      Math.max(presence, this.presence.riff),
+      { ms: 80, ease: preset.handoff.riffIn.ease },
+      t,
+    );
+    if (this.backchannelTimer) clearTimeout(this.backchannelTimer);
+    this.backchannelTimer = setTimeout(() => {
+      this.backchannelTimer = null;
+      const floor = this.silenceRiffFloor();
+      this.retargetPresence(
+        "riff",
+        floor,
+        preset.handoff.riffOut,
+        performance.now(),
+      );
+    }, ms);
+  }
+
+  private silenceRiffFloor(): number {
+    const state = this.config.voiceState;
+    const preset = this.effectivePreset();
+    if (state === "riff-talking") return 1;
+    if (state === "silence" && preset.silenceHolder === "riff") return 0.25;
+    return 0;
+  }
+
   // ---- Voice channel ----
   setVoiceState(next: VoiceState) {
     if (!VOICE_STATES.includes(next)) return;
+    if (this.config.voiceState === next) return;
     this.config.voiceState = next;
     if (next === "you-talking") this.nextSyntheticOnsetAt = 0;
     if (next === "riff-talking") this.nextRiffOnsetAt = 0;
+    this.retargetPresenceForState(next);
     this.emitStatus();
+  }
+
+  private retargetPresence(
+    role: Role,
+    target: number,
+    tween: Tween,
+    t: number,
+  ) {
+    const cur = this.evalPresence(role, t);
+    this.presenceTween[role] = { from: cur, to: target, start: t, tween };
+  }
+
+  private evalPresence(role: Role, t: number): number {
+    const pt = this.presenceTween[role];
+    const elapsed = t - pt.start;
+    const frac = pt.tween.ms <= 0 ? 1 : elapsed / pt.tween.ms;
+    const eased = evalEase(pt.tween.ease, frac);
+    return pt.from + (pt.to - pt.from) * eased;
+  }
+
+  private retargetPresenceForState(next: VoiceState) {
+    const t = performance.now();
+    const preset = this.effectivePreset();
+    let humanTarget = 0;
+    let humanTween = preset.handoff.humanOut;
+    let riffTarget = 0;
+    let riffTween = preset.handoff.riffOut;
+    const enteringRole: Role | null =
+      next === "you-talking"
+        ? "human"
+        : next === "riff-talking"
+          ? "riff"
+          : null;
+    if (next === "you-talking") {
+      humanTarget = 1;
+      humanTween = preset.handoff.humanIn;
+    } else if (next === "riff-talking") {
+      riffTarget = 1;
+      riffTween = preset.handoff.riffIn;
+    } else if (next === "silence") {
+      if (preset.silenceHolder === "human") {
+        humanTarget = 1;
+        humanTween = preset.handoff.humanIn;
+      }
+      if (preset.silenceHolder === "riff") {
+        riffTarget = 0.25;
+        riffTween = preset.handoff.riffIn;
+      }
+    }
+    this.retargetPresence("human", humanTarget, humanTween, t);
+    this.retargetPresence("riff", riffTarget, riffTween, t);
+
+    if (enteringRole) {
+      if (preset.handoff.smearFrames > 0)
+        this.smearFramesLeft[enteringRole] = preset.handoff.smearFrames;
+      if (preset.handoff.entryPunch > 0) {
+        if (enteringRole === "human")
+          this.onsetPulse = Math.max(
+            this.onsetPulse,
+            preset.handoff.entryPunch,
+          );
+        else
+          this.riffOnsetPulse = Math.max(
+            this.riffOnsetPulse,
+            preset.handoff.entryPunch,
+          );
+      }
+    }
   }
 
   // ---- Job channel (independent of voice) ----
@@ -274,9 +565,31 @@ export class VoiceLabEngine {
   }
 
   private beginLanding() {
-    this.cinders = this.cindersEnabled()
-      ? beginLandingImpl(this.frames, this.cinders, this.config.cinderConfig)
-      : (resetFrames(this.frames), (this.cinders = []), this.cinders);
+    const preset = this.effectivePreset();
+    if (!this.cindersEnabled()) {
+      resetFrames(this.frames);
+      this.cinders = [];
+      return;
+    }
+    this.cinders = beginLandingImpl(
+      this.frames,
+      this.cinders,
+      this.config.cinderConfig,
+    );
+    if (preset.landing.hitStopMs > 0)
+      this.hitStopUntil = performance.now() + preset.landing.hitStopMs;
+    if (preset.landing.riffNod) this.riffOnsetPulse = 1;
+    if (preset.landing.tipBurst > 0) {
+      const emitters = this.lastMarkContext?.mark.getTipEmitters
+        ? this.lastMarkContext.mark.getTipEmitters(this.lastMarkContext.g)
+        : [];
+      spawnTipSparks(
+        this.getOrigin(),
+        emitters,
+        preset.landing.tipBurst,
+        this.dustPuffs,
+      );
+    }
   }
 
   // ---- Real mic ----
@@ -337,6 +650,12 @@ export class VoiceLabEngine {
       return d;
     }
     return new Uint8Array(1024);
+  }
+
+  private riffLevelData(t: number, active: boolean): Uint8Array {
+    const d = synthesizeLevelData(t * 0.8 + 4000);
+    if (!active) for (let i = 0; i < d.length; i++) d[i] = Math.min(d[i], 18);
+    return d;
   }
 
   private maybeDetectOnset(t: number, avg: number) {
@@ -411,84 +730,144 @@ export class VoiceLabEngine {
     }
   }
 
-  private drawVoiceLayer(t: number, dt: number) {
+  private updateMarkClock(t: number, dt: number, preset: SequencePreset) {
+    if (t >= this.hitStopUntil) this.markClock += dt * this.timeScale;
+    this.markT =
+      preset.stepFps > 0
+        ? Math.floor(this.markClock / (1000 / preset.stepFps)) *
+          (1000 / preset.stepFps)
+        : this.markClock;
+  }
+
+  private computeDiscSquash(t: number, preset: SequencePreset) {
+    let depth = 0;
+    if (this.anticipationMs > 0) {
+      const elapsed = t - this.anticipationStart;
+      const frac = elapsed / this.anticipationMs;
+      if (frac >= 0 && frac <= 1)
+        depth =
+          this.anticipationDepth *
+          (frac < 0.5 ? frac / 0.5 : 1 - (frac - 0.5) / 0.5);
+    }
+    let breathe = 0;
+    if (
+      preset.breathe.periodMs > 0 &&
+      (this.config.voiceState === "idle" ||
+        this.config.voiceState === "silence")
+    ) {
+      breathe =
+        Math.sin((t / preset.breathe.periodMs) * Math.PI * 2) *
+        preset.breathe.depth;
+    }
+    return {
+      sx: 1 + depth * 0.25 - breathe * 0.5,
+      sy: 1 - depth * 0.5 + breathe,
+    };
+  }
+
+  private drawRole(
+    role: Role,
+    t: number,
+    dt: number,
+    activeRole: Role | null,
+    preset: SequencePreset,
+  ) {
+    const presence = this.presence[role];
+    if (presence <= 0.01) return;
+    const o = this.getOrigin();
+    const active = role === activeRole;
+    const markId =
+      role === "human" ? this.config.humanMarkId : this.config.riffMarkId;
+    const color =
+      role === "human" ? this.config.humanColor : this.config.riffColor;
+    const mark = MARK_BY_ID[markId];
+    let bands: number[];
+    let level: number;
+    let onsetPulse: number;
+    if (role === "human") {
+      const data = this.levelDataForState(
+        t,
+        active ? "you-talking" : "silence",
+      );
+      this.smoothedUser = computeBands(data, this.smoothedUser);
+      bands = BAR_ORDER.map((i) => this.smoothedUser[i]);
+      level = bands.reduce((a, b) => a + b, 0) / bands.length;
+      if (active) this.maybeDetectOnset(t, level);
+      onsetPulse = this.onsetPulse;
+    } else {
+      const data = this.riffLevelData(t, active);
+      this.smoothedAgent = computeBands(data, this.smoothedAgent);
+      bands = BAR_ORDER.map((i) => this.smoothedAgent[i]);
+      level = bands.reduce((a, b) => a + b, 0) / bands.length;
+      if (active) this.maybeDetectRiffOnset(t);
+      onsetPulse = this.riffOnsetPulse;
+    }
+    const smear = this.smearFramesLeft[role] > 0 ? 1.6 : 1;
+    const g: MarkDrawArgs = {
+      o,
+      t: this.markT,
+      level,
+      bands,
+      onsetPulse,
+      boilFrame: this.boilFrame,
+      color,
+      cfg:
+        role === "human"
+          ? this.config.markConfigsByRole.human[markId]
+          : this.config.markConfigsByRole.riff[markId],
+      mode: active ? "talking" : "silence",
+      presence,
+      smear,
+    };
+    setAlphaMul(preset.markPeak * presence);
+    mark.draw(g);
+    setAlphaMul(1);
+    if (this.smearFramesLeft[role] > 0) this.smearFramesLeft[role]--;
+    if (role === "human" && active && this.config.onsetRingsOn)
+      this.drawOnsetRings(t, color);
+    // Sketch-job cinders spawn off whichever mark is Burst (spec item 2):
+    // prefer the active speaker so ray tips stay live during a handoff, but
+    // fall back to a fading Burst so backchannel/underlay sparks keep going.
+    if (mark.id === "burst" && (active || !this.lastMarkContext))
+      this.lastMarkContext = { mark, g };
+  }
+
+  private drawVoiceLayer(t: number, dt: number, preset: SequencePreset) {
     const o = this.getOrigin();
     const state = this.config.voiceState;
-    if (this.config.centerCircleOn) drawMicDisc(o, INK);
-    if (t - this.lastBoilAt > 400) {
+
+    this.presence.human = this.evalPresence("human", t);
+    this.presence.riff = this.evalPresence("riff", t);
+
+    const squash = this.computeDiscSquash(t, preset);
+    if (this.config.centerCircleOn) drawMicDisc(o, INK, squash.sx, squash.sy);
+
+    if (this.markT - this.lastBoilAt > 400) {
       this.boilFrame = (this.boilFrame + 1) % 3;
-      this.lastBoilAt = t;
+      this.lastBoilAt = this.markT;
     }
 
-    // Only a talking state has an "active speaker mark" whose tips sketch
-    // cinders can spawn from; every other state clears it.
-    this.lastMarkContext = null;
+    this.onsetPulse *= Math.pow(0.86, dt / 16.7);
+    this.riffOnsetPulse *= Math.pow(0.86, dt / 16.7);
 
-    if (state === "you-talking") {
-      const data = this.levelDataForState(t, state);
-      this.smoothedUser = computeBands(data, this.smoothedUser);
-      const bands = BAR_ORDER.map((i) => this.smoothedUser[i]);
-      const level = bands.reduce((a, b) => a + b, 0) / bands.length;
-      this.maybeDetectOnset(t, level);
-      this.onsetPulse *= Math.pow(0.86, dt / 16.7);
-      const mark = MARK_BY_ID[this.config.humanMarkId];
-      const g: MarkDrawArgs = {
-        o,
-        t,
-        level,
-        bands,
-        onsetPulse: this.onsetPulse,
-        boilFrame: this.boilFrame,
-        color: this.config.humanColor,
-        cfg: this.config.markConfigsByRole.human[this.config.humanMarkId],
-        mode: "talking",
-      };
-      mark.draw(g);
-      this.lastMarkContext = { mark, g };
-      if (this.config.onsetRingsOn)
-        this.drawOnsetRings(t, this.config.humanColor);
-    } else if (state === "riff-talking") {
-      const data = synthesizeLevelData(t * 0.8 + 4000);
-      this.smoothedAgent = computeBands(data, this.smoothedAgent);
-      const bands = BAR_ORDER.map((i) => this.smoothedAgent[i]);
-      const level = bands.reduce((a, b) => a + b, 0) / bands.length;
-      this.maybeDetectRiffOnset(t);
-      this.riffOnsetPulse *= Math.pow(0.86, dt / 16.7);
-      const mark = MARK_BY_ID[this.config.riffMarkId];
-      const g: MarkDrawArgs = {
-        o,
-        t,
-        level,
-        bands,
-        onsetPulse: this.riffOnsetPulse,
-        boilFrame: this.boilFrame,
-        color: this.config.riffColor,
-        cfg: this.config.markConfigsByRole.riff[this.config.riffMarkId],
-        mode: "talking",
-      };
-      mark.draw(g);
-      this.lastMarkContext = { mark, g };
-    } else if (state === "silence") {
-      const data = this.levelDataForState(t, state);
-      this.smoothedUser = computeBands(data, this.smoothedUser);
-      const bands = BAR_ORDER.map((i) => this.smoothedUser[i]);
-      const level = bands.reduce((a, b) => a + b, 0) / bands.length;
-      const mark = MARK_BY_ID[this.config.humanMarkId];
-      mark.draw({
-        o,
-        t,
-        level,
-        bands,
-        onsetPulse: 0,
-        boilFrame: this.boilFrame,
-        color: this.config.humanColor,
-        cfg: this.config.markConfigsByRole.human[this.config.humanMarkId],
-        mode: "silence",
-      });
-    } else if (state === "dead-mic") {
-      drawFlatline(o, this.config.humanColor);
-    } else {
-      drawIdleSquiggle(o, t, this.config.humanColor, 0);
+    this.lastMarkContext = null;
+    const activeRole: Role | null =
+      state === "you-talking"
+        ? "human"
+        : state === "riff-talking"
+          ? "riff"
+          : null;
+
+    // Incoming role drawn on top: draw the outgoing (or non-active) role
+    // first, active role last.
+    const order: Role[] =
+      activeRole === "riff" ? ["human", "riff"] : ["riff", "human"];
+    for (const role of order) this.drawRole(role, t, dt, activeRole, preset);
+
+    if (activeRole === null) {
+      if (state === "dead-mic") drawFlatline(o, this.config.humanColor);
+      else if (state === "idle" && this.presence.human < 0.02)
+        drawIdleSquiggle(o, t, this.config.humanColor, 0);
     }
   }
 
@@ -498,11 +877,22 @@ export class VoiceLabEngine {
     this.ctx.drawImage(this.dotGridCanvas, 0, 0);
   }
 
-  private updateSketchSpawning(t: number, dt: number) {
+  private jobDuckEnvelope(preset: SequencePreset): number {
+    // Sidechain ducking: cinders yield visually while a voice role is
+    // active (research point 9) — duck is a preset gate on top of Sean's own
+    // cinder settings, never a suppression of voice.
+    const active = this.presence.human > 0.3 || this.presence.riff > 0.3;
+    return active ? 1 - preset.job.duck : 1;
+  }
+
+  private updateSketchSpawning(t: number, dt: number, preset: SequencePreset) {
     const elapsed = t - this.sketchStartTime;
     if (elapsed > 11000) return;
     if (this.cinders.length >= this.config.cinderConfig.cinderCap) return;
-    const rate = Math.max(0, 30 * (1 - elapsed / 11000));
+    if (preset.job.emit === "none") return;
+    if (preset.job.emit === "gaps" && !this.isVoiceGap()) return;
+    const duck = this.jobDuckEnvelope(preset);
+    const rate = Math.max(0, 30 * (1 - elapsed / 11000)) * duck;
     this.spawnAccumulator += (rate * dt) / 1000;
     // Sparks off ray tips: if the active speaker mark exposes an emitter
     // (e.g. Burst), a fraction of spawns fly off its live tip points instead
@@ -511,6 +901,18 @@ export class VoiceLabEngine {
     const emitters = this.lastMarkContext?.mark.getTipEmitters
       ? this.lastMarkContext.mark.getTipEmitters(this.lastMarkContext.g)
       : [];
+    if (preset.job.emit === "onsets") {
+      const punched = Math.max(this.onsetPulse, this.riffOnsetPulse) > 0.6;
+      if (punched && emitters.length > 0) {
+        const n = 3 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < n; i++) {
+          if (this.cinders.length >= this.config.cinderConfig.cinderCap) break;
+          const emitter = emitters[Math.floor(Math.random() * emitters.length)];
+          spawnCinder(this.getOrigin(), this.frames, t, this.cinders, emitter);
+        }
+      }
+      return;
+    }
     while (
       this.spawnAccumulator >= 1 &&
       this.cinders.length < this.config.cinderConfig.cinderCap
@@ -526,17 +928,67 @@ export class VoiceLabEngine {
     }
   }
 
+  // ---- Glow (spec §3.6) ----
+  attachGlow(els: { cyan: HTMLElement; green: HTMLElement }) {
+    this.glowCyanEl = els.cyan;
+    this.glowGreenEl = els.green;
+  }
+
+  private updateGlow(
+    t: number,
+    dt: number,
+    preset: SequencePreset,
+    voiceLevel: number,
+  ) {
+    const target =
+      preset.glow.level[this.config.voiceState] *
+      (1 - preset.glow.follow + preset.glow.follow * voiceLevel);
+    const tc =
+      target > this.glowFollower
+        ? preset.envelope.attackMs
+        : preset.envelope.releaseMs;
+    if (tc <= 0) this.glowFollower = target;
+    else {
+      const alpha = 1 - Math.exp(-dt / tc);
+      this.glowFollower += (target - this.glowFollower) * alpha;
+    }
+    const ambient = this.config.ambientGlowOn ? 1 : 0;
+    const reducedMul = this.reducedMotionActive() ? 0.4 : 1;
+    const opacity =
+      Math.max(0, Math.min(1.2, this.glowFollower)) * ambient * reducedMul;
+    const scale = 1 + (preset.glow.swell - 1) * this.glowFollower;
+    if (this.glowCyanEl) {
+      this.glowCyanEl.style.opacity = String(opacity);
+      this.glowCyanEl.style.transform = `scale(${scale})`;
+    }
+    if (this.glowGreenEl) {
+      this.glowGreenEl.style.opacity = String(opacity);
+      this.glowGreenEl.style.transform = `scale(${scale})`;
+    }
+  }
+
   private renderFrame(t: number) {
     const dt = Math.min(48, t - this.lastT);
     this.lastT = t;
     this.drawBackground();
 
+    const preset = this.effectivePreset();
+    this.updateMarkClock(t, dt, preset);
+    this.player.tick(t, this.timeScale);
+
     // Job channel — cinders + landing frames render independent of voice.
     if (this.config.showFramesOn)
-      drawFrames(this.ctx, this.frames, t, this.config.cinderConfig);
+      drawFrames(
+        this.ctx,
+        this.frames,
+        t,
+        this.config.cinderConfig,
+        preset.landing.inkStaggerMs,
+        preset.landing.impact,
+      );
     if (this.cindersEnabled()) {
       if (this.config.jobState === "sketching")
-        this.updateSketchSpawning(t, dt);
+        this.updateSketchSpawning(t, dt, preset);
       for (const c of this.cinders)
         if (c.phase === "drift")
           updateCinderDrift(
@@ -548,11 +1000,29 @@ export class VoiceLabEngine {
             this.config.cinderConfig,
           );
       this.dustPuffs = this.dustPuffs.filter((d) => t - d.born < d.life);
-      drawCinders(this.ctx, this.cinders, this.dustPuffs, this.getOrigin(), t);
+      drawCinders(
+        this.ctx,
+        this.cinders,
+        this.dustPuffs,
+        this.getOrigin(),
+        t,
+        this.jobDuckEnvelope(preset),
+      );
     }
 
     // Voice channel — always renders, regardless of job state.
-    this.drawVoiceLayer(t, dt);
+    this.drawVoiceLayer(t, dt, preset);
+
+    const voiceLevel =
+      Math.max(this.presence.human, this.presence.riff) > 0.01
+        ? Math.max(
+            this.presence.human > 0.01 ? this.presence.human : 0,
+            this.presence.riff > 0.01 ? this.presence.riff : 0,
+          )
+        : 0;
+    this.updateGlow(t, dt, preset, voiceLevel);
+
+    if (this.onStatus && this.player.playing) this.emitStatus();
   }
 
   scheduleLoop() {
@@ -649,6 +1119,7 @@ export class VoiceLabEngine {
     if (this.rafId) cancelAnimationFrame(this.rafId);
     if (this.staticIntervalId) clearInterval(this.staticIntervalId);
     if (this.autoLandTimer) clearTimeout(this.autoLandTimer);
+    if (this.backchannelTimer) clearTimeout(this.backchannelTimer);
     this.mql.removeEventListener("change", this.onMqlChange);
     document.removeEventListener("visibilitychange", this.onVisibilityChange);
     this.disableRealMic();

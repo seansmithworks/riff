@@ -8,6 +8,7 @@ import {
   roundRectPath,
 } from "./constants";
 import type { CinderConfig } from "./types";
+import type { LandingImpact } from "./sequence";
 
 type FrameElement = {
   id: string;
@@ -249,6 +250,36 @@ export function spawnDustPuff(
   }
 }
 
+// Landing tip-spark burst (spec §3.8) — modeled on spawnDustPuff, but
+// launches from the active mark's live ray tips (falling back to origin)
+// instead of the disc, so the "sketch job speaks through the mark" moment
+// reads at the landing.
+export function spawnTipSparks(
+  origin: { x: number; y: number },
+  emitters: { x: number; y: number; angle: number }[],
+  n: number,
+  dustPuffs: DustPuff[],
+) {
+  for (let i = 0; i < n; i++) {
+    const emitter = emitters.length
+      ? emitters[Math.floor(Math.random() * emitters.length)]
+      : null;
+    const baseAngle = emitter ? emitter.angle : -Math.PI / 2;
+    const angle = baseAngle + (Math.random() - 0.5) * 0.9;
+    const speed = 0.8 + Math.random() * 1.6;
+    dustPuffs.push({
+      x: emitter ? emitter.x : origin.x + (Math.random() - 0.5) * 16,
+      y: emitter ? emitter.y : origin.y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      born: performance.now(),
+      life: 500 + Math.random() * 300,
+      len: 3 + Math.random() * 4,
+      rot: angle,
+    });
+  }
+}
+
 export function spawnCinder(
   origin: { x: number; y: number },
   frames: Frame[],
@@ -395,6 +426,8 @@ export function drawFrames(
   frames: Frame[],
   t: number,
   cfg: CinderConfig,
+  inkStaggerMs = 0,
+  impact: LandingImpact = { kind: "ticks" },
 ) {
   for (const f of frames) {
     const inkStart = f.landStartedAt
@@ -429,16 +462,41 @@ export function drawFrames(
       continue;
     }
     const inkMs = cfg.landDurationMs * (180 / 900);
-    const inkT = Math.max(0, Math.min(1, (t - inkStart) / inkMs));
-    if (inkT > 0) {
-      drawInkingReveal(ctx, f.paths.outline, inkT);
-      for (const el of f.paths.elements) drawInkingReveal(ctx, el, inkT);
-      if (inkT >= 1) {
-        const settleT = Math.min(
-          1,
-          (t - inkStart - inkMs) / (cfg.landDurationMs * (160 / 900)),
+    const outlineT = Math.max(0, Math.min(1, (t - inkStart) / inkMs));
+    if (outlineT > 0) {
+      drawInkingReveal(ctx, f.paths.outline, outlineT);
+      // Per-element stagger (spec §3.8): each element starts inking a
+      // fraction later than the last, capped at 600ms total across the set,
+      // so the frame reads as hand-drawn rather than all lines at once.
+      const staggerTotal = Math.min(600, inkStaggerMs);
+      const n = f.paths.elements.length;
+      let allDone = outlineT >= 1;
+      f.paths.elements.forEach((el, i) => {
+        const delay = n > 1 ? (i / (n - 1)) * staggerTotal : 0;
+        const elT = Math.max(0, Math.min(1, (t - inkStart - delay) / inkMs));
+        if (elT > 0) drawInkingReveal(ctx, el, elT);
+        if (elT < 1) allDone = false;
+      });
+      if (allDone) {
+        const settleMs = cfg.landDurationMs * (160 / 900);
+        const settleT = Math.max(
+          0,
+          Math.min(1, (t - inkStart - inkMs - staggerTotal) / settleMs),
         );
-        drawImpactMarks(ctx, f, settleT);
+        const squashScale =
+          impact.kind === "squash"
+            ? 1 + (easeOutBack(settleT) - 1) * 0.12 * impact.bounce
+            : 1;
+        if (squashScale !== 1) {
+          ctx.save();
+          const cx = f.x + f.w / 2,
+            cy = f.y + f.h / 2;
+          ctx.translate(cx, cy);
+          ctx.scale(squashScale, squashScale);
+          ctx.translate(-cx, -cy);
+        }
+        if (impact.kind !== "none") drawImpactMarks(ctx, f, settleT);
+        if (squashScale !== 1) ctx.restore();
         if (settleT >= 1) f.landed = true;
       }
     }
@@ -520,6 +578,7 @@ export function drawCinders(
   dustPuffs: DustPuff[],
   origin: { x: number; y: number },
   t: number,
+  duckAlpha = 1,
 ) {
   ctx.save();
   ctx.strokeStyle = INK;
@@ -530,7 +589,7 @@ export function drawCinders(
       const fade = Math.max(0.15, 1 - distFromOrigin / 900);
       const angle = Math.atan2(c.vy, c.vx);
       const hl = c.len / 2;
-      ctx.globalAlpha = fade * 0.8;
+      ctx.globalAlpha = fade * 0.8 * duckAlpha;
       ctx.lineWidth = 1.25;
       ctx.beginPath();
       ctx.moveTo(c.x - Math.cos(angle) * hl, c.y - Math.sin(angle) * hl);
