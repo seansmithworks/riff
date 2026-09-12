@@ -109,3 +109,13 @@ Done this session: glow hard edge via mask (`f403a3e`), Glow slider set (Strengt
 **Parked (off-objective):**
 
 - [ ] DialKit panel separation — Sean's cut-off point ("sparks/glow panel needs to be better separated with…"), he no longer recalls it; revisit if it resurfaces.
+
+### 2026-09-12 (ink-and-wash sketchbook, Phase A)
+
+- [x] Dot-grid paper: `DotGrid` addressable buffer, dirty-dot redraws, new Paper panel (Pitch/Dot size/Base opacity/on-off)
+- [x] Glow as texture: density field tints/brightens dot-grid paper (Style: Wash/Dots/Both)
+- [x] Watercolor treatment: wet edge, granulation, 2-3 glazes, wet-in-wet boundary warp
+- [x] Role-color dominance fix: "Role color" dial + `hueBiasExplicit` so presets 1/4 read blue/yellow/green by default
+- [x] Stroke bleed primitive: `bleedAlongPath` + single ink-advance callback hook in `frames.ts`
+- [x] Reviewer nit: Amoeba's smear now widens outline reach like Burst's rays
+- [ ] **Phase B: sparks build the sketch on the grid** — particle landing snaps to nearest grid dot, speculative tiers draw as lit-dot skeletons, dots fade to paper under finished ink (voice-lab-dotgrid-addendum.md §3). Separate builder.
