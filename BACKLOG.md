@@ -99,8 +99,12 @@ Done this session: glow hard edge via mask (`f403a3e`), Glow slider set (Strengt
 ## 2026-09-12 (sequence exploration)
 
 - [x] 10 sequence presets built
-- [ ] recording of all 10 sent to Sean
-- [ ] Sean picks a direction
+- [x] recording of all 10 sent to Sean
+- [ ] Sean picks a preset direction
+- [ ] Fluid "shader" gradient glow (blue/green, tied to voice activity)
+- [ ] Color semantics: human = blue, Riff = yellow, overlap = green
+- [ ] New Amoeba mark, single wobbly loop (shipped as default human mark per Sean's correction; Riff keeps Burst)
+- [ ] Center disc squash & stretch (vertical for human, horizontal for Riff)
 
 **Parked (off-objective):**
 
