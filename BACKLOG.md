@@ -129,9 +129,24 @@ Done this session: glow hard edge via mask (`f403a3e`), Glow slider set (Strengt
 **Carried (on-objective):**
 
 - [ ] Sean picks a base choreography — strawman in place: preset "B · Blend" (Mm-hm turn-taking + Catch sparks, `32b61be`, default on fresh installs). Next thread: apply his redlines, don't re-ask.
-- [ ] Sean's dial pass → bake DialKit values as code defaults (verify in a clean browser; saved localStorage overrides defaults).
+- [x] Sean's dial pass → bake DialKit values as code defaults (verify in a clean browser; saved localStorage overrides defaults). `6771c2c`
 - [ ] Merge feat/voice-lab → main (= prod deploy; per-deploy nod), then Phases 1–3: bring the winning system into the real voice UI. Known blocker: React Flow node coords move during fitView; evolve = diff re-ink, not rebuild.
 - [ ] DECIDE OR KILL (carried 2× since 2026-09-11): voice-mark origin bottom-center (built default) vs bottom-right; white pill vs disc. Disc squash assumes the disc.
 - [ ] DECIDE OR KILL (carried 5× since 2026-09-10): feat/load-logo @ 0f52726 — clean SVG export, draw-in intro only, or kill.
 
 **Parked (off-objective):** see the Phase B deferred items above and the panel-separation item; not duplicated here.
+
+### voice-lab morph transition system (2026-09-12, feat/voice-lab)
+
+Build order from `docs/voice-lab-morph-spec.md`, one commit per step:
+
+- [ ] Step 1: F0 fixes (landing white-card flash, landing timestamp ownership, construction dots after clear)
+- [ ] Step 2: `morph.ts` motion primitives + F2–F7 engine/marks/fluidGlow/frames integration
+- [ ] Step 3: 5 Morph styles (build order 1 · Still Breath → 4 · Ink & Wash → 3 · Relay → 5 · Elastic → 2 · Shapeshift)
+- [ ] Step 4: MorphPanel, `M`/`Shift+M` hotkey, caption label
+- [ ] Step 5: Evidence recordings + ffmpeg acceptance checks in `docs/evidence/morph/`
+- [ ] Sean picks a Morph style (strawman default: Ink & Wash; fork: one creature [Shapeshift/Elastic] vs two speakers [Relay/Ink & Wash])
+- [ ] Fresh load comes up paused (VoicePanel mount stops autoplay) — awaiting Sean's nod, not fixed
+- [ ] Landing particle and ink-bleed color follows the wrong role (`activeRoleAndMarkId` reports human during silence) — noticed, not fixed
+- [ ] `burstUnderlay` is dead (typed and set by presets but never read) — noticed, not fixed
+- [ ] Burst boil runs at ~11Hz, above the reduced-motion 3Hz guidance — noticed, not fixed

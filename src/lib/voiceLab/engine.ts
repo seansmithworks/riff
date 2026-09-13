@@ -288,6 +288,16 @@ export class VoiceLabEngine implements SequenceHost {
   private discVx = 0;
   private discVy = 0;
 
+  // F0 one-frame clock: renderFrame stores the rAF-driven t here before
+  // player.tick runs, so state-change handlers invoked mid-frame (retarget
+  // presence, land, sketch-start) stamp themselves with the same instant the
+  // frame is about to draw, instead of a later performance.now() that can
+  // land after the draw's own clock read (the T7 landing flash's root cause).
+  private frameT = 0;
+  private now(): number {
+    return this.frameT || performance.now();
+  }
+
   constructor(canvas: HTMLCanvasElement, config?: EngineConfig) {
     this.canvas = canvas;
     this.config = config ?? defaultEngineConfig();
@@ -489,7 +499,7 @@ export class VoiceLabEngine implements SequenceHost {
     this.dustPuffs = [];
     this.config.jobState = "none";
     this.config.voiceState = "idle";
-    const t = performance.now();
+    const t = this.now();
     this.presence.human = 0;
     this.presence.riff = 0;
     this.presenceTween.human = { from: 0, to: 0, start: t, tween: ZERO_TWEEN };
@@ -520,7 +530,7 @@ export class VoiceLabEngine implements SequenceHost {
   }
 
   triggerAnticipation(depth: number, ms: number) {
-    this.anticipationStart = performance.now();
+    this.anticipationStart = this.now();
     this.anticipationMs = ms;
     this.anticipationDepth = depth;
   }
@@ -529,7 +539,7 @@ export class VoiceLabEngine implements SequenceHost {
   // from the human (research point 4) — voiceState is untouched.
   triggerBackchannel(presence: number, ms: number) {
     if (presence <= 0) return;
-    const t = performance.now();
+    const t = this.now();
     const preset = this.effectivePreset();
     this.retargetPresence(
       "riff",
@@ -541,12 +551,7 @@ export class VoiceLabEngine implements SequenceHost {
     this.backchannelTimer = setTimeout(() => {
       this.backchannelTimer = null;
       const floor = this.silenceRiffFloor();
-      this.retargetPresence(
-        "riff",
-        floor,
-        preset.handoff.riffOut,
-        performance.now(),
-      );
+      this.retargetPresence("riff", floor, preset.handoff.riffOut, this.now());
     }, ms);
   }
 
@@ -588,7 +593,7 @@ export class VoiceLabEngine implements SequenceHost {
   }
 
   private retargetPresenceForState(next: VoiceState) {
-    const t = performance.now();
+    const t = this.now();
     const preset = this.effectivePreset();
     let humanTarget = 0;
     let humanTween = preset.handoff.humanOut;
@@ -649,12 +654,13 @@ export class VoiceLabEngine implements SequenceHost {
       this.cinders = [];
       this.dustPuffs = [];
       this.buildPlan = null;
-      this.sketchStartTime = performance.now();
+      this.sketchStartTime = this.now();
       if (this.cindersEnabled())
         spawnDustPuff(
           this.getOrigin(),
           this.config.cinderConfig,
           this.dustPuffs,
+          this.sketchStartTime,
         );
       // Skip the wall-clock auto-land while the player drives (spec §3.1):
       // its own landing.policy (immediate/nextGap) decides when `ready`
@@ -684,7 +690,7 @@ export class VoiceLabEngine implements SequenceHost {
 
   private beginLanding() {
     const preset = this.effectivePreset();
-    const now = performance.now();
+    const now = this.now();
     // The ink/crossfade build always runs on landing (build-plan.md §3's
     // reduced-motion tier crossfade included) — only particle scheduling
     // (drift-cinder recruitment, pooled sparks) depends on cinders being
@@ -692,6 +698,13 @@ export class VoiceLabEngine implements SequenceHost {
     // must not stall the frame on guide dots forever.
     const cindersOn = this.cindersEnabled();
     resetFrames(this.frames);
+    // F0 landing-timestamp ownership: every frame gets landStartedAt here,
+    // unconditionally, before the cindersOn branch below. Previously this
+    // was only ever set inside beginLandingImpl's own resetFrames+stamp,
+    // which only ran when cinders were on — so Cinders-off landings drew
+    // cards at t=0 forever (landStartedAt stuck at 0), i.e. full alpha, no
+    // fade.
+    for (const f of this.frames) f.landStartedAt = now;
     // Recruit drift cinders (bearing-sorted from the origin) as the pooled
     // spark particles' launch points (build-plan.md §2/§3) — this happens
     // before ensuring the drift floor below so a fast landing (few cinders
@@ -711,6 +724,7 @@ export class VoiceLabEngine implements SequenceHost {
         this.frames,
         this.cinders,
         this.config.cinderConfig,
+        now,
       );
     } else {
       this.cinders = [];
@@ -731,6 +745,7 @@ export class VoiceLabEngine implements SequenceHost {
         emitters,
         preset.landing.tipBurst,
         this.dustPuffs,
+        now,
       );
     }
     const clearAt = this.player.nextBeatAt(
@@ -1358,6 +1373,10 @@ export class VoiceLabEngine implements SequenceHost {
   private renderFrame(t: number) {
     const dt = Math.min(48, t - this.lastT);
     this.lastT = t;
+    // F0 one-frame clock: stamp before player.tick / any state-change side
+    // effect runs this frame, so this.now() below reads the same instant
+    // this frame is drawing at, not a later performance.now().
+    this.frameT = t;
     this.drawBackground(dt);
 
     const preset = this.effectivePreset();
@@ -1384,7 +1403,14 @@ export class VoiceLabEngine implements SequenceHost {
         this.config.paperOn ? this.onInkAdvance : undefined,
         this.buildPlan,
         {
-          speculativeFrame: this.config.buildConfig.speculativeFrame,
+          // F0: construction dots only draw while a job is actually
+          // sketching — otherwise the speculative layer (which draws
+          // whenever no plan exists, regardless of job state) re-lights
+          // within a few frames of clear.
+          speculativeFrame:
+            this.config.jobState === "sketching"
+              ? this.config.buildConfig.speculativeFrame
+              : "off",
           guideDots: this.config.buildConfig.guideDots,
           dotGrid: this.config.paperOn ? this.dotGrid : null,
           reducedMotion: this.reducedMotionActive(),

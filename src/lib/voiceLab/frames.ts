@@ -360,6 +360,7 @@ export function spawnDustPuff(
   origin: { x: number; y: number },
   cfg: CinderConfig,
   dustPuffs: DustPuff[],
+  t: number,
 ) {
   for (let i = 0; i < cfg.burstSize; i++) {
     const angle = -Math.PI / 2 + (Math.random() - 0.5) * 2.2;
@@ -369,7 +370,7 @@ export function spawnDustPuff(
       y: origin.y,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
-      born: performance.now(),
+      born: t,
       life: 700 + Math.random() * 300,
       len: 3 + Math.random() * 3,
       rot: angle,
@@ -386,6 +387,7 @@ export function spawnTipSparks(
   emitters: { x: number; y: number; angle: number }[],
   n: number,
   dustPuffs: DustPuff[],
+  t: number,
 ) {
   for (let i = 0; i < n; i++) {
     const emitter = emitters.length
@@ -399,7 +401,7 @@ export function spawnTipSparks(
       y: emitter ? emitter.y : origin.y,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
-      born: performance.now(),
+      born: t,
       life: 500 + Math.random() * 300,
       len: 3 + Math.random() * 4,
       rot: angle,
@@ -491,8 +493,8 @@ export function beginLanding(
   frames: Frame[],
   cinders: Cinder[],
   cfg: CinderConfig,
+  t: number,
 ): Cinder[] {
-  const t = performance.now();
   resetFrames(frames);
   for (const f of frames) f.landStartedAt = t;
   if (cinders.filter((c) => c.phase === "drift").length >= 20) return cinders;
