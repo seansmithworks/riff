@@ -160,7 +160,14 @@ async function callFireworksOnce(
   messages: ChatMessage[],
   apiKey: string,
   modelId: string,
+  signal?: AbortSignal,
 ): Promise<string> {
+  if (signal?.aborted) {
+    throw signal.reason instanceof Error
+      ? signal.reason
+      : new DOMException("Aborted", "AbortError");
+  }
+
   const res = await fetch(FIREWORKS_URL, {
     method: "POST",
     headers: {
@@ -168,7 +175,9 @@ async function callFireworksOnce(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(buildRequestBody(messages, modelId)),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT_MS)])
+      : AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 
   if (!res.ok) {
@@ -250,6 +259,7 @@ async function waitBeforeRetry(attempt: number, reason: string) {
 
 async function callFireworks(
   messages: ChatMessage[],
+  signal?: AbortSignal,
 ): Promise<{ content: string; model: string }> {
   const apiKey = process.env.FIREWORKS_API_KEY;
   if (!apiKey) {
@@ -261,9 +271,15 @@ async function callFireworks(
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const modelId = modelForAttempt(attempt);
     try {
-      const content = await callFireworksOnce(messages, apiKey, modelId);
+      const content = await callFireworksOnce(
+        messages,
+        apiKey,
+        modelId,
+        signal,
+      );
       return { content, model: modelId };
     } catch (err) {
+      if (signal?.aborted) throw signal.reason ?? err;
       lastError = err;
 
       const reason = retryReason(err, modelId);
@@ -284,9 +300,11 @@ async function callFireworks(
 export async function generateArtifact({
   brief,
   currentArtifact,
+  signal,
 }: {
   brief: string;
   currentArtifact?: Artifact;
+  signal?: AbortSignal;
 }): Promise<{ artifact: Artifact; model: string }> {
   const messages: ChatMessage[] = [
     {
@@ -296,7 +314,7 @@ export async function generateArtifact({
     { role: "user", content: buildUserMessage(brief, currentArtifact) },
   ];
 
-  const first = await callFireworks(messages);
+  const first = await callFireworks(messages, signal);
 
   try {
     const parsed = JSON.parse(first.content);
@@ -315,7 +333,7 @@ export async function generateArtifact({
       content: `That response was invalid: ${errorMessage}. Respond again with ONLY valid JSON strictly matching the schema.`,
     });
 
-    const retry = await callFireworks(messages);
+    const retry = await callFireworks(messages, signal);
     const parsed = JSON.parse(retry.content);
     if (!validateArtifact(parsed)) {
       const validationError: ModelTaggedError = new Error(
@@ -699,10 +717,17 @@ export async function* streamArtifact({
     return;
   }
 
+  if (signal.aborted) {
+    console.error(
+      `[api/generate] streamed result invalid (finish_reason ${call.finishReason}); skipping generateArtifact fallback, signal already aborted`,
+    );
+    return;
+  }
+
   console.error(
     `[api/generate] streamed result invalid (finish_reason ${call.finishReason}); falling back to generateArtifact`,
   );
-  const batch = await generateArtifact({ brief, currentArtifact });
+  const batch = await generateArtifact({ brief, currentArtifact, signal });
   yield {
     type: "done",
     artifact: batch.artifact,

@@ -20,9 +20,9 @@ type GenerateBody = {
   truncateAfterScreens?: number;
 };
 
-// Requests that send `Accept: application/x-ndjson` get the stream. Everyone
-// else keeps the one-shot JSON response, which useVoice.ts and
-// CopilotPanel.tsx rely on until they move to the stream (plan Step 4).
+// Requests that send `Accept: application/x-ndjson` get the stream. Voice
+// and text both send it, via sketch-job.ts. The one-shot JSON response below
+// remains for any other caller.
 const NDJSON = "application/x-ndjson";
 
 export async function POST(req: NextRequest) {
