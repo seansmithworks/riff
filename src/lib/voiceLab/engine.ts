@@ -384,6 +384,11 @@ export class VoiceLabEngine implements SequenceHost {
     schedule: StreamSchedule;
     outlineShown: boolean;
     next: number; // index into streamOrder of the next frame to ink
+    // Frames this job will ink: all of them, until a clear drops the parts
+    // that hadn't arrived yet.
+    count: number;
+    // The clear beat fired; tickStream applies it once arrived frames ink.
+    clearPending: boolean;
   } | null = null;
   // Frames in schema order (x), the order planBuild inks them.
   private streamOrder: Frame[];
@@ -876,6 +881,11 @@ export class VoiceLabEngine implements SequenceHost {
 
   // ---- Job channel (independent of voice) ----
   setJobState(next: JobState) {
+    // Stream prototype: a clear waits for arrived frames to finish inking.
+    if (next === "none" && this.streamJob) {
+      this.deferStreamClear();
+      return;
+    }
     if (this.autoLandTimer) {
       clearTimeout(this.autoLandTimer);
       this.autoLandTimer = null;
@@ -917,7 +927,6 @@ export class VoiceLabEngine implements SequenceHost {
     }
     if (next === "landing") this.beginLanding();
     if (next === "none") {
-      this.streamJob = null;
       // F6 clear: a Morph style keeps the plan alive and drives jobOut to 0
       // over clearMs instead of vanishing in one frame — stepMotion() runs
       // resetFrames/nulls the plan once the spring settles below 0.01. Old
@@ -959,15 +968,16 @@ export class VoiceLabEngine implements SequenceHost {
     // Arrival dials are loop time, like beats; builds run on the wall clock,
     // so slow-mo stretches the arrivals but not the pen's own draw speed.
     const ts = this.timeScale;
+    // Hit-stop fires once per job, on the first frame only.
     const spans = this.streamOrder.map(
-      (f) =>
+      (f, i) =>
         frameBuildMs(
           f,
           this.config.buildConfig,
           this.config.cinderConfig,
           preset.landing.inkStaggerMs,
           rm,
-        ) + preset.landing.hitStopMs,
+        ) + (i === 0 ? preset.landing.hitStopMs : 0),
     );
     return {
       startAt: this.sketchStartTime,
@@ -982,34 +992,64 @@ export class VoiceLabEngine implements SequenceHost {
       ),
       outlineShown: false,
       next: 0,
+      count: this.streamOrder.length,
+      clearPending: false,
     };
   }
 
-  // Once per render frame while a streamed job sketches: shows the outline
-  // head, then lands each frame at its scheduled ink start. Allocates only on
+  // Once per render frame while a streamed job is live: shows the outline
+  // head, lands each frame at its scheduled ink start, and applies a deferred
+  // clear once every arrived frame has finished inking. Allocates only on
   // those events.
   private tickStream(t: number) {
     const job = this.streamJob;
-    if (!job || this.config.jobState !== "sketching") return;
+    if (!job) return;
     const elapsed = t - job.startAt;
-    if (!job.outlineShown && elapsed >= job.schedule.outlineMs)
-      job.outlineShown = true;
-    const starts = job.schedule.inkStartMs;
-    while (job.next < this.streamOrder.length && elapsed >= starts[job.next]) {
-      job.outlineShown = true;
-      const plan = this.landFrames(
-        [this.streamOrder[job.next]],
-        job.startAt + starts[job.next],
-        job.schedule.tempo,
-      );
-      if (this.buildPlan) mergeBuildPlan(this.buildPlan, plan);
-      else this.buildPlan = plan;
-      job.next++;
+    if (this.config.jobState === "sketching") {
+      if (!job.outlineShown && elapsed >= job.schedule.outlineMs)
+        job.outlineShown = true;
+      const starts = job.schedule.inkStartMs;
+      while (job.next < job.count && elapsed >= starts[job.next]) {
+        job.outlineShown = true;
+        const plan = this.landFrames(
+          [this.streamOrder[job.next]],
+          job.startAt + starts[job.next],
+          job.schedule.tempo,
+          job.next === 0,
+        );
+        if (this.buildPlan) mergeBuildPlan(this.buildPlan, plan);
+        else this.buildPlan = plan;
+        job.next++;
+      }
+      if (job.next >= job.count) {
+        this.config.jobState = "landing";
+        this.emitStatus();
+      }
     }
-    if (job.next >= this.streamOrder.length) {
-      this.config.jobState = "landing";
-      this.emitStatus();
+    if (
+      job.clearPending &&
+      job.next >= job.count &&
+      (!this.buildPlan || t >= this.buildPlan.endAt)
+    ) {
+      this.streamJob = null;
+      this.setJobState("none");
     }
+  }
+
+  // Stream prototype: the job's clear beat never cuts ink in progress. Parts
+  // that hadn't arrived are dropped; frames that had keep inking (a queued
+  // steady frame included), and tickStream applies the clear when the last
+  // one finishes. Only the job channel waits; voice beats keep the player's
+  // clock.
+  private deferStreamClear() {
+    const job = this.streamJob;
+    if (!job || job.clearPending) return;
+    job.clearPending = true;
+    const elapsed = this.now() - job.startAt;
+    const arrive = job.schedule.arriveMs;
+    let arrived = job.next;
+    while (arrived < job.count && arrive[arrived] <= elapsed) arrived++;
+    job.count = arrived;
   }
 
   private streamLandRemaining() {
@@ -1017,12 +1057,15 @@ export class VoiceLabEngine implements SequenceHost {
     if (!job) return;
     const elapsed = this.now() - job.startAt;
     const starts = job.schedule.inkStartMs;
-    for (let i = job.next; i < starts.length; i++)
+    const arrive = job.schedule.arriveMs;
+    for (let i = job.next; i < job.count; i++) {
       starts[i] = Math.min(starts[i], elapsed);
+      arrive[i] = Math.min(arrive[i], elapsed);
+    }
   }
 
   private beginLanding() {
-    this.buildPlan = this.landFrames(this.frames, this.now(), null);
+    this.buildPlan = this.landFrames(this.frames, this.now(), null, true);
   }
 
   // One landing over `frames`, starting at `now`. Batch lands every frame at
@@ -1032,6 +1075,9 @@ export class VoiceLabEngine implements SequenceHost {
     frames: Frame[],
     now: number,
     streamTempo: number | null,
+    // Hit-stop freezes the mark clock globally, so a streamed job fires it on
+    // its first frame only; batch always fires it.
+    hitStop: boolean,
   ): BuildPlan {
     const preset = this.effectivePreset();
     // The ink/crossfade build always runs on landing (build-plan.md §3's
@@ -1098,12 +1144,12 @@ export class VoiceLabEngine implements SequenceHost {
     } else {
       this.cinders = [];
     }
-    if (preset.landing.hitStopMs > 0)
-      this.hitStopUntil = now + preset.landing.hitStopMs;
+    const hitStopMs = hitStop ? preset.landing.hitStopMs : 0;
+    if (hitStopMs > 0) this.hitStopUntil = now + hitStopMs;
     // Build clock starts after hit-stop (build-plan.md §2): hitStopUntil only
     // freezes the mark clock, so without this the build's own clock (t below)
     // would already be hitStopMs into tier 0's sweep when the freeze reads.
-    const buildStartAt = now + preset.landing.hitStopMs;
+    const buildStartAt = now + hitStopMs;
     if (preset.landing.riffNod) this.riffOnsetPulse = 1;
     if (cindersOn && preset.landing.tipBurst > 0) {
       if (this.morphId === "relay" && this.motion.relay.land.on) {

@@ -199,9 +199,9 @@ Four asks off the 10-preset review, all wired to dials (`src/lib/voiceLab/fluidG
 Fakes progressive-sketch options A+B from the research. Stream panel (after Morph); `T` flips batch/stream, `Shift+T` flips steady/bursts. Model: `src/lib/voiceLab/stream.ts`. Mode, pace, and dials latch at job start.
 
 - **Batch** is today's job: the speculative layer from job start, then one `ready` landing builds every frame at once.
-- **Stream** shows nothing until `outlineMs` (1.5s), when every frame gets its speculative look (the outline head). Each frame then inks when its part arrives: `frame1Ms` 2.0s, `frame2Ms` 5.5s after job start, in schema (x) order. The preset's `ready` beat is ignored. `L` makes every remaining part arrive now.
+- **Stream** shows nothing until `outlineMs` (1.5s), when every frame gets its speculative look (the outline head). Each frame then inks when its part arrives: `frame1Ms` 2.0s, `frame2Ms` 5.5s after job start, in schema (x) order. The preset's `ready` beat is ignored. `L` makes every remaining part arrive now. The clear beat never cuts ink: parts that hadn't arrived are dropped, frames that had finish inking, then the job clears (voice beats keep their own clock).
 - **Bursts:** a frame inks at normal build speed the moment it arrives.
 - **Steady pen (default):** ink starts at the first arrival and runs at one tempo, the fastest (at most normal speed) at which the pen is never idle longer than `bufferMs` (1.5s) before the next part. A frame never starts before it arrives or before the previous frame finishes.
-- Each frame's landing is a normal `planBuild` over that one frame (sparks, tip burst, Relay bead aimed at it), uncapped by the clear beat and merged into the job's running plan (`mergeBuildPlan`).
+- Each frame's landing is a normal `planBuild` over that one frame (sparks, tip burst, Relay bead aimed at it), uncapped by the clear beat and merged into the job's running plan (`mergeBuildPlan`). Hit-stop fires only on the first frame, because it freezes the voice mark's clock.
 - Reduced motion: frames crossfade in one at a time at their arrivals; there is no pen to pace.
 - The lab has two frames, so there are two arrival dials, not the research's three beats (2.0 / 5.5 / 9.0s); Blend clears 9.4s after job start. The lab has no evolve/diff re-ink path.

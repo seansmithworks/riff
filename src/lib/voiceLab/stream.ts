@@ -25,6 +25,8 @@ export type StreamConfig = {
 
 export type StreamSchedule = {
   outlineMs: number;
+  // Per frame, schema order: when that frame's part arrives (monotone).
+  arriveMs: number[];
   // Per frame, schema order: when that frame's ink starts, ms after job start.
   inkStartMs: number[];
   // Build-timeline multiplier for planBuild (1 = the lab's normal draw speed).
@@ -60,7 +62,7 @@ export function planStreamSchedule(
   }
   const outlineMs = n > 0 ? Math.min(cfg.outlineMs, arrive[0]) : cfg.outlineMs;
   if (cfg.pace === "bursts" || reducedMotion || n === 0)
-    return { outlineMs, inkStartMs: arrive, tempo: 1 };
+    return { outlineMs, arriveMs: arrive, inkStartMs: [...arrive], tempo: 1 };
 
   let rate = 1;
   let drawn = 0;
@@ -77,5 +79,5 @@ export function planStreamSchedule(
     inkStartMs.push(start);
     penFree = start + spans[i] * tempo;
   }
-  return { outlineMs, inkStartMs, tempo };
+  return { outlineMs, arriveMs: arrive, inkStartMs, tempo };
 }
