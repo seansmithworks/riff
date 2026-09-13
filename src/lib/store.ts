@@ -107,18 +107,22 @@ export const useStore = create<StoreState>((set) => ({
       jobs: state.jobs.map((job) => (job.id === id ? { ...job, status } : job)),
     })),
   sketchHead: (jobId, base, { kind, platform, title, outline }) =>
-    set({
-      sketch: {
-        jobId,
-        kind,
-        platform,
-        title,
-        outline,
-        base,
-        closed: [],
-        elements: {},
-        changed: changedById(base, outline, []),
-      },
+    set((state) => {
+      const job = state.jobs.find((j) => j.id === jobId);
+      if (job?.status !== "sketching") return {};
+      return {
+        sketch: {
+          jobId,
+          kind,
+          platform,
+          title,
+          outline,
+          base,
+          closed: [],
+          elements: {},
+          changed: changedById(base, outline, []),
+        },
+      };
     }),
   sketchElement: (jobId, { screenIndex, elementIndex, element }) =>
     set((state) => {

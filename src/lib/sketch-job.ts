@@ -127,8 +127,11 @@ async function run(
   const t0 = performance.now();
   const at = () => Math.round(performance.now() - t0);
   const times: { head?: number; ink?: number; s1?: number } = {};
-  const mark = (name: string) =>
+  const markNames: string[] = [];
+  const mark = (name: string) => {
     performance.mark(name, { detail: { jobId: job.id } });
+    markNames.push(name);
+  };
 
   const finish = (result: SketchResult): SketchResult => {
     if (isCurrent()) running = null;
@@ -137,6 +140,7 @@ async function run(
     console.log(
       `[sketch] job ${job.id} ${source} ${base ? "evolve" : "initial"}${dev?.replay ? ` replay:${dev.replay}` : ""}${job.pendingScreens.length ? ` pending ${job.pendingScreens.map((e) => e.id).join(",")}` : ""}${unfinishedFirstSketch ? " unfinished-first-sketch" : ""} ${result.status} head ${times.head ?? "-"}ms first-ink ${times.ink ?? "-"}ms s1 ${times.s1 ?? "-"}ms screens ${job.closed.length} end ${at()}ms${extra}`,
     );
+    for (const name of markNames) performance.clearMarks(name);
     return result;
   };
 
@@ -175,8 +179,10 @@ async function run(
         useStore.getState().sketchScreen(job.id, event);
         return null;
       case "done":
-        useStore.getState().sketchDone(event.artifact);
-        store.updateJobStatus(job.id, "done");
+        if (isCurrent()) {
+          useStore.getState().sketchDone(event.artifact);
+          store.updateJobStatus(job.id, "done");
+        }
         return finish({ status: "done", artifact: event.artifact });
       case "error":
         return fail(event.message);
