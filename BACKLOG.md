@@ -102,10 +102,23 @@
 
 **Done since the 2026-09-13 night checkpoint:** DialKit pass baked on `feat/voice-lab` `7fbb78d`; stream plan `35b3e79` (adversarial review); Steps 1–6 + Pen on `feat/stream` through `3acddf1`, all reviewed and pushed.
 
-- [ ] **Put the `/voice-lab` voice UI into the real build** (carried 3× since 2026-09-12 as "Phases 1–3"; now the locked objective). Strawman: new branch off `feat/stream`, merge `feat/voice-lab`, plan with adversarial-plan. The old Phases 1–3 plan was lost with a tmp scratchpad; re-derive from the lab engine.
+- [ ] **Put the `/voice-lab` voice UI into the real build** (carried 3× since 2026-09-12 as "Phases 1–3"; now the locked objective). Strawman: new branch off `feat/stream`, merge `feat/voice-lab`, plan with adversarial-plan. The old Phases 1–3 plan was lost with a tmp scratchpad; re-derive from the lab engine. Plan done: `docs/plans/riff-voice-real.html` (revised after 2 adversarial reviews, 47 findings), awaiting Sean's confirm.
 - [ ] **Prod ship of `feat/stream` is ON HOLD** until the lab voice UI is in (Sean 2026-09-13). The merge also ships `feat/voice-ui`'s 10 unmerged VoiceBar/VoiceHint commits.
-- [ ] "Open chat" tooltip renders at the top-left of the canvas (Sean's screenshot; label from `VoiceBar.tsx:355`, not reproduced). Fix before any ship. Carried.
+- [ ] "Open chat" tooltip renders at the top-left of the canvas (Sean's screenshot; label from `VoiceBar.tsx:355`, not reproduced). Fix before any ship. Carried. Plan Phase 1: replace the native `title` tooltip with an app tooltip (Sean's browser isn't stock Chrome, so a hover test proves nothing).
 - [ ] Streaming on Vercel prod is untested (previews have no keys). Verify on the first prod deploy with one live sketch.
 - [ ] Fallback model `gpt-oss-120b` streaming was never measured (reasoning left on). Carried.
 - [ ] `feat/stream-canvas` worktree is merged; remove it when convenient. Parked.
-- [ ] DECIDE OR KILL: `feat/load-logo` @ `0f52726` (carried 7× since 2026-09-10). Parked.
+- [ ] DECIDE OR KILL: `feat/load-logo` @ `0f52726` (carried 8× since 2026-09-10). Parked.
+
+### wrap-continue (2026-09-13 night, integration plan)
+
+**Done since the late-night checkpoint:** integration plan drafted, attacked by 2 independent reviewers (generalist + canvas/SDK), revised; `docs/plans/riff-voice-real.html` with mocks and findings ledger.
+
+- [ ] **Sean confirms the plan and 4 calls.** Strawman recs to apply or redline: (1) marks sit bar → marks → caption (option A); (2) wash over the sketch; (3) `/voice-lab` stays public on prod; (4) typed sketches keep the "thinking" glow.
+- [ ] Phase 0: worktree `feat-voice-real` (port 3330) off `feat/stream`; merge `feat/voice-lab` (BACKLOG.md conflict only) and `origin/main` (clean, adds `51051bf` `e39b54f`); symlink `node_modules` to feat-voice-lab's real install.
+- [ ] Phase 1: tooltip. Native `title` out of VoiceBar icon buttons and Header; shared app tooltip.
+- [ ] Phase 2: voice layer on real audio. Engine host mode first (`levelFor(role)` at every `drawRole` branch, cleared transparent canvas, job channel off, `tuning.ts` single source, calibration dials), then real-app mount. Sean live mic review.
+- [ ] Phase 3: paper. React Flow `<Background>` retuned to Sean's values plus a tint layer inside React Flow. Sean review.
+- [ ] Phase 4: ship on Sean's nod (fast-forward push, curl prod, one live session).
+- [ ] Riff logo overlaps the first frame's top-left on a fitted sketch (seen in replay captures). Parked.
+- [ ] v2 bridges after ship: Pen nib bleeds paper, Burst nod at first ink, tip sparks on screen close. Parked.

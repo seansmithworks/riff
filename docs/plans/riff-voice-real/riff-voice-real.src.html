@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Lab voice UI into the real Riff app</title>
+    <link rel="stylesheet" href="http://localhost:4849/assets/plan.css" />
+    <style>
+      figure {
+        margin: 1rem 0;
+      }
+      figure img {
+        width: 100%;
+        border: 1px solid #dddbd6;
+        border-radius: 6px;
+        display: block;
+      }
+      figcaption {
+        font-size: 0.85rem;
+        color: #5a5852;
+        margin-top: 0.35rem;
+      }
+      .grid3 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.75rem;
+      }
+      .grid2 {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+      }
+      .rec {
+        font-weight: 600;
+        color: #2d5fa8;
+      }
+      td,
+      th {
+        vertical-align: top;
+      }
+      .ledger td:first-child {
+        white-space: nowrap;
+      }
+    </style>
+  </head>
+  <body>
+    <h1 data-anchor-id="title">Lab voice UI into the real Riff app</h1>
+    <div class="doc-meta">
+      <span>Project: Riff (CreativeConvos)</span>
+      <span>2026-09-13</span>
+      <span class="badge badge--draft"
+        >Revised after 2 adversarial reviews, awaiting Sean</span
+      >
+    </div>
+
+    <div class="summary" data-anchor-id="summary">
+      <strong>The plan</strong>
+      <p>
+        The real app gets the lab's voice layer: Amoeba (you) and Burst (Riff),
+        Ink &amp; Wash, the fluid wash, and your paper with wash-tinted dots. It
+        runs on your real mic and Riff's real audio, on top of the working Pen
+        stream. The Pen keeps all sketch drawing; the lab's sparks, cinders,
+        build particles and fake phone frames are cut.
+      </p>
+      <p>
+        The review changed the base. As drafted, the marks would have moved on
+        the lab's fake sine wave even with a real mic, because Ink &amp; Wash
+        bypasses the audio hook. Stretching the lab's dot paper to full screen
+        would also have stalled on zoom. Both are fixed below.
+      </p>
+    </div>
+
+    <h2 id="phases" data-anchor-id="phases">Order of work</h2>
+    <ol>
+      <li>
+        <strong>Setup.</strong> New branch <code>feat/voice-real</code> from
+        <code>feat/stream</code>, with <code>feat/voice-lab</code> and current
+        <code>main</code> merged in.
+      </li>
+      <li>
+        <strong>Tooltip.</strong> Swap the browser's native tooltip for the
+        app's own. Small, lands first.
+      </li>
+      <li>
+        <strong>Voice layer on real audio.</strong> Marks and wash, driven by
+        the live session. <em>You review live with a mic.</em>
+      </li>
+      <li>
+        <strong>Paper.</strong> Your dot values on the canvas, plus wash-tinted
+        dots. <em>You review.</em>
+      </li>
+      <li>
+        <strong>Ship.</strong> Merge to main on your nod, then check prod.
+      </li>
+    </ol>
+
+    <h2 id="decisions" data-anchor-id="decisions">Your calls (4)</h2>
+
+    <h3 id="d1" data-anchor-id="d1">
+      1. Where the marks sit, given the caption bubble
+    </h3>
+    <p>
+      The caption appears right above the bar exactly when the marks are active,
+      so they collide. Mocks use Riff speaking over a finished sketch.
+    </p>
+    <div class="stack">
+      <figure>
+        <img src="{{img:mocks/d1-a-crop.png}}" alt="Marks between bar and caption" />
+        <figcaption>
+          <span class="rec">A (recommended).</span> Bar, then marks, then
+          caption. Keeps your tuned mark size; the caption moves up over the
+          sketch.
+        </figcaption>
+      </figure>
+      <figure>
+        <img
+          src="{{img:mocks/d1-b-crop.png}}"
+          alt="Marks behind bar and caption"
+        />
+        <figcaption>
+          <b>B.</b> Marks behind the bar and caption. Nothing moves, but the
+          caption hides most of the mark.
+        </figcaption>
+      </figure>
+      <figure>
+        <img
+          src="{{img:mocks/d1-c-crop.png}}"
+          alt="Mark inside the bar's disc"
+        />
+        <figcaption>
+          <b>C.</b> The mark replaces the level disc inside the bar. Tidy, but
+          about a third of the tuned size.
+        </figcaption>
+      </figure>
+    </div>
+
+    <h3 id="d2" data-anchor-id="d2">2. Wash over the sketch, or under it</h3>
+    <div class="grid2">
+      <figure>
+        <img src="{{img:mocks/d2-above.png}}" alt="Wash above the frames" />
+        <figcaption>
+          <span class="rec">Over (recommended).</span> The frames pick up the
+          color, like the lab you tuned.
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="{{img:mocks/d2-below.png}}" alt="Wash below the frames" />
+        <figcaption>
+          <b>Under.</b> Frames stay white; the wash shows only around them.
+        </figcaption>
+      </figure>
+    </div>
+
+    <h3 id="d3" data-anchor-id="d3">
+      3. Keep <code>/voice-lab</code> public on prod
+    </h3>
+    <p>
+      <span class="rec">Recommended: keep it public.</span> The lab code was
+      written to be public (<code>Stage.tsx:100</code>,
+      <code>AgentationMount.tsx:3</code>). The alternative is a 404 on prod,
+      with the lab still working locally.
+    </p>
+
+    <h3 id="d4" data-anchor-id="d4">
+      4. Typed sketches keep today's "thinking" glow
+    </h3>
+    <p>
+      <span class="rec">Recommended: yes.</span> With no voice session, today's
+      glow is the only sign Riff is working. The new wash only reacts to voice,
+      so the typed path would go dark without it.
+    </p>
+
+    <details data-anchor-id="steps">
+      <summary>Build steps and evidence gates</summary>
+
+      <h3>0. Setup (orchestrator + implementer)</h3>
+      <ul>
+        <li>
+          <strong>Worktree</strong>
+          <code>.claude/worktrees/feat-voice-real</code>, port 3330. Symlink
+          <code>node_modules</code> to feat-voice-lab's real install (the shared
+          root install lacks dialkit, agentation and motion), plus
+          <code>.env.local</code> and the replay fixtures.
+        </li>
+        <li>
+          <strong>Merge <code>feat/voice-lab</code>:</strong> only
+          <code>BACKLOG.md</code> conflicts (union).
+          <strong>Merge <code>origin/main</code>:</strong> clean, brings the
+          footnote popover (<code>51051bf</code>, <code>e39b54f</code>), so the
+          ship push is a fast-forward.
+        </li>
+        <li>
+          <strong>Gate:</strong> tsc, <code>npm test</code>, build pass;
+          <code>/</code> replay still inks; <code>/voice-lab</code> still plays.
+        </li>
+      </ul>
+
+      <h3>1. Tooltip (implementer + reviewer)</h3>
+      <ul>
+        <li>
+          <strong>Remove native <code>title</code></strong> from VoiceBar's icon
+          buttons (<code>VoiceBar.tsx:95</code>) and Header
+          (<code>Header.tsx:45</code>), same bug class.
+          <code>aria-label</code> stays.
+        </li>
+        <li>
+          <strong>Add one shared tooltip</strong> anchored to the button, styled
+          like the footnote popover already on main (white/95, zinc-200 border,
+          shadow-lg).
+        </li>
+        <li>
+          <strong>Why not diagnose first:</strong> your browser isn't stock
+          Chrome, and native tooltips are placed by the browser shell, so a
+          Chrome test proves nothing. Removing the native tooltip fixes it in
+          every browser.
+        </li>
+        <li>
+          <strong>Gate:</strong> hover capture shows the tooltip at the button;
+          you confirm in your browser.
+        </li>
+      </ul>
+
+      <h3>2. Voice layer on real audio (Opus builder + separate reviewer)</h3>
+      <p>
+        <strong
+          >2a. Engine host mode, one named refactor; the lab must behave the
+          same.</strong
+        >
+      </p>
+      <ul>
+        <li>
+          <strong>One level source</strong> <code>levelFor(role)</code> feeds
+          every mark branch (human <code>engine.ts:1478</code>, Riff
+          <code>:1488</code>, Shapeshift). It copies the SDK buffer before the
+          talk blend, fires onsets whenever a source exists, and treats an empty
+          buffer as "no source".
+        </li>
+        <li>
+          <strong>Transparent canvas</strong> cleared every frame; the engine
+          paints no paper in host mode.
+        </li>
+        <li>
+          <strong>Job channel off:</strong> no frames, cinders, build, stream or
+          scripted beats. The gate checks nothing job-driven still draws.
+        </li>
+        <li>
+          <strong>One copy of your tuned values</strong> in
+          <code>tuning.ts</code>, read by both the lab panels and the real app.
+          This fixes the 7 engine defaults that differ from your baked dials.
+        </li>
+        <li>
+          <strong>Calibration:</strong> per-role gain, floor and curve applied
+          to the SDK data. The marks were tuned on synthetic levels; real audio
+          is processed and resampled to 100-8000 Hz.
+        </li>
+        <li>
+          <strong>Loop sleeps</strong> when voice is idle and everything has
+          settled; <code>destroy()</code> removes its hidden SVG and timers.
+        </li>
+      </ul>
+      <p><strong>2b. Real-app mount.</strong></p>
+      <ul>
+        <li>
+          <strong>Fixed 1440x900 stage</strong> (the lab's own coordinate model)
+          anchored per call 1, scaled to the viewport width (min 0.5). It holds
+          the marks canvas and the mask wrapper with the fluid wash, sits above
+          the sketch per call 2, and ignores the pointer.
+        </li>
+        <li>
+          <strong>Anchor position cached</strong>, refreshed on resize and
+          during the bar's chat-open slide, never read blind every frame.
+        </li>
+        <li>
+          <strong>State from the live session:</strong>
+          <ul>
+            <li>Riff speaking → Burst.</li>
+            <li>
+              Listening → Amoeba while your input is above a threshold, silence
+              otherwise.
+            </li>
+            <li>Mic blocked → dead mic; everything else → idle.</li>
+          </ul>
+          The yield squash fires on the server's end of turn
+          (<code>userTurnCount</code>), not every pause. Riff's level drops to
+          zero when he stops, since the SDK fades interrupted audio over 2s.
+        </li>
+        <li>
+          <strong>Dev tools:</strong> <code>?voiceState=</code> fixtures set the
+          engine state directly. <code>__riffVoiceFeed</code> pushes recorded
+          audio frames through the level source.
+          <code>__riffVoicePerf</code> samples frame timing. A dev-only
+          <code>?dials=1</code> panel holds calibration and VAD values, baked
+          after your pass.
+        </li>
+        <li>
+          <strong>Remove</strong> the bar's listening/speaking glow; keep the
+          thinking glow for typed sketches (call 4).
+        </li>
+        <li>
+          <strong>Off-limits:</strong> <code>render_artifact</code> in
+          <code>useVoice.ts:119-153</code>, <code>sketch-job.ts</code>, the Pen
+          (<code>draw-treatment.ts</code>, <code>canvas-slots.ts</code>), API
+          routes.
+        </li>
+      </ul>
+      <p><strong>Gates (evidence).</strong></p>
+      <ul>
+        <li>
+          <strong>Audio reaches the marks:</strong> the same frame with a quiet
+          vs loud injected source shows a visibly different Burst under Ink
+          &amp; Wash. The recorded-audio feed moves the band readout.
+        </li>
+        <li>
+          <strong>Captures</strong> at 1440x900 and 390x844: idle, speaking over
+          a mid-ink replay, listening, chat open, caption showing.
+        </li>
+        <li>
+          <strong>Stream untouched:</strong> <code>__riffPen</code> and
+          <code>__riffNodeRenders</code> match <code>feat/stream</code> on the
+          same replay; <code>useVoice.ts</code> handler diff is empty.
+        </li>
+        <li>
+          <strong>Performance in your real Chrome</strong> at your window size:
+          replay, wheel zoom, the fit animation, 30s idle. Budget comes from the
+          measured refresh rate.
+        </li>
+        <li>
+          <strong>Your live pass</strong> with a mic: calibration dials, then
+          bake.
+        </li>
+      </ul>
+
+      <h3>3. Paper (after you OK step 2)</h3>
+      <ul>
+        <li>
+          <strong>Lattice:</strong> keep React Flow's own dot background,
+          retuned to your paper values (pitch 12, dot 1, opacity 0.3). It stays
+          crisp and pans and zooms for free.
+        </li>
+        <li>
+          <strong>Tinted dots:</strong> a small canvas inside React Flow,
+          between the dots and the frames, redrawn in the same tick as the
+          viewport. It only covers the wash's footprint and allocates nothing
+          per dot.
+        </li>
+        <li>
+          <strong>Empty state:</strong> the same dots in CSS plus the same tint
+          layer. <code>main</code> becomes <code>relative isolate</code> so
+          nothing paints over the headline.
+        </li>
+        <li><strong>Remove</strong> the canvases' cyan/lime gradient.</li>
+        <li>
+          <strong>Gate:</strong> captures at zoom 1, 0.6 and 0.15; a
+          fit-animation recording shows tints locked to the dots; performance
+          during wheel zoom.
+        </li>
+      </ul>
+
+      <h3>4. Ship (on your nod)</h3>
+      <ul>
+        <li>
+          <strong>Re-merge</strong> <code>origin/main</code> if it moved, rerun
+          gates, push <code>feat/voice-real:main</code> with an explicit
+          refspec.
+        </li>
+        <li>
+          <strong>Ships together:</strong> the 10 VoiceBar commits, the real
+          stream, the voice layer, <code>/voice-lab</code> per call 3.
+        </li>
+        <li>
+          <strong>Verify:</strong> curl prod for a string only this build has;
+          you run one live session on prod (streaming on Vercel prod is
+          untested).
+        </li>
+      </ul>
+
+      <h3>Later (not in this plan)</h3>
+      <ul>
+        <li><strong>Pen nib bleeds</strong> ink into the paper as it draws.</li>
+        <li><strong>Burst nods</strong> at the first ink of a sketch.</li>
+        <li><strong>Tip sparks</strong> fly when a screen finishes.</li>
+      </ul>
+    </details>
+
+    <details data-anchor-id="baseline">
+      <summary>Current state (captures from today)</summary>
+      <div class="grid2">
+        <figure>
+          <img
+            src="{{img:captures/app-speaking-ink.png}}"
+            alt="Real app mid-ink"
+          />
+          <figcaption>
+            Real app, <code>feat/stream</code>, speaking fixture, mid-ink.
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="{{img:captures/lab-t8.png}}" alt="Lab mid-sequence" />
+          <figcaption>
+            Lab, Blend + Ink &amp; Wash, Amoeba with wash over its own fake
+            phone frame.
+          </figcaption>
+        </figure>
+      </div>
+    </details>
+
+    <details data-anchor-id="ledger">
+      <summary>
+        What the review changed: 47 findings from 2 reviewers, merged to 30
+        rows. All accepted, 2 only in part.
+      </summary>
+      <p>
+        G = generalist reviewer, D = canvas/SDK specialist. Unedited reports:
+        <code>scratchpad/plan/refutation.md</code>,
+        <code>refutation-domain.md</code>.
+      </p>
+      <table class="ledger">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Finding</th>
+            <th>Outcome</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1 G-F1 F18, D-F1 E2 E3 M7</td>
+            <td>
+              Audio hook never reaches marks under Ink &amp; Wash; the old gates
+              couldn't see it
+            </td>
+            <td>
+              Accepted: <code>levelFor</code> across all branches, quiet/loud
+              gate, recorded-audio feed
+            </td>
+          </tr>
+          <tr>
+            <td>2 D-F2, G-F16</td>
+            <td>
+              Bin count and empty output were false risks; the real risk is
+              signal shape vs synthetic tuning
+            </td>
+            <td>Accepted: risks removed; calibration dials added</td>
+          </tr>
+          <tr>
+            <td>3 G-F2, D-F7</td>
+            <td>Marks canvas never cleared once paper moves out</td>
+            <td>Accepted: clear every frame, transparent host mode</td>
+          </tr>
+          <tr>
+            <td>4 G-F3 F19, D-F6 E5</td>
+            <td>Paper at <code>fixed z-0</code> paints over the empty state</td>
+            <td>
+              Accepted: <code>main</code> relative isolate; tint layer inside
+              React Flow
+            </td>
+          </tr>
+          <tr>
+            <td>5 G-F4 F17, D-F3 E1</td>
+            <td>
+              "Tint pass is origin-bounded" was false; cost scales with screen
+              area
+            </td>
+            <td>
+              Accepted: claim removed; tints limited to the wash footprint, no
+              per-dot allocations
+            </td>
+          </tr>
+          <tr>
+            <td>6 D-F4, G-F12</td>
+            <td>
+              Engine dot grid rebuilds every zoom frame; up to ~1M dots at zoom
+              0.15
+            </td>
+            <td>Accepted: React Flow's dots stay the lattice</td>
+          </tr>
+          <tr>
+            <td>7 D-F5, G-F13</td>
+            <td>
+              96x60 wash field distorts at phone and wide aspects; no mobile
+              rule
+            </td>
+            <td>
+              Accepted, modified: fixed 1440x900 stage, scale floor 0.5 (not
+              0.6), checked at 390px
+            </td>
+          </tr>
+          <tr>
+            <td>8 D-F8</td>
+            <td>Dots lag frames by one tick during the fit animation</td>
+            <td>Accepted: redraw in React Flow's viewport subscription</td>
+          </tr>
+          <tr>
+            <td>9 D-F9, G-F9</td>
+            <td>
+              Reading the bar's position every frame forces layout against Pen's
+              writes
+            </td>
+            <td>Accepted: cached position</td>
+          </tr>
+          <tr>
+            <td>10 G-F5</td>
+            <td>
+              Ship push would be rejected; main has 2 commits the branches lack
+            </td>
+            <td>
+              Accepted: merge <code>origin/main</code> in setup and before ship
+            </td>
+          </tr>
+          <tr>
+            <td>11 G-F6</td>
+            <td>
+              <code>/voice-lab</code> 404 was fragile in a client page, and an
+              unrequested product change
+            </td>
+            <td>Accepted: now call 3</td>
+          </tr>
+          <tr>
+            <td>12 G-F7 F20</td>
+            <td>
+              Tooltip step committed no fix; test ran in a browser you don't use
+            </td>
+            <td>
+              Accepted: replace native tooltips; Header added as same class (my
+              call)
+            </td>
+          </tr>
+          <tr>
+            <td>13 G-F8</td>
+            <td>Fixtures have no mic, so "listening" never showed Amoeba</td>
+            <td>Accepted: fixtures set engine state directly</td>
+          </tr>
+          <tr>
+            <td>14 G-F9</td>
+            <td>Marks hide behind the caption; two level meters</td>
+            <td>Accepted: now call 1, with mocks</td>
+          </tr>
+          <tr>
+            <td>15 G-F10</td>
+            <td>Wash over vs under the sketch was never decided</td>
+            <td>Accepted: now call 2, with mocks</td>
+          </tr>
+          <tr>
+            <td>16 G-F11</td>
+            <td>Typed sketches lose their only glow</td>
+            <td>Accepted: now call 4</td>
+          </tr>
+          <tr>
+            <td>17 G-F14</td>
+            <td>Tint resampling on pan is wasted work</td>
+            <td>Accepted: cut</td>
+          </tr>
+          <tr>
+            <td>18 G-F15, D-O3 E4</td>
+            <td>Perf gate had wrong budget and wrong scenarios</td>
+            <td>
+              Accepted, modified: in-page frame sampler in your real Chrome, no
+              time from you
+            </td>
+          </tr>
+          <tr>
+            <td>19 G-F21</td>
+            <td>Dial JSON note "not yet baked" is stale</td>
+            <td>Accepted: flagged in builder brief</td>
+          </tr>
+          <tr>
+            <td>20 G-F22, D-E6</td>
+            <td>Symlinking the shared install breaks the build</td>
+            <td>Accepted: link to feat-voice-lab's install</td>
+          </tr>
+          <tr>
+            <td>21 D-M1</td>
+            <td>Engine loop and wash burn CPU while idle</td>
+            <td>Accepted: loop sleeps when settled; idle in perf gate</td>
+          </tr>
+          <tr>
+            <td>22 D-M2</td>
+            <td>No-session buffer is empty and pins marks in a fixed pose</td>
+            <td>Accepted: empty = no source</td>
+          </tr>
+          <tr>
+            <td>23 D-M3</td>
+            <td>
+              Burst starts before Riff's sound; lingers 2s after interrupt
+            </td>
+            <td>
+              Partly rejected: linger fixed; the lead (~200ms) kept, reads as
+              anticipation
+            </td>
+          </tr>
+          <tr>
+            <td>24 D-M4</td>
+            <td>
+              Local-silence yield squash fires on every mid-sentence pause
+            </td>
+            <td>Accepted: server end of turn drives it</td>
+          </tr>
+          <tr>
+            <td>25 D-M5</td>
+            <td>1x canvas dots go soft on retina</td>
+            <td>Accepted: React Flow's SVG dots stay</td>
+          </tr>
+          <tr>
+            <td>26 D-M6</td>
+            <td>Dots snap when the canvas mounts or remounts</td>
+            <td>Accepted: lattice mounts with the nodes as today</td>
+          </tr>
+          <tr>
+            <td>27 D-O1</td>
+            <td>Variable stage size across the engine is gold-plating</td>
+            <td>Accepted: cut</td>
+          </tr>
+          <tr>
+            <td>28 D-O2</td>
+            <td>
+              Engine paper is the cost center; empty state could be static dots
+            </td>
+            <td>
+              Partly rejected: empty state keeps tints, since that's where
+              talking starts
+            </td>
+          </tr>
+          <tr>
+            <td>29 G weakest assumption</td>
+            <td>
+              "Lab engine plus swapped inputs" is false under Ink &amp; Wash
+            </td>
+            <td>
+              Accepted: host-mode refactor and its audio gate come before any
+              mount work
+            </td>
+          </tr>
+          <tr>
+            <td>30 G-F12 (stain)</td>
+            <td>Ink stain writes screen coordinates into a panning grid</td>
+            <td>
+              Accepted: stain tints drawn in screen space on the tint layer
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </details>
+  </body>
+</html>

@@ -1,0 +1,45 @@
+You are an adversarial plan reviewer. Your ONLY job is to refute the plan below. Default to skepticism: assume the plan is flawed and prove how. Do not be agreeable, do not summarize, do not compliment.
+
+You have read access to the repository in two worktrees at the refs the plan targets. READ THE ACTUAL FILES. Do not take the plan's description of the codebase on faith, including its description of anything the planner authored. Verify its claims and cite path:line when you attack one.
+- Real app (landing ref): /Users/seansmith/Code/CreativeConvos/.claude/worktrees/feat-stream (branch feat/stream @ 9219f07)
+- Lab engine: /Users/seansmith/Code/CreativeConvos/.claude/worktrees/feat-voice-lab (branch feat/voice-lab @ 7fbb78d)
+Your shell starts in a different tree; use absolute paths and `git -C <tree>`. Read-only: do not edit, commit, run or kill dev servers.
+
+ORIGINAL REQUEST (verbatim):
+Put the /voice-lab voice UI (voice marks, glow, Morph Ink & Wash, dot paper, sequences) into the real Riff app, on top of the real streaming sketch. Then ship on Sean's nod. Decide which lab FX survive next to Pen (the lab's Canvas2D build/sparks layer likely overlaps Pen). Include the "Open chat" tooltip mispositioning fix.
+
+Standing constraints from the project (verified in earlier sessions):
+- ElevenLabs aborts an in-flight client tool when the user speaks; `render_artifact` must stay synchronous/fire-and-forget with a byte-identical return literal. The stream is read in sketch-job.ts.
+- Voice and sketch job are concurrent channels, never exclusive states. Amoeba = human mark, Burst = Riff mark.
+- Pushing main auto-deploys prod. Vercel env vars are Production-scoped only (voice/generation fail on previews).
+- Sean is a designer; design decisions are his. Headless Chrome fake mic is pure silence, so mic tests need Sean.
+
+KEY RESEARCH FINDINGS the plan rests on:
+- Lab engine draws both channels into one Canvas2D; draw order paper -> frames -> cinders -> build particles -> voice marks, then glow (engine.ts:2115-2217). Stage.tsx mounts main canvas + mask wrapper with 2 gradient divs + 96x60 fluid canvas (Stage.tsx:258-300), contain-fit to fixed 1440x900 (Stage.tsx:199-215; constants.ts:4-5).
+- Origin hardcoded: engine.ts:494-498. Riff level is always synthetic (engine.ts:1270-1274, 1307-1315). Human level is synthetic or engine's own getUserMedia (engine.ts:1197-1254).
+- Scripted beats dispatch via SequencePlayer.fireBeat -> host.setVoiceState / triggerAnticipation / triggerBackchannel / startSketch (sequence.ts:254-275). setVoiceState at engine.ts:753.
+- Seven engine defaults disagree with baked DialKit panel defaults (engine.ts:133,152-156,167,169,170,178,187 vs Panels.tsx:424,517,519,521,791-795,823,855). Sean's dial pass JSON: /Users/seansmith/.claude/projects/-Users-seansmith-Code-CreativeConvos/memory/dialkit-pass-2026-09-13.json ("changed": [old, Sean's]).
+- Real app: page.tsx:54-71 tree; React Flow provider scoped inside WireframeCanvas (WireframeCanvas.tsx:369); existing dot <Background> + cyan/lime radial gradient (WireframeCanvas.tsx:333-351, FlowCanvas.tsx:79-103); VoiceBar fixed glow z-10 (VoiceBar.tsx:232-236), bar wrapper z-20 (238). Voice state derivation ConversationPanel.tsx:176-200; useVoice exposes get{Input,Output}Volume and get{Input,Output}ByteFrequencyData (useVoice.ts:203-206); render_artifact handler useVoice.ts:119-153. Pen draws SVG inside each node (draw-treatment.ts). Dev hooks: __riffSketch(brief, kind, {replay}) sketch-job.ts:252-265; ?voiceState= fixtures ConversationPanel.tsx:19-32,122-132.
+- Merge: `git merge-tree feat/stream feat/voice-lab` conflicts only in BACKLOG.md. Lab adds deps agentation, dialkit, motion (lab tooling only).
+- Tooltip: "Open chat" is a native title attribute (VoiceBar.tsx:95, label :355). Sean's screenshot (extracted to /private/tmp/claude-501/-Users-seansmith-Code-CreativeConvos--claude-worktrees-feat-voice-ui/287874d7-cee7-4309-ba38-3b9e5a08ddc2/scratchpad/plan/captures/sean-shot-1-0.png, you may Read it) shows a macOS native-style tooltip at the top-left of a region screenshot while the chat button shows hover state.
+- Current-state captures in the same captures/ dir: lab-now.png, lab-t5.png, lab-t8.png (lab), app-idle.png (real app idle).
+
+STATED ASSUMPTIONS:
+See the ASSUMPTIONS section at the end of the draft (A1-A8).
+
+DRAFT PLAN TO REFUTE:
+Read it from: /private/tmp/claude-501/-Users-seansmith-Code-CreativeConvos--claude-worktrees-feat-voice-ui/287874d7-cee7-4309-ba38-3b9e5a08ddc2/scratchpad/plan/draft-plan.md
+
+Return numbered findings (F1, F2, ...) under these exact headings:
+
+1. WRONG. Claims, steps, or assumptions that are incorrect, risky, or will break. For each: what is wrong, the evidence, and the consequence if it ships as-is.
+2. MISSING. Edge cases, dependencies, failure modes, constraints, surfaces, or steps that are absent. For each: what is missing and why it matters.
+3. OVERVALUED / GOLD-PLATED. Parts that cost more than they are worth or buy scope the task does not need. For each: what to cut and why.
+4. EVIDENCE. Attack how the plan gathered its facts, not only its logic. Which claims were never verified against a file? Which measurement could not have seen the thing it claims to have checked? Which stale source (memory file, summary, comment, prior report) is being trusted?
+5. WEAKEST ASSUMPTION. The single load-bearing assumption most likely to be false, and what happens to the plan if it is.
+
+Rules:
+- Be specific. Cite the exact step or claim you are attacking. Vague criticism is useless.
+- A few load-bearing kills beat a long list of nitpicks.
+- A section may end "no material findings", but only after a real attempt to break it, never as a default.
+- End with VERDICT: ship-as-is / revise / rethink, plus the single most important change.
