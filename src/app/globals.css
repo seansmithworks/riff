@@ -37,6 +37,22 @@ body {
   display: none;
 }
 
+/* Streamed wireframe ink — see src/components/InkScope.tsx and
+   src/lib/draw-treatment.ts. A frame's pencil turns to ink as its screen
+   lands; a treatment can hide an element's text, icons and fills while its
+   strokes stay visible. */
+[data-ink-frame] path {
+  transition: stroke 400ms ease-out;
+}
+
+[data-ink-hidden] {
+  visibility: hidden;
+}
+
+[data-ink-hidden] svg[data-sketch] {
+  visibility: visible;
+}
+
 /* Ambient voice glow — see src/components/VoiceBar.tsx */
 @keyframes riff-glow-listening {
   0%,

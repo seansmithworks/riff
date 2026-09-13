@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { roughLine, roughRoundedRect, roughEllipse } from "drawably";
 
 // One-line flips for the hand-drawn look. See CreativeConvos/ORCHESTRATOR.md
@@ -26,13 +33,21 @@ function firstStroke(doubledPath: string): string {
 // Deterministic 32-bit string hash (djb2 variant) — content-derived seed so
 // an untouched element keeps its exact stroke across an evolve; only edited
 // elements redraw. Never seed from array index.
-function hashSeed(input: string): number {
+export function hashSeed(input: string): number {
   let hash = 5381;
   for (let i = 0; i < input.length; i++) {
     hash = (hash * 33) ^ input.charCodeAt(i);
   }
   return hash >>> 0;
 }
+
+/**
+ * Set by a live ink scope (InkScope.tsx), which draws the stroke in. Outside
+ * one it's null and the stroke renders static.
+ */
+export const SketchInkContext = createContext<
+  ((svg: SVGSVGElement, path: SVGPathElement) => void) | null
+>(null);
 
 interface SketchProps {
   // "line" draws one horizontal rule at mid-height (dividers, borders).
@@ -57,6 +72,10 @@ export function Sketch({
   strokeWidth,
 }: SketchProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const pathRef = useRef<SVGPathElement>(null);
+  const handedOver = useRef(false);
+  const onStroke = useContext(SketchInkContext);
   const [size, setSize] = useState<{ width: number; height: number } | null>(
     null,
   );
@@ -115,6 +134,16 @@ export function Sketch({
     }
   }
 
+  // Only the first non-empty path per mount is handed over (before paint, so
+  // it never flashes fully drawn); a resize just reshapes it.
+  useLayoutEffect(() => {
+    if (!path || handedOver.current) return;
+    handedOver.current = true;
+    if (onStroke && svgRef.current && pathRef.current) {
+      onStroke(svgRef.current, pathRef.current);
+    }
+  }, [path, onStroke]);
+
   const resolvedStrokeWidth =
     strokeWidth ?? (kind === "line" ? 1 : SKETCH_STROKE_WIDTH);
 
@@ -124,11 +153,14 @@ export function Sketch({
       className={`pointer-events-none absolute inset-0 ${className ?? ""}`}
     >
       <svg
+        ref={svgRef}
+        data-sketch=""
         aria-hidden="true"
         className="absolute inset-0 h-full w-full overflow-visible"
       >
         {path ? (
           <path
+            ref={pathRef}
             d={path}
             fill="none"
             stroke="var(--color-wireframe-ink)"
