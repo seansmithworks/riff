@@ -25,10 +25,38 @@ type GenerateBody = {
 // remains for any other caller.
 const NDJSON = "application/x-ndjson";
 
+// Covers STREAM_HARD_CAP_MS (45s, generate.ts) plus headroom; makes the
+// function's limit explicit instead of relying on the platform default.
+export const maxDuration = 60;
+
+// Client-controlled input (brief, currentArtifact, pendingScreens) is
+// unbounded otherwise; 64 KB comfortably covers real artifacts (measured:
+// docs/evidence/artifact-after.json, the largest committed fixture, is
+// ~7.2 KB) plus a realistic brief.
+const MAX_BODY_BYTES = 64 * 1024;
+// Evolve screen cap (see WIREFRAME_SCREEN_COUNT_RULE_EVOLVE in generate.ts).
+const MAX_PENDING_SCREENS = 6;
+
 export async function POST(req: NextRequest) {
+  const contentLength = req.headers.get("content-length");
+  if (contentLength && Number(contentLength) > MAX_BODY_BYTES) {
+    return NextResponse.json(
+      { error: "Request body too large" },
+      { status: 413 },
+    );
+  }
+
+  const rawBody = await req.text();
+  if (Buffer.byteLength(rawBody, "utf8") > MAX_BODY_BYTES) {
+    return NextResponse.json(
+      { error: "Request body too large" },
+      { status: 413 },
+    );
+  }
+
   let body: GenerateBody;
   try {
-    body = await req.json();
+    body = JSON.parse(rawBody);
   } catch {
     return NextResponse.json(
       { error: "Request body must be valid JSON" },
@@ -41,6 +69,15 @@ export async function POST(req: NextRequest) {
   if (!brief || typeof brief !== "string" || !brief.trim()) {
     return NextResponse.json(
       { error: "Missing required field: brief" },
+      { status: 400 },
+    );
+  }
+
+  if (body.pendingScreens && body.pendingScreens.length > MAX_PENDING_SCREENS) {
+    return NextResponse.json(
+      {
+        error: `pendingScreens exceeds the ${MAX_PENDING_SCREENS}-screen limit`,
+      },
       { status: 400 },
     );
   }

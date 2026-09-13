@@ -16,6 +16,7 @@ import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import {
   ARTIFACT_JSON_SCHEMA,
+  validateArtifact,
   type Artifact,
   type Element,
   type Screen,
@@ -455,25 +456,6 @@ function canonical(value: unknown): string {
       .join(",")}}`;
   }
   return JSON.stringify(value);
-}
-
-// Same checks as validateArtifact in src/lib/generate.ts:83-98, which is
-// module-private there (plan Step 2 moves it to artifact.ts).
-function validateArtifact(value: unknown): value is Artifact {
-  if (!value || typeof value !== "object") return false;
-  const v = value as Record<string, unknown>;
-  if (v.kind === "wireframe") {
-    return Array.isArray(v.screens) && v.screens.length > 0;
-  }
-  if (v.kind === "flow") {
-    return (
-      Array.isArray(v.nodes) &&
-      v.nodes.length > 0 &&
-      Array.isArray(v.edges) &&
-      v.edges.length > 0
-    );
-  }
-  return false;
 }
 
 const hasTabbar = (s: Screen | undefined) =>
