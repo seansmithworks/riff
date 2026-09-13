@@ -146,6 +146,9 @@ Build order from `docs/voice-lab-morph-spec.md`, one commit per step:
 - [x] Step 4: MorphPanel, `M`/`Shift+M` hotkey, caption label `b254698`
 - [x] Step 5: Evidence recordings + ffmpeg acceptance checks in `docs/evidence/morph/` (mobile only, untracked; desktop 1440px skipped, time)
 - [x] Fix wave after reviewer rejection (2026-09-12): prod-gated engine hook + spec committed `6284fee`; live Morph dials `88a3332`; Shapeshift as one K-slot shared-topology body `5ec6899`; Relay gather/hold/release timeline + disc pivot + landing bead `115772a`; spring period clamp (every spring ran ≥1s) `02f4c44`; F2 talk-blended bands `a01de94`; onset pulses stuck at 1 under Morph (cinder flood) `8d4d4b5`
+- [ ] Morph F5 not wired: every style defines `wash.overlap`, but nothing in `engine.ts`/`fluidGlow.ts` reads it, so riff blob anchors never lerp toward human (spec §2 F5) — found in review of `c7c02ae..a4966b0`
+- [ ] Elastic wind-up→settle uses `setTimeout` (`morph.ts` ~665), off the frame clock; a backgrounded tab can flip the target mid-freeze and jump on refocus — move it onto `now()`
+- [ ] Sean's design call: barge-in transitions (T6/T9) are specced ≤150ms, so Shapeshift/Relay/Ink & Wash still show one visible step on interrupt — slow them for smoothness, or keep them snappy?
 - [ ] Sean picks a Morph style (strawman default: Ink & Wash; fork: one creature [Shapeshift/Elastic] vs two speakers [Relay/Ink & Wash])
 - [ ] Fresh load comes up paused (VoicePanel mount stops autoplay) — awaiting Sean's nod, not fixed
 - [ ] Landing particle and ink-bleed color follows the wrong role (`activeRoleAndMarkId` reports human during silence) — noticed, not fixed
