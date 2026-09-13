@@ -81,7 +81,7 @@
   | R3-control today, time-slot edit | 442 | – | 887 | 2433 | 7322 | 10407 |
   | R4 candidate, tab bar edit | 324 | 744 | 952 | 2360 | 4614 | 6290 |
 
-- [ ] **Step 2. Contract, tracker and merge.** `ARTIFACT_STREAM_JSON_SCHEMA` + `validateArtifact` into `artifact.ts`, new `artifact-stream.ts`, `tests/artifact-stream.test.ts` on spike fixtures.
+- [x] **Step 2. Contract, tracker and merge.** `ARTIFACT_STREAM_JSON_SCHEMA` + `validateArtifact` into `artifact.ts`, new `artifact-stream.ts`, `tests/artifact-stream.test.ts` on spike fixtures. `npm test` 18/18: chunking-invariant events (whole, per char, every split, 50 seeds) on R2-1, R2-2, R3-1, R3-2 and a reordered-keys fixture; head buffering; element-before-screen; deep-equal unchanged; both M4 cases; synthetic before→after equals `artifact-after.json`.
 - [ ] **Step 3. Streaming `/api/generate` with dev-only replay.**
 - [ ] **Step 4. One client job runner (`sketch-job.ts`) and a store draft.**
 - [ ] **Step 5. Canvas: outlines, ink, camera framed once.** Needs decision 1 (per screen vs per element) first.

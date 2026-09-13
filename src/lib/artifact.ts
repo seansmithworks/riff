@@ -34,6 +34,17 @@ export type Element =
   | { type: "divider" }
   | { type: "avatar"; name?: string };
 
+// One entry of the streamed outline (ARTIFACT_STREAM_JSON_SCHEMA): every
+// screen of the resulting wireframe, in display order, with the model's claim
+// about it relative to the CURRENT ARTIFACT.
+export type OutlineStatus = "new" | "keep" | "changed";
+
+export interface OutlineEntry {
+  id: string;
+  name: string;
+  status: OutlineStatus;
+}
+
 export interface FlowNode {
   id: string;
   label: string;
@@ -262,3 +273,57 @@ export const ARTIFACT_JSON_SCHEMA = {
     },
   ],
 } as const;
+
+const OUTLINE_ENTRY_SCHEMA = {
+  type: "object",
+  properties: {
+    id: { type: "string" },
+    name: { type: "string" },
+    status: { type: "string", enum: ["new", "keep", "changed"] },
+  },
+  required: ["id", "name", "status"],
+  additionalProperties: false,
+};
+
+// The streamed variant, exactly the candidate schema that passed the Step 1
+// gate spike (src/app/api/dev/stream-bench/route.ts, 15/15 order-correct and
+// valid). Wireframe properties are listed head-first (kind, platform, title,
+// outline) so the outline lands before any screen. Key order is NOT enforced
+// by constrained decoding, so the stream tracker never relies on it.
+// Validated wireframes still map to Artifact: outline is dropped at merge.
+export const ARTIFACT_STREAM_JSON_SCHEMA = {
+  $schema: ARTIFACT_JSON_SCHEMA.$schema,
+  title: ARTIFACT_JSON_SCHEMA.title,
+  anyOf: [
+    {
+      type: "object",
+      properties: {
+        kind: { const: "wireframe" },
+        platform: { type: "string", enum: ["mobile", "desktop"] },
+        title: { type: "string" },
+        outline: { type: "array", items: OUTLINE_ENTRY_SCHEMA },
+        screens: { type: "array", items: SCREEN_SCHEMA },
+      },
+      required: ["kind", "platform", "title", "outline", "screens"],
+      additionalProperties: false,
+    },
+    ARTIFACT_JSON_SCHEMA.anyOf[1],
+  ],
+} as const;
+
+export function validateArtifact(value: unknown): value is Artifact {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  if (v.kind === "wireframe") {
+    return Array.isArray(v.screens) && v.screens.length > 0;
+  }
+  if (v.kind === "flow") {
+    return (
+      Array.isArray(v.nodes) &&
+      v.nodes.length > 0 &&
+      Array.isArray(v.edges) &&
+      v.edges.length > 0
+    );
+  }
+  return false;
+}

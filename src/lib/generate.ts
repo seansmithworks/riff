@@ -1,7 +1,11 @@
 // Artifact generation — turns a spoken design brief into structured
 // wireframe/flow JSON via Fireworks AI's OpenAI-compatible chat completions.
 
-import { ARTIFACT_JSON_SCHEMA, type Artifact } from "./artifact";
+import {
+  ARTIFACT_JSON_SCHEMA,
+  validateArtifact,
+  type Artifact,
+} from "./artifact";
 
 const FIREWORKS_URL = "https://api.fireworks.ai/inference/v1/chat/completions";
 
@@ -78,23 +82,6 @@ function buildRequestBody(messages: ChatMessage[], modelId: string = MODEL_ID) {
       },
     },
   };
-}
-
-function validateArtifact(value: unknown): value is Artifact {
-  if (!value || typeof value !== "object") return false;
-  const v = value as Record<string, unknown>;
-  if (v.kind === "wireframe") {
-    return Array.isArray(v.screens) && v.screens.length > 0;
-  }
-  if (v.kind === "flow") {
-    return (
-      Array.isArray(v.nodes) &&
-      v.nodes.length > 0 &&
-      Array.isArray(v.edges) &&
-      v.edges.length > 0
-    );
-  }
-  return false;
 }
 
 // A single attempt cannot run longer than this — a live demo can't afford a
