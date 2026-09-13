@@ -140,11 +140,11 @@ Done this session: glow hard edge via mask (`f403a3e`), Glow slider set (Strengt
 
 Build order from `docs/voice-lab-morph-spec.md`, one commit per step:
 
-- [ ] Step 1: F0 fixes (landing white-card flash, landing timestamp ownership, construction dots after clear)
-- [ ] Step 2: `morph.ts` motion primitives + F2–F7 engine/marks/fluidGlow/frames integration
-- [ ] Step 3: 5 Morph styles (build order 1 · Still Breath → 4 · Ink & Wash → 3 · Relay → 5 · Elastic → 2 · Shapeshift)
-- [ ] Step 4: MorphPanel, `M`/`Shift+M` hotkey, caption label
-- [ ] Step 5: Evidence recordings + ffmpeg acceptance checks in `docs/evidence/morph/`
+- [x] Step 1: F0 fixes (landing white-card flash, landing timestamp ownership, construction dots after clear) `723f60a`
+- [x] Step 2: `morph.ts` motion primitives + F2–F7 engine/marks/fluidGlow/frames integration `8c8f388` (combined with Step 3 below — MORPH_STYLES' Record type needs all 5 styles to exist for the engine wiring to compile)
+- [x] Step 3: 5 Morph styles `8c8f388` — Shapeshift is a simplified crossfade of the outgoing loop against the incoming ray fan (drawShapeshiftBody), not the spec's literal shared-topology K-slot resample
+- [x] Step 4: MorphPanel, `M`/`Shift+M` hotkey, caption label `b254698`
+- [x] Step 5: Evidence recordings + ffmpeg acceptance checks in `docs/evidence/morph/` (mobile only, untracked; desktop 1440px skipped, time)
 - [ ] Sean picks a Morph style (strawman default: Ink & Wash; fork: one creature [Shapeshift/Elastic] vs two speakers [Relay/Ink & Wash])
 - [ ] Fresh load comes up paused (VoicePanel mount stops autoplay) — awaiting Sean's nod, not fixed
 - [ ] Landing particle and ink-bleed color follows the wrong role (`activeRoleAndMarkId` reports human during silence) — noticed, not fixed
