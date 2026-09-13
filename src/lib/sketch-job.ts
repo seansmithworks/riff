@@ -41,6 +41,10 @@ type RunningJob = {
   pendingScreens: OutlineEntry[];
   outline: OutlineEntry[] | null;
   closed: Screen[];
+  /** performance.now() at the call; the [sketch] line counts from here. */
+  t0: number;
+  times: { head?: number; ink?: number; s1?: number };
+  markNames: string[];
 };
 
 let running: RunningJob | null = null;
@@ -56,6 +60,27 @@ function carriedPending(job: RunningJob): OutlineEntry[] {
   return job.outline
     ? pendingFromSuperseded(job.outline, job.closed)
     : job.pendingScreens;
+}
+
+function elapsed(job: RunningJob): number {
+  return Math.round(performance.now() - job.t0);
+}
+
+function mark(job: RunningJob, name: string) {
+  performance.mark(name, { detail: { jobId: job.id } });
+  job.markNames.push(name);
+}
+
+/**
+ * `sketch:first-ink`: the canvas calls this when the job's first element
+ * stroke starts drawing (InkScope.tsx). Ink from a job that is no longer
+ * running doesn't count.
+ */
+export function markFirstInk(jobId: number): void {
+  const job = running;
+  if (job?.id !== jobId || job.times.ink !== undefined) return;
+  job.times.ink = elapsed(job);
+  mark(job, "sketch:first-ink");
 }
 
 export function startSketchJob({
@@ -87,6 +112,9 @@ export function startSketchJob({
     pendingScreens,
     outline: null,
     closed: [],
+    t0: performance.now(),
+    times: {},
+    markNames: [],
   };
   running = job;
   store.addJob({
@@ -124,23 +152,16 @@ async function run(
 ): Promise<SketchResult> {
   const store = useStore.getState();
   const isCurrent = () => running === job;
-  const t0 = performance.now();
-  const at = () => Math.round(performance.now() - t0);
-  const times: { head?: number; ink?: number; s1?: number } = {};
-  const markNames: string[] = [];
-  const mark = (name: string) => {
-    performance.mark(name, { detail: { jobId: job.id } });
-    markNames.push(name);
-  };
+  const { times } = job;
 
   const finish = (result: SketchResult): SketchResult => {
     if (isCurrent()) running = null;
-    if (result.status === "done") mark("sketch:done");
+    if (result.status === "done") mark(job, "sketch:done");
     const extra = result.status === "failed" ? ` (${result.error})` : "";
     console.log(
-      `[sketch] job ${job.id} ${source} ${base ? "evolve" : "initial"}${dev?.replay ? ` replay:${dev.replay}` : ""}${job.pendingScreens.length ? ` pending ${job.pendingScreens.map((e) => e.id).join(",")}` : ""}${unfinishedFirstSketch ? " unfinished-first-sketch" : ""} ${result.status} head ${times.head ?? "-"}ms first-ink ${times.ink ?? "-"}ms s1 ${times.s1 ?? "-"}ms screens ${job.closed.length} end ${at()}ms${extra}`,
+      `[sketch] job ${job.id} ${source} ${base ? "evolve" : "initial"}${dev?.replay ? ` replay:${dev.replay}` : ""}${job.pendingScreens.length ? ` pending ${job.pendingScreens.map((e) => e.id).join(",")}` : ""}${unfinishedFirstSketch ? " unfinished-first-sketch" : ""} ${result.status} head ${times.head ?? "-"}ms first-ink ${times.ink ?? "-"}ms s1 ${times.s1 ?? "-"}ms screens ${job.closed.length} end ${elapsed(job)}ms${extra}`,
     );
-    for (const name of markNames) performance.clearMarks(name);
+    for (const name of job.markNames) performance.clearMarks(name);
     return result;
   };
 
@@ -156,25 +177,17 @@ async function run(
   const apply = (event: ServerEvent): SketchResult | null => {
     switch (event.type) {
       case "head":
-        times.head ??= at();
-        mark("sketch:first-outline");
+        times.head ??= elapsed(job);
+        mark(job, "sketch:first-outline");
         job.outline = event.outline;
         useStore.getState().sketchHead(job.id, base, event);
         return null;
       case "element":
-        if (times.ink === undefined) {
-          times.ink = at();
-          mark("sketch:first-ink");
-        }
         useStore.getState().sketchElement(job.id, event);
         return null;
       case "screen":
-        if (times.ink === undefined) {
-          times.ink = at();
-          mark("sketch:first-ink");
-        }
-        times.s1 ??= at();
-        mark(`sketch:screen:${event.screen.id}`);
+        times.s1 ??= elapsed(job);
+        mark(job, `sketch:screen:${event.screen.id}`);
         job.closed.push(event.screen);
         useStore.getState().sketchScreen(job.id, event);
         return null;
@@ -191,7 +204,7 @@ async function run(
     }
   };
 
-  mark("sketch:call");
+  mark(job, "sketch:call");
   try {
     const res = await fetch("/api/generate", {
       method: "POST",

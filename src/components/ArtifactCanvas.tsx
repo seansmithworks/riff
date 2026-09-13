@@ -18,6 +18,7 @@ export function ArtifactCanvas({
   rightInset: number;
 }) {
   const artifact = useStore((s) => s.artifact);
+  const sketch = useStore((s) => s.sketch);
   const setArtifact = useStore((s) => s.setArtifact);
   const jobs = useStore((s) => s.jobs);
   const isGenerating = jobs.some((job) => job.status === "sketching");
@@ -27,7 +28,7 @@ export function ArtifactCanvas({
   // active the logo has docked to the corner, so this padding drops away.
   const sessionActive = useSessionActive();
 
-  if (!artifact) {
+  if (!artifact && !sketch) {
     if (isGenerating) {
       return <WireframeSkeleton />;
     }
@@ -69,21 +70,23 @@ export function ArtifactCanvas({
     );
   }
 
+  // A streamed sketch is always a wireframe; flows render at done.
+  const wireframe = artifact?.kind === "wireframe" ? artifact : null;
   return (
     <div className="relative h-full w-full">
-      {artifact.kind === "wireframe" ? (
+      {sketch || wireframe ? (
         <WireframeCanvas
-          screens={artifact.screens}
-          platform={artifact.platform}
+          artifact={wireframe}
+          sketch={sketch}
           rightInset={rightInset}
         />
-      ) : (
+      ) : artifact?.kind === "flow" ? (
         <FlowCanvas
           nodes={artifact.nodes}
           edges={artifact.edges}
           rightInset={rightInset}
         />
-      )}
+      ) : null}
     </div>
   );
 }
