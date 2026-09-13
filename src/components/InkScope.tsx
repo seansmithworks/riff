@@ -135,43 +135,18 @@ export function InkScope({
   const [live] = useState(useContext(LiveInkContext));
   const scopeRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<ElementInk | null>(null);
-  const strokesRef = useRef<SVGSVGElement[]>([]);
   const [onStroke] = useState(() =>
-    live
-      ? (svg: SVGSVGElement, path: SVGPathElement) => {
-          const handle = handleRef.current;
-          if (!handle) return;
-          const index = strokesRef.current.indexOf(svg);
-          handle.stroke({
-            path,
-            index: index < 0 ? strokesRef.current.length : index,
-            length: path.getTotalLength(),
-          });
-        }
-      : null,
+    live ? (path: SVGPathElement) => handleRef.current?.stroke({ path }) : null,
   );
 
   useLayoutEffect(() => {
     // The scope is display: contents, so the element's own root stays the
     // body's flex item (unchanged layout); that root is what animates.
-    const scope = scopeRef.current;
-    const root = scope?.firstElementChild;
-    if (!live || !scope || !(root instanceof HTMLElement)) return;
-    strokesRef.current = Array.from(
-      scope.querySelectorAll<SVGSVGElement>("svg[data-sketch]"),
-    );
+    const root = scopeRef.current?.firstElementChild;
+    if (!live || !(root instanceof HTMLElement)) return;
     let started = false;
     const handle = live.ink.element({
       root,
-      strokeCount: strokesRef.current.length,
-      content: {
-        hide: () => {
-          root.dataset.inkHidden = "";
-        },
-        show: () => {
-          delete root.dataset.inkHidden;
-        },
-      },
       started: () => {
         if (started) return;
         started = true;

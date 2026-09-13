@@ -46,7 +46,7 @@ export function hashSeed(input: string): number {
  * one it's null and the stroke renders static.
  */
 export const SketchInkContext = createContext<
-  ((svg: SVGSVGElement, path: SVGPathElement) => void) | null
+  ((path: SVGPathElement) => void) | null
 >(null);
 
 interface SketchProps {
@@ -72,7 +72,6 @@ export function Sketch({
   strokeWidth,
 }: SketchProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
   const pathRef = useRef<SVGPathElement>(null);
   const handedOver = useRef(false);
   const onStroke = useContext(SketchInkContext);
@@ -139,9 +138,7 @@ export function Sketch({
   useLayoutEffect(() => {
     if (!path || handedOver.current) return;
     handedOver.current = true;
-    if (onStroke && svgRef.current && pathRef.current) {
-      onStroke(svgRef.current, pathRef.current);
-    }
+    if (onStroke && pathRef.current) onStroke(pathRef.current);
   }, [path, onStroke]);
 
   const resolvedStrokeWidth =
@@ -153,7 +150,6 @@ export function Sketch({
       className={`pointer-events-none absolute inset-0 ${className ?? ""}`}
     >
       <svg
-        ref={svgRef}
         data-sketch=""
         aria-hidden="true"
         className="absolute inset-0 h-full w-full overflow-visible"
