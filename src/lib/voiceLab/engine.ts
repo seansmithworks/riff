@@ -40,6 +40,7 @@ import {
   drawFlatline,
   drawIdleSquiggle,
   drawShapeshiftBody,
+  SHAPESHIFT_BODY_MARK,
   strokeChain,
 } from "./marks";
 import {
@@ -98,6 +99,7 @@ import {
   createMotionState,
   dialSpeed,
   setMorphReducedMotion,
+  shapeshiftSprout,
   type MorphId,
   type MotionState,
   type RolePose,
@@ -344,6 +346,8 @@ export class VoiceLabEngine implements SequenceHost {
   // Ink & Wash stain throttle (spec §4.4: bleed every 50ms per role).
   private lastStainAt: Record<Role, number> = { human: 0, riff: 0 };
   private clearSpec: SpringSpec = { response: 1, damping: 1 };
+  // Whether Shapeshift's shared body drew last frame (dev evidence evals).
+  private shapeshiftBodyActive = false;
 
   constructor(canvas: HTMLCanvasElement, config?: EngineConfig) {
     this.canvas = canvas;
@@ -1182,24 +1186,29 @@ export class VoiceLabEngine implements SequenceHost {
     const style = morphOn
       ? MORPH_STYLES[this.morphId as Exclude<MorphId, "off">]
       : null;
-    // Shapeshift only reads as a continuous morph for the Amoeba/Burst
-    // pairing (spec §4.2) — Burst is then drawn by the shared radial-morph
-    // pass in drawVoiceLayer instead of here, and every other pairing (and
-    // every other style) falls back to this generic pose path.
-    const isShapeshiftPair =
-      style?.id === "shapeshift" &&
-      this.config.humanMarkId === "amoeba" &&
-      this.config.riffMarkId === "burst";
-    if (isShapeshiftPair && role === "riff") return;
-
-    const pose = style ? style.pose(role, this.motion, t) : null;
-    this.lastPose[role] = pose;
     const presence = morphOn
       ? this.motion.presence[role].value
       : this.presence[role];
+    if (morphOn) this.presence[role] = presence;
+    // Shapeshift draws one shared body (spec §4.2) only for the Amoeba/Burst
+    // pairing, and only when geometry may move: under reduced motion, or any
+    // other pairing, both marks draw normally with Still Breath poses.
+    const shapeshiftBody =
+      style?.id === "shapeshift" &&
+      this.config.humanMarkId === "amoeba" &&
+      this.config.riffMarkId === "burst" &&
+      !this.reducedMotionActive();
+    this.shapeshiftBodyActive = shapeshiftBody;
+    if (shapeshiftBody && role === "riff") return;
+    const poseStyle =
+      style?.id === "shapeshift" && !shapeshiftBody
+        ? MORPH_STYLES.breath
+        : style;
+
+    const pose = poseStyle ? poseStyle.pose(role, this.motion, t) : null;
+    this.lastPose[role] = pose;
     const cullAlpha = pose ? pose.alpha : presence;
     if (cullAlpha <= 0.01) return;
-    if (morphOn) this.presence[role] = presence;
 
     const o = this.getOrigin();
     const active = role === activeRole;
@@ -1253,11 +1262,9 @@ export class VoiceLabEngine implements SequenceHost {
       stagger: morphOn ? this.config.morph.inkwash.stagger : undefined,
       nib: morphOn ? this.config.morph.inkwash.nib : undefined,
     };
-    if (isShapeshiftPair && role === "human") {
-      // The shared radial-morph body (spec §4.2, simplified per morph.ts's
-      // comment on drawShapeshiftBody) replaces both roles' ordinary
-      // mark.draw() calls — built here so it has both roles' live band data
-      // in the same frame.
+    if (shapeshiftBody && role === "human") {
+      // The shared body replaces both roles' ordinary mark.draw() calls —
+      // built here so it has both roles' live band data in the same frame.
       const riffData = this.riffLevelData(t, activeRole === "riff");
       this.smoothedAgent = computeBands(riffData, this.smoothedAgent);
       const riffBands = BAR_ORDER.map((i) => this.smoothedAgent[i]);
@@ -1278,8 +1285,13 @@ export class VoiceLabEngine implements SequenceHost {
         smear: this.smearFramesLeft.riff > 0 ? 1.6 : 1,
         talk: this.motion.talk.riff.value,
       };
-      setAlphaMul(1);
-      drawShapeshiftBody(g, gRiff, this.motion.morph.value);
+      setAlphaMul(preset.markPeak * pose!.alpha);
+      drawShapeshiftBody(
+        g,
+        gRiff,
+        this.motion.morph.value,
+        shapeshiftSprout(this.motion, t),
+      );
     } else if (pose) {
       setAlphaMul(preset.markPeak * pose.alpha);
       setLineMul(pose.lineMul);
@@ -1309,7 +1321,9 @@ export class VoiceLabEngine implements SequenceHost {
     // emitters (Burst, Amoeba — spec item 2): prefer the active speaker so
     // ray/bulge tips stay live during a handoff, but fall back to a fading
     // one so backchannel/underlay sparks keep going.
-    if (mark.getTipEmitters && (active || !this.lastMarkContext))
+    if (shapeshiftBody)
+      this.lastMarkContext = { mark: SHAPESHIFT_BODY_MARK, g };
+    else if (mark.getTipEmitters && (active || !this.lastMarkContext))
       this.lastMarkContext = { mark, g };
   }
 
@@ -1451,12 +1465,6 @@ export class VoiceLabEngine implements SequenceHost {
     );
     this.motion.talk.human.step(sdt, style.talk);
     this.motion.talk.riff.step(sdt, style.talk);
-    this.motion.morph.step(
-      sdt,
-      this.motion.morph.target > this.motion.morph.value
-        ? { response: 420, damping: 0.9 }
-        : { response: 180, damping: 1 },
-    );
     this.motion.bead.step(sdt, { response: 120, damping: 0.75 });
     this.clearSpec.response =
       (reduced ? 400 : Math.max(60, style.clearMs)) / 0.755;

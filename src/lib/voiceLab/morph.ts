@@ -152,6 +152,7 @@ export type MotionState = {
   presence: Record<Role, Spring>;
   talk: Record<Role, Spring>; // talk: 0 silence-mode .. 1 talking-mode
   morph: Spring; // 0 human form .. 1 riff form (Shapeshift)
+  morphRest: number; // Shapeshift's form outside a backchannel window
   body: { aspect: Spring; radial: Spring; scale: Spring }; // one shared body (Elastic, Breath scale)
   bead: Spring; // Relay
   wash: Record<Role, Envelope>;
@@ -173,6 +174,7 @@ export function createMotionState(host: MorphHost): MotionState {
     presence: { human: new Spring(), riff: new Spring() },
     talk: { human: new Spring(), riff: new Spring() },
     morph: new Spring(),
+    morphRest: 0,
     body: { aspect: new Spring(), radial: new Spring(), scale: new Spring() },
     bead: new Spring(),
     wash: { human: new Envelope(), riff: new Envelope() },
@@ -490,11 +492,14 @@ const elastic: MorphStyle = {
 };
 
 // ---- 2 · Shapeshift (continuous morph) ----------------------------------
-// Only reads as a true continuous morph when human=Amoeba/riff=Burst — the
-// engine falls back to Still Breath's pose for any other mark pairing (spec
-// §4.2). The morph spring (0 human .. 1 riff) drives marks.ts's
-// drawRadialMorph; this style's own pose() only needs to keep alpha/scale
-// sane for that fallback path.
+// Human = Amoeba / Riff = Burst only (spec §4.2): marks.ts's
+// drawShapeshiftBody draws one body on shared K angular slots, driven by the
+// morph spring (0 human form .. 1 riff form). The engine falls back to Still
+// Breath poses for any other pairing, and under reduced motion (the body's
+// geometry would move; only opacity may).
+const SHAPESHIFT_TO_RIFF: SpringSpec = { response: 420, damping: 0.9 }; // ≈290ms, ~0% overshoot
+const SHAPESHIFT_TO_HUMAN: SpringSpec = { response: 180, damping: 1 }; // ≈135ms
+
 const shapeshift: MorphStyle = {
   id: "shapeshift",
   label: MORPH_LABELS.shapeshift,
@@ -508,29 +513,62 @@ const shapeshift: MorphStyle = {
   onsetScale: 1,
   clearMs: 450,
   cinderDieMs: 400,
+  // The shared body's pose (the engine draws it once, from the human pass):
+  // alpha never vanishes mid-handoff — max of both presences. Geometry
+  // comes from m.morph, not scale/radial, so those stay at rest.
   pose(role, m, now) {
     void now;
-    // Alpha never fully vanishes mid-handoff (spec: max of both presences),
-    // so the shared body always has *something* on screen while morphing.
     const alpha = Math.max(m.presence.human.value, m.presence.riff.value);
-    if (reducedActive) return reducedPose(role, role === "human" ? alpha : 0);
-    // Burst is drawn by drawRadialMorph, not drawRole, when the pairing applies
-    return writePose(role, role === "human" ? alpha : 0);
+    if (reducedActive)
+      return reducedPose(role, clamp01(m.presence[role].value));
+    return writePose(role, clamp01(alpha));
   },
+  // Frame-driven morph target (no setTimeout): rest form from the last
+  // handoff, raised to the Backchannel sprout dial for the backchannel window.
+  step(m, now, dt) {
+    const bc = m.backchannel;
+    const inWindow = bc.amount > 0 && now >= bc.at && now <= bc.until;
+    const sprout = Math.min(
+      1,
+      m.host.morph.shapeshift.backchannelSprout * dialIntensity(m),
+    );
+    m.morph.target = inWindow ? Math.max(m.morphRest, sprout) : m.morphRest;
+    m.morph.step(
+      dt,
+      m.morph.target > m.morph.value ? SHAPESHIFT_TO_RIFF : SHAPESHIFT_TO_HUMAN,
+    );
+    // m clamped to [0, 1.04] (spec §4.2).
+    if (m.morph.value > 1.04) {
+      m.morph.value = 1.04;
+      m.morph.velocity = Math.min(0, m.morph.velocity);
+    } else if (m.morph.value < 0) {
+      m.morph.value = 0;
+      m.morph.velocity = Math.max(0, m.morph.velocity);
+    }
+  },
+  // Morph target: you → 0; riff → 1; silence keeps the last form (holder
+  // riff stays open at 1).
   onHandoff(m, from, to, now) {
     m.handoff = { from, to, at: now };
-    m.morph.target = to === "riff" ? 1 : to === "human" ? 0 : m.morph.target;
+    if (to === "riff") m.morphRest = 1;
+    else if (to === "human") m.morphRest = 0;
   },
   onBackchannel(m, amount, ms, now) {
     m.backchannel = { at: now, until: now + ms, amount };
-    const sprout = 0.18; // dial: shapeshift.backchannelSprout
-    const prevTarget = m.morph.target;
-    m.morph.target = Math.min(1, m.morph.target + sprout);
-    setTimeout(() => {
-      m.morph.target = prevTarget;
-    }, ms);
   },
 };
+
+// Ray sprout for drawShapeshiftBody: smoothstep(Sprout delay, 1, m) (spec
+// §4.2). A backchannel parks m at the Backchannel sprout value, below the
+// delay, where that smoothstep is ~0 — so inside the backchannel envelope the
+// spokes grow with m itself ("3-4 short green spokes, then reabsorbed").
+export function shapeshiftSprout(m: MotionState, now: number): number {
+  const mv = clamp01(m.morph.value);
+  const handoff = smoothstep(m.host.morph.shapeshift.sproutDelay, 1, mv);
+  const bc = m.backchannel.amount;
+  const bcEnv = bc > 0 ? backchannelEnvelope(m, now) / bc : 0;
+  return Math.max(handoff, bcEnv * mv);
+}
 
 export const MORPH_STYLES: Record<Exclude<MorphId, "off">, MorphStyle> = {
   breath: stillBreath,

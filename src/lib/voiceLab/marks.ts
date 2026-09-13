@@ -5,7 +5,7 @@ import {
   mulberry32,
 } from "drawably";
 import { SKETCH_ROUGHNESS, hashSeed, polar, arcPts } from "./constants";
-import type { MarkDef, MarkDrawArgs } from "./types";
+import type { MarkDef, MarkDrawArgs, TipEmitter } from "./types";
 
 // Shared drawing helpers ----------------------------------------------------
 
@@ -123,32 +123,45 @@ let waveformBuf: number[] = [];
 // Shared outline geometry for the Amoeba mark — draw() and getTipEmitters()
 // both call this so the mark's visible bulges and its spark-spawn points are
 // guaranteed identical.
+// Radius of outline segment s (of totalSegs, angle s/totalSegs·2π from +x).
+// Shared by amoebaOutline and Shapeshift's body so both read one formula.
+function amoebaRadius(
+  g: MarkDrawArgs,
+  cfg: Record<string, number>,
+  s: number,
+  totalSegs: number,
+): number {
+  const { t, bands, onsetPulse, smear } = g;
+  const smearMul = smear ?? 1;
+  const frac = s / totalSegs;
+  const bandIdx = Math.floor(frac * bands.length) % bands.length;
+  const bandLevel = bands[bandIdx];
+  const bulge =
+    Math.sin(frac * cfg.bulgeCount * Math.PI * 2 + t / 380) *
+    cfg.wobble *
+    6 *
+    (0.4 + bandLevel);
+  // Smear widening (matches Burst's reach ×1.6 during a handoff's
+  // smearFrames window, marks.ts ~148-175): only the reach *beyond* the
+  // base radius scales, so the loop's resting size stays put.
+  return (
+    cfg.baseRadius +
+    (bandLevel * cfg.bulgeAmount + bulge + onsetPulse * cfg.onsetPunch * 10) *
+      smearMul
+  );
+}
+
 function amoebaOutline(
   g: MarkDrawArgs,
   cfg: Record<string, number>,
 ): { x: number; y: number; a: number; r: number }[] {
-  const { o, t, bands, onsetPulse, smear } = g;
-  const smearMul = smear ?? 1;
+  const { o, bands } = g;
   const segsPerBand = 6;
   const totalSegs = bands.length * segsPerBand;
   const pts: { x: number; y: number; a: number; r: number }[] = [];
   for (let s = 0; s < totalSegs; s++) {
-    const frac = s / totalSegs;
-    const a = frac * Math.PI * 2;
-    const bandIdx = Math.floor(frac * bands.length) % bands.length;
-    const bandLevel = bands[bandIdx];
-    const bulge =
-      Math.sin(frac * cfg.bulgeCount * Math.PI * 2 + t / 380) *
-      cfg.wobble *
-      6 *
-      (0.4 + bandLevel);
-    // Smear widening (matches Burst's reach ×1.6 during a handoff's
-    // smearFrames window, marks.ts ~148-175): only the reach *beyond* the
-    // base radius scales, so the loop's resting size stays put.
-    const r =
-      cfg.baseRadius +
-      (bandLevel * cfg.bulgeAmount + bulge + onsetPulse * cfg.onsetPunch * 10) *
-        smearMul;
+    const a = (s / totalSegs) * Math.PI * 2;
+    const r = amoebaRadius(g, cfg, s, totalSegs);
     const [x, y] = polar(o.x, o.y - 30, r, a);
     pts.push({ x, y, a, r });
   }
@@ -1446,51 +1459,268 @@ export function drawFlatline(o: { x: number; y: number }, color: string) {
   strokePath(new Path2D(d), color, 1.25, 0.85);
 }
 
-// Shapeshift's continuous-morph body (spec §4.2), simplified: rather than
-// resampling both marks onto shared K angular slots (the literal spec text),
-// this crossfades the outgoing Amoeba loop against the incoming Burst fan,
-// scaling ray length by the same eased `morph` value that drives the fade —
-// so the read is "one body opening up" rather than a hard mark swap, without
-// a bespoke shared-topology geometry pass. Only wired for the Amoeba/Burst
-// pairing (engine.ts's isShapeshiftPair); every other pairing falls back to
-// Still Breath's ordinary two-mark crossfade.
+// ---- Shapeshift body (spec §4.2) -----------------------------------------
+// One continuous shape on K shared angular slots (K = Burst's ray count), so
+// the Amoeba loop and the Burst fan are the same topology at every morph
+// value m: nothing is swapped, crossfaded or culled at a threshold. Per slot:
+//   angle   lerp(θ_h, θ_r, easeInOut(m)) — θ_h = K even loop angles from
+//           −90°, θ_r = that Burst ray's angle (spread + posJitter)
+//   center  (o.x, lerp(o.y − 30, o.y, m))
+//   inner   lerp(amoebaRadiusAt(angle), 26, m) — the loop runs through these
+//   tip     inner + sprout · burstLen · vis — loop bulges grow into rays
+// Loop slots are indexed from the fan's center ray (θ_h of the middle slot
+// = −90° = the fan's center), so the loop gathers upward into the fan with
+// no slot swinging more than ~65°; indexing from the fan's first ray instead
+// spins every point 110-230° around the center.
+// All buffers are module-level and rebuilt only when K changes.
+const SS_AMOEBA_SEED = hashSeed("amoeba");
+let ssK = 0;
+let ssThreshold = new Float64Array(0);
+let ssPosJit = new Float64Array(0);
+let ssLenJit = new Float64Array(0);
+let ssRaySeed = new Float64Array(0);
+let ssAngR = new Float64Array(0); // Burst ray angle per slot, degrees
+let ssAng = new Float64Array(0); // current slot angle, radians
+let ssInnerR = new Float64Array(0);
+let ssInnerX = new Float64Array(0);
+let ssInnerY = new Float64Array(0);
+let ssLen = new Float64Array(0); // unsprouted ray length
+let ssVis = new Float64Array(0);
+let ssRayW = new Float64Array(0);
+let ssRayA = new Float64Array(0);
+let ssTipLen = new Float64Array(0);
+let ssTipX = new Float64Array(0);
+let ssTipY = new Float64Array(0);
+let ssLoop: [number, number][] = [];
+let ssAmoebaR = new Float64Array(64);
+let ssDrawnMorph = 0;
+
+function ensureShapeshiftSlots(K: number) {
+  if (K === ssK) return;
+  ssK = K;
+  ssThreshold = new Float64Array(K);
+  ssPosJit = new Float64Array(K);
+  ssLenJit = new Float64Array(K);
+  ssRaySeed = new Float64Array(K);
+  ssAngR = new Float64Array(K);
+  ssAng = new Float64Array(K);
+  ssInnerR = new Float64Array(K);
+  ssInnerX = new Float64Array(K);
+  ssInnerY = new Float64Array(K);
+  ssLen = new Float64Array(K);
+  ssVis = new Float64Array(K);
+  ssRayW = new Float64Array(K);
+  ssRayA = new Float64Array(K);
+  ssTipLen = new Float64Array(K);
+  ssTipX = new Float64Array(K);
+  ssTipY = new Float64Array(K);
+  ssLoop = Array.from({ length: 2 * K }, () => [0, 0] as [number, number]);
+  for (let i = 0; i < K; i++) {
+    // Same per-slot constants burstRays() derives, so the fan at m = 1 has
+    // Burst's own thresholds, angle jitter and length jitter.
+    const slotRng = mulberry32(hashSeed(`b-slot-${i}`));
+    ssThreshold[i] = 0.05 + slotRng() * 0.5;
+    ssPosJit[i] = (slotRng() - 0.5) * 16;
+    ssLenJit[i] = slotRng();
+    ssRaySeed[i] = hashSeed(`b-ray-${i}`);
+  }
+}
+
+// Linear interpolation of the Amoeba outline radii (ssAmoebaR, `segs`
+// samples at s/segs·2π from +x) at an arbitrary angle — continuous in angle,
+// unlike re-evaluating the band-stepped radius formula directly.
+function amoebaRadiusAt(a: number, segs: number): number {
+  const TAU = Math.PI * 2;
+  const u = ((((a % TAU) + TAU) % TAU) / TAU) * segs;
+  const i0 = Math.floor(u) % segs;
+  const f = u - Math.floor(u);
+  const r0 = ssAmoebaR[i0];
+  return r0 + (ssAmoebaR[(i0 + 1) % segs] - r0) * f;
+}
+
+let ssColA = "";
+let ssColB = "";
+let ssColQ = -1;
+let ssColStr = "";
+function parseHex(hex: string): [number, number, number] | null {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex.trim());
+  return m
+    ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)]
+    : null;
+}
+// sRGB lerp between the two role colors, cached per 1/64 step of t.
+function shapeshiftColor(a: string, b: string, t: number): string {
+  const q = Math.round(Math.max(0, Math.min(1, t)) * 64);
+  if (a === ssColA && b === ssColB && q === ssColQ) return ssColStr;
+  ssColA = a;
+  ssColB = b;
+  ssColQ = q;
+  const ca = parseHex(a);
+  const cb = parseHex(b);
+  if (!ca || !cb) {
+    ssColStr = q < 32 ? a : b;
+  } else {
+    const f = q / 64;
+    ssColStr = `rgb(${Math.round(ca[0] + (cb[0] - ca[0]) * f)},${Math.round(
+      ca[1] + (cb[1] - ca[1]) * f,
+    )},${Math.round(ca[2] + (cb[2] - ca[2]) * f)})`;
+  }
+  return ssColStr;
+}
+
 export function drawShapeshiftBody(
   gHuman: MarkDrawArgs,
   gRiff: MarkDrawArgs,
   morph: number,
+  sprout: number,
 ) {
-  const m = Math.max(0, Math.min(1, morph));
-  const eased = m * m * (3 - 2 * m);
-  const alpha = Math.max(gHuman.presence ?? 0, gRiff.presence ?? 0);
-  if (eased < 0.97) {
-    const outline = amoebaOutline(gHuman, gHuman.cfg);
-    const pts: [number, number][] = outline.map((p) => [p.x, p.y]);
-    strokeChain(
-      pts,
-      gHuman.color,
-      gHuman.cfg.thickness,
-      hashSeed("amoeba") + Math.floor(gHuman.t / 220),
-      alpha * (1 - eased),
-      true,
-    );
+  const hc = gHuman.cfg;
+  const rc = gRiff.cfg;
+  const K = Math.max(3, Math.round(rc.rayCount));
+  ensureShapeshiftSlots(K);
+  const m = Math.max(0, Math.min(1.04, morph));
+  const m1 = Math.min(1, m);
+  const e = m1 < 0.5 ? 4 * m1 * m1 * m1 : 1 - Math.pow(-2 * m1 + 2, 3) / 2;
+  const { o } = gHuman;
+  const cy = o.y - 30 + 30 * m;
+  const DEG = Math.PI / 180;
+  const half = (K - 1) / 2;
+
+  // Amoeba outline radii for this frame (human bands).
+  const segs = gHuman.bands.length * 6;
+  if (ssAmoebaR.length < segs) ssAmoebaR = new Float64Array(segs);
+  for (let s = 0; s < segs; s++)
+    ssAmoebaR[s] = amoebaRadius(gHuman, hc, s, segs);
+
+  // Pass 1 — per slot: Burst's own ray level/visibility/length (riff bands),
+  // mirroring burstRays() including the F3 smoothstep fade band.
+  const rb = gRiff.bands;
+  const nb = rb.length;
+  const smearR = gRiff.smear ?? 1;
+  for (let i = 0; i < K; i++) {
+    const frac = i / (K - 1);
+    const pos = frac * (nb - 1);
+    const i0 = Math.floor(pos);
+    const i1 = Math.min(nb - 1, i0 + 1);
+    const lf = pos - i0;
+    const lvl = rb[i0] * (1 - lf) + rb[i1] * lf;
+    const th = ssThreshold[i];
+    const v = Math.max(0, Math.min(1, (lvl - (th - 0.08)) / 0.12));
+    ssVis[i] = v * v * (3 - 2 * v);
+    const eA = Math.max(0, Math.min(1, (lvl - th) / (1 - th)));
+    ssLen[i] =
+      (12 +
+        eA * rc.reach +
+        ssLenJit[i] * 18 +
+        gRiff.onsetPulse * rc.onsetPunch * 24) *
+      smearR;
+    ssRayW[i] = 1.25 * 0.8 * rc.thickness + eA * 1.1 * rc.thickness;
+    ssRayA[i] = (0.45 + eA * 0.5) * ssVis[i];
+    ssAngR[i] = -90 - rc.spread / 2 + rc.spread * frac + ssPosJit[i];
   }
-  if (eased > 0.03) {
-    for (const r of burstRays({ ...gRiff, radial: eased })) {
-      strokePath(
-        new Path2D(
-          roughLine(r.x1, r.y1, r.x2, r.y2, {
-            seed: r.seed,
-            roughness: SKETCH_ROUGHNESS,
-            boil: 0,
-          }),
-        ),
-        gRiff.color,
-        r.width,
-        r.alpha * alpha,
-      );
+
+  // Pass 2 — loop vertices at 2× subdivision: even = slot inner points, odd
+  // = the half-slot between them (the last one bridges the fan's open side).
+  for (let i = 0; i < K; i++) {
+    for (let h = 0; h < 2; h++) {
+      const thH = -90 + (360 * (i + h * 0.5 - half)) / K;
+      const thR =
+        h === 0
+          ? ssAngR[i]
+          : i < K - 1
+            ? (ssAngR[i] + ssAngR[i + 1]) / 2
+            : (ssAngR[K - 1] + ssAngR[0] + 360) / 2;
+      const a = (thH + (thR - thH) * e) * DEG;
+      const ra = amoebaRadiusAt(a, segs);
+      const r = ra + (26 - ra) * m;
+      const x = o.x + Math.cos(a) * r;
+      const y = cy + Math.sin(a) * r;
+      const p = ssLoop[2 * i + h];
+      p[0] = x;
+      p[1] = y;
+      if (h === 0) {
+        ssAng[i] = a;
+        ssInnerR[i] = r;
+        ssInnerX[i] = x;
+        ssInnerY[i] = y;
+      }
     }
   }
+
+  const color = shapeshiftColor(gHuman.color, gRiff.color, m1);
+  const seedBucket = Math.floor(gHuman.t / (220 + (90 - 220) * m1));
+  const burstBaseW = 1.25 * 0.8 * rc.thickness;
+
+  // Loop: Amoeba's own talk-blended stroke alpha, fading as rays take over.
+  const talkH = gHuman.talk ?? (gHuman.mode === "talking" ? 1 : 0);
+  const loopA =
+    (0.3 + (Math.max(0.25, 0.6 + gHuman.level * 0.3) - 0.3) * talkH) *
+    (1 - smoothstep01((m - 0.35) / 0.5));
+  if (loopA > 0.002)
+    strokeChain(
+      ssLoop,
+      color,
+      hc.thickness + (burstBaseW - hc.thickness) * m1,
+      SS_AMOEBA_SEED + seedBucket,
+      loopA,
+      true,
+    );
+
+  // Rays: grow outward from the loop's slot points along the slot angle.
+  for (let i = 0; i < K; i++) {
+    const len = sprout * ssLen[i] * ssVis[i];
+    ssTipLen[i] = len;
+    const a = ssAng[i];
+    ssTipX[i] = ssInnerX[i] + Math.cos(a) * len;
+    ssTipY[i] = ssInnerY[i] + Math.sin(a) * len;
+    if (ssVis[i] < 0.02 || len < 0.25) continue;
+    strokePath(
+      new Path2D(
+        roughLine(ssInnerX[i], ssInnerY[i], ssTipX[i], ssTipY[i], {
+          seed: ssRaySeed[i] + seedBucket,
+          roughness: SKETCH_ROUGHNESS,
+          boil: 0,
+        }),
+      ),
+      color,
+      hc.thickness + (ssRayW[i] - hc.thickness) * m1,
+      ssRayA[i],
+    );
+  }
+  ssDrawnMorph = m;
 }
+
+function smoothstep01(x: number): number {
+  const c = Math.max(0, Math.min(1, x));
+  return c * c * (3 - 2 * c);
+}
+
+// Emitters for the body (spec §4.2): loop local maxima while m < 0.5, ray
+// tips after. Reads the buffers from the last drawShapeshiftBody call.
+export const SHAPESHIFT_BODY_MARK: MarkDef = {
+  id: "shapeshift-body",
+  num: 0,
+  name: "Shapeshift",
+  params: [],
+  draw() {},
+  getTipEmitters(): TipEmitter[] {
+    const K = ssK;
+    const out: TipEmitter[] = [];
+    if (ssDrawnMorph < 0.5) {
+      for (let i = 0; i < K; i++) {
+        const prev = ssInnerR[(i - 1 + K) % K];
+        const next = ssInnerR[(i + 1) % K];
+        if (ssInnerR[i] >= prev && ssInnerR[i] >= next)
+          out.push({ x: ssInnerX[i], y: ssInnerY[i], angle: ssAng[i] });
+      }
+    } else {
+      for (let i = 0; i < K; i++)
+        if (ssVis[i] > 0.5 && ssTipLen[i] > 1)
+          out.push({ x: ssTipX[i], y: ssTipY[i], angle: ssAng[i] });
+    }
+    return out;
+  },
+};
 
 export function drawIdleSquiggle(
   o: { x: number; y: number },
