@@ -96,6 +96,11 @@ export default function Stage({ children }: { children: React.ReactNode }) {
     if (!canvasRef.current) return;
     const engine = new VoiceLabEngine(canvasRef.current);
     engineRef.current = engine;
+    // Dev/evidence-capture hook only (spec §5 acceptance: "eval output of
+    // getMorph()") — never read by any shipped UI.
+    (
+      window as unknown as { __voiceLabEngine?: VoiceLabEngine }
+    ).__voiceLabEngine = engine;
     const autoplay = new Autoplay(engine);
     engine.onStatusChange(setStatus);
     if (glowCyanRef.current && glowGreenRef.current)
@@ -145,6 +150,12 @@ export default function Stage({ children }: { children: React.ReactNode }) {
       }
       if (e.key.toLowerCase() === "z") {
         engine.setSlowMotion(!engine.getSlowMotion());
+        return;
+      }
+      // Morph lab (spec §5): M cycles forward, Shift+M backward. Placed
+      // before the S/L branch below, same ordering the spec calls out.
+      if (e.key.toLowerCase() === "m") {
+        engine.cycleMorph(e.shiftKey ? -1 : 1);
         return;
       }
       if (e.key.toLowerCase() === "s") {
@@ -278,7 +289,7 @@ export default function Stage({ children }: { children: React.ReactNode }) {
               <div className="flex items-center justify-between gap-2">
                 <span>
                   {status.sequenceHotkey} · {status.sequenceName} —{" "}
-                  {status.sequenceThesis}
+                  {status.sequenceThesis} — morph: {status.morphLabel}
                 </span>
                 <span className="shrink-0 text-[#a1a1aa]">
                   {status.sequencePlaying ? "▶" : "❚❚"}

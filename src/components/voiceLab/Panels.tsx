@@ -143,6 +143,125 @@ function SequencePanel() {
   return null;
 }
 
+// Morph lab (docs/voice-lab-morph-spec.md §5) — style select + hotkey sync,
+// same idempotent pattern as SequencePanel above so a keyboard cycle (M /
+// Shift+M) and this select never fall out of sync. Dial values are pushed
+// straight into engine.config.morph; only `style` round-trips through
+// setMorph/getMorph, since that's the one call with side effects (spring
+// retargeting).
+function MorphPanel() {
+  const handle = useEngine();
+  const controller = useDialKitController(
+    "Morph",
+    {
+      style: {
+        type: "select",
+        options: [
+          { value: "off", label: "Off (current)" },
+          { value: "breath", label: "1 · Still Breath" },
+          { value: "shapeshift", label: "2 · Shapeshift" },
+          { value: "relay", label: "3 · Relay" },
+          { value: "inkwash", label: "4 · Ink & Wash" },
+          { value: "elastic", label: "5 · Elastic" },
+        ],
+        default: "inkwash",
+      },
+      speed: [1, 0.5, 2, 0.05],
+      intensity: [1, 0, 1.5, 0.05],
+      breath: { _collapsed: true, scale: [0.88, 0.7, 1, 0.01] },
+      shapeshift: {
+        _collapsed: true,
+        sproutDelay: [0.15, 0, 0.6, 0.05],
+        backchannelSprout: [0.18, 0, 0.5, 0.02],
+      },
+      relay: {
+        _collapsed: true,
+        gatherMs: [140, 60, 300, 10],
+        holdMs: [60, 0, 200, 10],
+        releasePunch: [0.6, 0, 1.5, 0.05],
+        landingBead: true,
+      },
+      inkwash: {
+        _collapsed: true,
+        stagger: [0.6, 0, 1.5, 0.05],
+        stain: [0.6, 0, 1, 0.05],
+        wetBloom: [0.15, 0, 0.4, 0.01],
+        nib: true,
+      },
+      elastic: {
+        _collapsed: true,
+        squash: [0.18, 0, 0.4, 0.01],
+        wobble: [0.45, 0.2, 1, 0.05],
+      },
+    },
+    { persist: persistKey("morph") },
+  );
+
+  const controllerRef = useRef(controller);
+  useEffect(() => {
+    controllerRef.current = controller;
+  }, [controller]);
+
+  const style = controller.values.style as string;
+  useEffect(() => {
+    if (!handle) return;
+    if (style === handle.engine.getMorph()) return;
+    handle.engine.setMorph(style as never);
+  }, [handle, style]);
+
+  useEffect(() => {
+    if (!handle) return;
+    handle.engine.config.morph = {
+      speed: controller.values.speed as number,
+      intensity: controller.values.intensity as number,
+      breath: {
+        scale: (controller.values.breath as { scale: number }).scale,
+      },
+      shapeshift: controller.values.shapeshift as {
+        sproutDelay: number;
+        backchannelSprout: number;
+      },
+      relay: controller.values.relay as {
+        gatherMs: number;
+        holdMs: number;
+        releasePunch: number;
+        landingBead: boolean;
+      },
+      inkwash: controller.values.inkwash as {
+        stagger: number;
+        stain: number;
+        wetBloom: number;
+        nib: boolean;
+      },
+      elastic: controller.values.elastic as { squash: number; wobble: number },
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    handle,
+    controller.values.speed,
+    controller.values.intensity,
+    controller.values.breath,
+    controller.values.shapeshift,
+    controller.values.relay,
+    controller.values.inkwash,
+    controller.values.elastic,
+  ]);
+
+  // Engine → DialKit sync, so the `M`/`Shift+M` hotkey (Stage.tsx) keeps this
+  // select in lockstep, same as SequencePanel's preset/play sync.
+  useEffect(() => {
+    if (!handle) return;
+    return handle.engine.onStatusChange((status) => {
+      const c = controllerRef.current;
+      if (status.morphId !== c.getValues().style) {
+        c.setValue("style", status.morphId);
+      }
+    });
+  }, [handle]);
+
+  return null;
+}
+
 // ---- Voice channel: idle / you-talking / riff-talking / silence / dead-mic
 // `autoplay` used to live here; it's now the Sequence panel's `play` toggle
 // above (spec §5) — everything else about manual voice-state selection is
@@ -680,6 +799,7 @@ export default function VoiceLabPanels() {
   return (
     <>
       <SequencePanel />
+      <MorphPanel />
       <VoicePanel />
       <JobPanel />
       <TogglesPanel />
