@@ -84,16 +84,28 @@
 - [x] **Step 2. Contract, tracker and merge.** `ARTIFACT_STREAM_JSON_SCHEMA` + `validateArtifact` into `artifact.ts`, new `artifact-stream.ts`, `tests/artifact-stream.test.ts` on spike fixtures. `npm test` 18/18: chunking-invariant events (whole, per char, every split, 50 seeds) on R2-1, R2-2, R3-1, R3-2 and a reordered-keys fixture; head buffering; element-before-screen; deep-equal unchanged; both M4 cases; synthetic before→after equals `artifact-after.json`.
 - [x] **Step 3. Streaming `/api/generate` with dev-only replay.** NDJSON when the request sends `Accept: application/x-ndjson`; the JSON path (useVoice/CopilotPanel until Step 4) is unchanged. Stream request body byte-identical to the spike's R2-1/R3-1/R4-2 bodies. Live R2 ×3 heads received at 1194 / 2143 / 907ms (line 1251ms; run 2 missed, and replay shows the pipeline adds ~5ms). Abort after first screen: Fireworks read stopped 2ms after client abort, chunks 298 → 298. Replay R2-1 head t=1433ms vs fixture 1428ms. Idle watchdog 9s, hard cap 45s (arithmetic in `generate.ts`).
 - [x] **Step 4. One client job runner (`sketch-job.ts`) and a store draft.** Voice and text both call `startSketchJob` (NDJSON, newest wins globally, aborts the previous fetch). Store `sketch` slice: head fields, outline, base, closed screens, closed elements per stream screen index, per-screen `changed`; screens commit to `artifact` on close, done sets the final artifact. The canvas mode (per screen vs per element) is not picked. Replay R2-1: outline at 1439ms, s1's 5 elements accumulate, s1 commits at 3911ms. Supersede at 1.5s: job 1 `superseded`, server `aborted by client after 1507ms`, job 1's outline held until job 2's head at 2463ms. Supersede after s1: next body carried `currentArtifact [s1]`, `pendingScreens [s2,s3]`, `unfinishedFirstSketch: true`. Live x1: `[sketch] ... head 1554ms first-ink 1808ms s1 3484ms screens 3 end 8385ms` (1 Fireworks call).
-- [ ] **Step 5. Canvas: outlines, ink, camera framed once.** Needs decision 1 (per screen vs per element) first.
+- [x] **Step 5. Canvas: outlines, ink, camera framed once.** `f616004` (structure, merged `52b85f6`) + Pen `275fd84`; both reviewed.
   - Decision 1: per element (Sean 2026-09-13). Draw treatment: Pen, 1200 px/s (Sean 2026-09-13).
   - [x] Pencil outline color zinc-400 (`textTertiary`): confirmed, Sean 2026-09-13.
   - [x] `PEN_MAX_SPEEDUP` 20× kept (Sean 2026-09-13).
-- [ ] **Step 6. Races, failures, review (all on replay).** B1–B11 pass; screenshots untracked in `docs/evidence/stream/step6/`, synthetic replays `S6-*` in the spike folder. Open: Sean's mic session, the reviewer pass.
-  - [ ] **Sean: one live voice session with a real mic** (Step 4 acceptance, can't run headless): no `Voice connection error`, and the sketch still streams while the agent talks.
+- [x] **Step 6. Races, failures, review (all on replay).** `7d6af63`; final whole-diff review → ship-after-fixes, fixed in `3acddf1` (`maxDuration` 60, 64 KB body cap, pendingScreens ≤ 6, bench uses canonical `validateArtifact`). B1–B11 pass; screenshots untracked in `docs/evidence/stream/step6/`, synthetic replays `S6-*` in the spike folder. Open: Sean's mic session, the reviewer pass.
+  - [x] **Sean: one live voice session with a real mic** (Sean 2026-09-13: "Looks like it is working!") (Step 4 acceptance, can't run headless): no `Voice connection error`, and the sketch still streams while the agent talks.
   - [x] Keep landed ids, live (F4): supersede at job 1's s1 sent `currentArtifact [s1]`, `pendingScreens [s2,s3]`, `unfinishedFirstSketch`; final `s1,s2,s3`.
   - [ ] F4's 3-screen rule is prompt-only: the same supersede with a brief that adds a screen ("Add a screen where they pay") ended `s1..s4` (live, glm-5p2). Enforce in `generate.ts` or accept.
   - [x] A1: every element event re-rendered every screen node. Now a memoized node reads its own slot from a per-slot store. Desktop replay: s1/s2/s3 render 10/18/16 times and 28 of 28 element events re-render only the inking node (old model 39/47/45, 2 of 28).
   - [x] A2: no reorders in the 15 candidate runs (R2–R4 outline order matches base), so frames keep x by index with a comment, no move animation.
   - [x] A3: first-ink now fires when the pen reaches an element, stroke or not. No-stroke replay `-` → 1073ms; reduced motion 1820ms.
   - [x] B1 supersede before head (no fit, no frames until job 2's head). B2 supersede mid-ink (s1 kept: 0 remounts, same ink key). B3 error after s1 (s1 stays, "Sketch failed", nothing stuck). B4 flow at done. B5 desktop. B6 chat open mid-stream: one refit. B7 both directions: newest wins, 0 re-calls, the text rail got the do-not-retry string. B9 reduced motion: no nib, 27 of 27 elements crossfade. B10 hidden tab: dt unclamped by design, no jank on refocus. B11 3-job chain: 4 fits (2 heads, chat open, done's 4→3).
-  - [ ] Stale comment in `src/app/api/generate/route.ts:23-25` still says useVoice/CopilotPanel use the JSON path. Left alone (file under review during Step 4).
+  - [x] (fixed in `a03d5f9`) Stale comment in `src/app/api/generate/route.ts:23-25` still says useVoice/CopilotPanel use the JSON path. Left alone (file under review during Step 4).
+
+### wrap-continue (2026-09-13 late night)
+
+**Done since the 2026-09-13 night checkpoint:** DialKit pass baked on `feat/voice-lab` `7fbb78d`; stream plan `35b3e79` (adversarial review); Steps 1–6 + Pen on `feat/stream` through `3acddf1`, all reviewed and pushed.
+
+- [ ] **Put the `/voice-lab` voice UI into the real build** (carried 3× since 2026-09-12 as "Phases 1–3"; now the locked objective). Strawman: new branch off `feat/stream`, merge `feat/voice-lab`, plan with adversarial-plan. The old Phases 1–3 plan was lost with a tmp scratchpad; re-derive from the lab engine.
+- [ ] **Prod ship of `feat/stream` is ON HOLD** until the lab voice UI is in (Sean 2026-09-13). The merge also ships `feat/voice-ui`'s 10 unmerged VoiceBar/VoiceHint commits.
+- [ ] "Open chat" tooltip renders at the top-left of the canvas (Sean's screenshot; label from `VoiceBar.tsx:355`, not reproduced). Fix before any ship. Carried.
+- [ ] Streaming on Vercel prod is untested (previews have no keys). Verify on the first prod deploy with one live sketch.
+- [ ] Fallback model `gpt-oss-120b` streaming was never measured (reasoning left on). Carried.
+- [ ] `feat/stream-canvas` worktree is merged; remove it when convenient. Parked.
+- [ ] DECIDE OR KILL: `feat/load-logo` @ `0f52726` (carried 7× since 2026-09-10). Parked.
