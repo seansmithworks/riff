@@ -145,6 +145,7 @@ Build order from `docs/voice-lab-morph-spec.md`, one commit per step:
 - [x] Step 3: 5 Morph styles `8c8f388` — Shapeshift is a simplified crossfade of the outgoing loop against the incoming ray fan (drawShapeshiftBody), not the spec's literal shared-topology K-slot resample
 - [x] Step 4: MorphPanel, `M`/`Shift+M` hotkey, caption label `b254698`
 - [x] Step 5: Evidence recordings + ffmpeg acceptance checks in `docs/evidence/morph/` (mobile only, untracked; desktop 1440px skipped, time)
+- [x] Fix wave after reviewer rejection (2026-09-12): prod-gated engine hook + spec committed `6284fee`; live Morph dials `88a3332`; Shapeshift as one K-slot shared-topology body `5ec6899`; Relay gather/hold/release timeline + disc pivot + landing bead `115772a`; spring period clamp (every spring ran ≥1s) `02f4c44`; F2 talk-blended bands `a01de94`; onset pulses stuck at 1 under Morph (cinder flood) `8d4d4b5`
 - [ ] Sean picks a Morph style (strawman default: Ink & Wash; fork: one creature [Shapeshift/Elastic] vs two speakers [Relay/Ink & Wash])
 - [ ] Fresh load comes up paused (VoicePanel mount stops autoplay) — awaiting Sean's nod, not fixed
 - [ ] Landing particle and ink-bleed color follows the wrong role (`activeRoleAndMarkId` reports human during silence) — noticed, not fixed
