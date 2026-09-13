@@ -96,11 +96,14 @@ export default function Stage({ children }: { children: React.ReactNode }) {
     if (!canvasRef.current) return;
     const engine = new VoiceLabEngine(canvasRef.current);
     engineRef.current = engine;
-    // Dev/evidence-capture hook only (spec §5 acceptance: "eval output of
-    // getMorph()") — never read by any shipped UI.
-    (
-      window as unknown as { __voiceLabEngine?: VoiceLabEngine }
-    ).__voiceLabEngine = engine;
+    // Evidence-capture hook (spec §5 acceptance: "eval output of getMorph()").
+    // Dev builds only — /voice-lab is public on Vercel, so production builds
+    // never expose the engine on window.
+    if (process.env.NODE_ENV !== "production") {
+      (
+        window as unknown as { __voiceLabEngine?: VoiceLabEngine }
+      ).__voiceLabEngine = engine;
+    }
     const autoplay = new Autoplay(engine);
     engine.onStatusChange(setStatus);
     if (glowCyanRef.current && glowGreenRef.current)
