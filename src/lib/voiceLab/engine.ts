@@ -1045,6 +1045,20 @@ export class VoiceLabEngine implements SequenceHost {
     return new Uint8Array(1024);
   }
 
+  // F2 (morph spec §2): bands = lerp(silence, talking, talk) before
+  // computeBands' 0.6/0.4 smoothing. The silence clamp (≤18) eases in and out
+  // with the style's talk spring instead of switching the frame the voice
+  // state flips (which collapsed Amoeba bulges and Burst rays in ~4 frames).
+  // Mutates the freshly synthesized buffer in place.
+  private blendTalk(d: Uint8Array, talk: number): Uint8Array {
+    const k = Math.max(0, Math.min(1, talk));
+    for (let i = 0; i < d.length; i++) {
+      const s = Math.min(d[i], 18);
+      d[i] = Math.round(s + (d[i] - s) * k);
+    }
+    return d;
+  }
+
   private riffLevelData(t: number, active: boolean): Uint8Array {
     const d = synthesizeLevelData(t * 0.8 + 4000);
     if (!active) for (let i = 0; i < d.length; i++) d[i] = Math.min(d[i], 18);
@@ -1253,17 +1267,19 @@ export class VoiceLabEngine implements SequenceHost {
     let level: number;
     let onsetPulse: number;
     if (role === "human") {
-      const data = this.levelDataForState(
-        t,
-        active ? "you-talking" : "silence",
-      );
+      const data =
+        morphOn && !(this.config.realMicEnabled && this.analyser)
+          ? this.blendTalk(synthesizeLevelData(t), talk!)
+          : this.levelDataForState(t, active ? "you-talking" : "silence");
       this.smoothedUser = computeBands(data, this.smoothedUser);
       bands = BAR_ORDER.map((i) => this.smoothedUser[i]);
       level = bands.reduce((a, b) => a + b, 0) / bands.length;
       if (active) this.maybeDetectOnset(t, level);
       onsetPulse = morphOn ? this.motion.onset.human.value : this.onsetPulse;
     } else {
-      const data = this.riffLevelData(t, active);
+      const data = morphOn
+        ? this.blendTalk(synthesizeLevelData(t * 0.8 + 4000), talk!)
+        : this.riffLevelData(t, active);
       this.smoothedAgent = computeBands(data, this.smoothedAgent);
       bands = BAR_ORDER.map((i) => this.smoothedAgent[i]);
       level = bands.reduce((a, b) => a + b, 0) / bands.length;
@@ -1296,7 +1312,10 @@ export class VoiceLabEngine implements SequenceHost {
     if (shapeshiftBody && role === "human") {
       // The shared body replaces both roles' ordinary mark.draw() calls —
       // built here so it has both roles' live band data in the same frame.
-      const riffData = this.riffLevelData(t, activeRole === "riff");
+      const riffData = this.blendTalk(
+        synthesizeLevelData(t * 0.8 + 4000),
+        this.motion.talk.riff.value,
+      );
       this.smoothedAgent = computeBands(riffData, this.smoothedAgent);
       const riffBands = BAR_ORDER.map((i) => this.smoothedAgent[i]);
       const riffLevel = riffBands.reduce((a, b) => a + b, 0) / riffBands.length;
