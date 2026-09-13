@@ -66,3 +66,23 @@
 - [ ] CopilotKit chat throws `AI_MissingToolResultsError` when a `render_artifact` generate fails — the tool call never gets a result; the chat thread wedges.
 - [ ] Chat route has no model failover (streaming makes per-request failover impractical); it imports `MODEL_ID` so a retirement is a one-line fix.
 - [ ] Global model default: Sean said he switched to Fable this session; confirm it was session-only (`s`), not saved as default.
+
+## 2026-09-13 — real stream A+B (`feat/stream`, plan `docs/plans/riff-real-stream.html`)
+
+- [x] **Step 1. Gate spike: PASS, 6 of 6, no failure rule fired.** 33 glm-5p2 calls, 0 errors. Reasoning off won (R1b first content 420ms vs R1 1480ms), so R2–R4 ran with `reasoning_effort: "none"`. 15/15 candidate runs order-correct and valid. Honesty: R3 kept s1+s2 5/5, marked s3 changed 4/5 (control rewrote s3 4/5); R4 tab bar on every screen 5/5. **Decision 1 goes to Sean:** R2 screen 1 closes at 3200ms (over the 3s per-screen line), first element at 1198ms. Bench `src/app/api/dev/stream-bench/route.ts`; fixtures and `results.json` untracked in `docs/evidence/stream/spike-2026-09-13/`.
+
+  | Arm (median ms) | First content | Outline | First element | Screen 1 | First changed screen | Done |
+  |---|---|---|---|---|---|---|
+  | R0 today, batch | 8790 | – | – | – | – | 8790 |
+  | R1 today, stream | 1480 | – | 1937 | 4046 | – | 8401 |
+  | R1b stream, reasoning off | 420 | – | 889 | 2783 | – | 7989 |
+  | R2 candidate, new | 372 | 951 | 1198 | 3200 | – | 7364 |
+  | R3 candidate, time-slot edit | 500 | 1072 | 1296 | 3492 | 3492 | 5706 |
+  | R3-control today, time-slot edit | 442 | – | 887 | 2433 | 7322 | 10407 |
+  | R4 candidate, tab bar edit | 324 | 744 | 952 | 2360 | 4614 | 6290 |
+
+- [ ] **Step 2. Contract, tracker and merge.** `ARTIFACT_STREAM_JSON_SCHEMA` + `validateArtifact` into `artifact.ts`, new `artifact-stream.ts`, `tests/artifact-stream.test.ts` on spike fixtures.
+- [ ] **Step 3. Streaming `/api/generate` with dev-only replay.**
+- [ ] **Step 4. One client job runner (`sketch-job.ts`) and a store draft.**
+- [ ] **Step 5. Canvas: outlines, ink, camera framed once.** Needs decision 1 (per screen vs per element) first.
+- [ ] **Step 6. Races, failures, review (all on replay).**
