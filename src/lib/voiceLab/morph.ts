@@ -4,7 +4,7 @@
 // one clock here. The 5 Morph styles below are choreographies on this layer,
 // not easing swaps — Off never touches this file at all (engine.ts keeps its
 // original tween path for Off, per spec §2 F1 "Off").
-import type { Role } from "./types";
+import type { MorphDials, Role } from "./types";
 
 // ---- Primitives -----------------------------------------------------------
 
@@ -143,6 +143,11 @@ export function restPose(alpha = 1): RolePose {
   return { alpha, scale: 1, sx: 1, sy: 1, radial: 1, reveal: 1, lineMul: 1 };
 }
 
+// What the motion layer reads from the engine every frame. The engine passes
+// its own config object (never replaced), so every dial drag is live on the
+// next frame with no copying and no per-frame allocation.
+export type MorphHost = { morph: MorphDials; centerCircleOn: boolean };
+
 export type MotionState = {
   presence: Record<Role, Spring>;
   talk: Record<Role, Spring>; // talk: 0 silence-mode .. 1 talking-mode
@@ -158,9 +163,12 @@ export type MotionState = {
   // Non-spec bookkeeping the engine needs to drive retargeting without
   // re-deriving "which SpringSpec currently governs this role" every frame.
   presenceSpec: Record<Role, SpringSpec>;
+  // Ink & Wash wet bloom (spec §4.4): added to the wash edge amount.
+  bloom: Envelope;
+  host: MorphHost;
 };
 
-export function createMotionState(): MotionState {
+export function createMotionState(host: MorphHost): MotionState {
   const m: MotionState = {
     presence: { human: new Spring(), riff: new Spring() },
     talk: { human: new Spring(), riff: new Spring() },
@@ -177,11 +185,24 @@ export function createMotionState(): MotionState {
       human: { response: 200, damping: 1 },
       riff: { response: 200, damping: 1 },
     },
+    bloom: new Envelope(),
+    host,
   };
   m.body.radial.set(1);
   m.body.scale.set(1);
   m.jobOut.set(1);
   return m;
+}
+
+// Global dials (spec §4 preamble): Speed divides every r and ms — the engine
+// steps springs/envelopes on dt × speed, and timeline code divides its ms by
+// dialSpeed(); Intensity multiplies every spatial amount.
+export function dialSpeed(m: MotionState): number {
+  return Math.max(0.05, m.host.morph.speed);
+}
+
+function dialIntensity(m: MotionState): number {
+  return Math.max(0, m.host.morph.intensity);
 }
 
 export type MorphStyle = {
@@ -198,6 +219,9 @@ export type MorphStyle = {
   clearMs: number;
   cinderDieMs: number;
   pose(role: Role, m: MotionState, now: number): RolePose;
+  // Style-owned springs/timelines, stepped once per frame after the shared
+  // layer. dtMs is already speed-scaled; `now` is the frame clock.
+  step?(m: MotionState, now: number, dtMs: number): void;
   onHandoff?(
     m: MotionState,
     from: Role | null,
@@ -217,15 +241,41 @@ export const REDUCED_MOTION_PRESENCE: SpringSpec = {
   damping: 1,
 };
 
-function reducedPose(alpha: number): RolePose {
-  return { alpha, scale: 1, sx: 1, sy: 1, radial: 1, reveal: 1, lineMul: 1 };
+// One reusable pose per role: pose() runs for every role every frame, so it
+// writes into these instead of allocating. Callers read it before the next
+// pose() call for the same role.
+const POSE: Record<Role, RolePose> = { human: restPose(), riff: restPose() };
+
+function writePose(
+  role: Role,
+  alpha: number,
+  scale = 1,
+  sx = 1,
+  sy = 1,
+  radial = 1,
+  reveal = 1,
+  lineMul = 1,
+  pivot?: { x: number; y: number },
+): RolePose {
+  const p = POSE[role];
+  p.alpha = alpha;
+  p.scale = scale;
+  p.sx = sx;
+  p.sy = sy;
+  p.radial = radial;
+  p.reveal = reveal;
+  p.lineMul = lineMul;
+  p.pivot = pivot;
+  return p;
+}
+
+function reducedPose(role: Role, alpha: number): RolePose {
+  return writePose(role, alpha);
 }
 
 // ---- 1 · Still Breath (quiet) ----------------------------------------
 // The old mark exhales and shrinks away while the new one inhales in; the
 // watercolor just changes tint.
-const BREATH_SCALE = 0.88; // dial: breath.scale
-
 const stillBreath: MorphStyle = {
   id: "breath",
   label: MORPH_LABELS.breath,
@@ -240,19 +290,14 @@ const stillBreath: MorphStyle = {
   clearMs: 600,
   cinderDieMs: 400,
   pose(role, m, now) {
-    if (reducedActive) return reducedPose(m.presence[role].value);
+    if (reducedActive) return reducedPose(role, m.presence[role].value);
     const presence = clamp01(m.presence[role].value);
-    const bc = role === "riff" ? backchannelEnvelope(m, now) : 0;
-    const scale = BREATH_SCALE + (1 - BREATH_SCALE) * presence;
-    return {
-      alpha: presence,
-      scale: scale * (1 + 0.03 * bc),
-      sx: 1,
-      sy: 1,
-      radial: 1,
-      reveal: 1,
-      lineMul: 1,
-    };
+    // Spec §4.1: the backchannel nod is Amoeba's (+3%), not Burst's.
+    const bc = role === "human" ? backchannelEnvelope(m, now) : 0;
+    // Breath scale S (dial); Intensity scales the shrink depth 1 − S.
+    const S = 1 - (1 - m.host.morph.breath.scale) * dialIntensity(m);
+    const scale = S + (1 - S) * presence;
+    return writePose(role, presence, scale * (1 + 0.03 * bc));
   },
   onBackchannel(m, amount, ms, now) {
     m.backchannel = { at: now, until: now + ms, amount };
@@ -265,8 +310,9 @@ const stillBreath: MorphStyle = {
 function backchannelEnvelope(m: MotionState, now: number): number {
   const { at, until, amount } = m.backchannel;
   if (amount <= 0 || now < at) return 0;
-  const attack = 120;
-  const release = 300;
+  const speed = dialSpeed(m);
+  const attack = 120 / speed;
+  const release = 300 / speed;
   if (now <= at + attack) return clamp01((now - at) / attack) * amount;
   if (now <= until) return amount;
   if (now <= until + release)
@@ -292,8 +338,8 @@ const inkWash: MorphStyle = {
   cinderDieMs: 400,
   pose(role, m, now) {
     const presence = clamp01(m.presence[role].value);
-    if (reducedActive) return reducedPose(presence);
-    const revealMs = role === "human" ? 140 : 280;
+    if (reducedActive) return reducedPose(role, presence);
+    const revealMs = (role === "human" ? 140 : 280) / dialSpeed(m);
     const at = m.handoff.to === role ? m.handoff.at : 0;
     const reveal = at
       ? EASE_PEN(clamp01((now - at) / revealMs))
@@ -304,15 +350,23 @@ const inkWash: MorphStyle = {
     const incoming = m.handoff.to === role;
     const alpha = incoming ? Math.max(presence, reveal) : presence;
     const lineMul = 1 + 0.35 * (1 - presence);
-    return {
+    return writePose(
+      role,
       alpha,
-      scale: 1,
-      sx: 1,
-      sy: 1,
-      radial: 1,
-      reveal: Math.max(reveal, presence > 0.95 ? 1 : reveal),
+      1,
+      1,
+      1,
+      1,
+      Math.max(reveal, presence > 0.95 ? 1 : reveal),
       lineMul,
-    };
+    );
+  },
+  // Wet bloom (dial, spec §4.4): on each handoff the wash edge swells by an
+  // Envelope (attack 80, release 500) that targets the dial for 150ms.
+  step(m, now, dt) {
+    const d = m.host.morph;
+    const open = m.handoff.at > 0 && (now - m.handoff.at) * dialSpeed(m) < 150;
+    m.bloom.step(dt, open ? d.inkwash.wetBloom : 0, 80, 500);
   },
   onHandoff(m, from, to, now) {
     m.handoff = { from, to, at: now };
@@ -341,21 +395,12 @@ const relay: MorphStyle = {
   cinderDieMs: 400,
   pose(role, m, now) {
     const presence = clamp01(m.presence[role].value);
-    if (reducedActive) return reducedPose(presence);
+    if (reducedActive) return reducedPose(role, presence);
     const gathering = m.handoff.from === role && now - m.handoff.at < 400;
     const scale = gathering
       ? Math.max(0.08, presence)
       : Math.max(0.08, presence);
-    return {
-      alpha: presence,
-      scale,
-      sx: 1,
-      sy: 1,
-      radial: 1,
-      reveal: 1,
-      lineMul: 1,
-      pivot: { x: 0, y: -15 },
-    };
+    return writePose(role, presence, scale, 1, 1, 1, 1, 1, { x: 0, y: -15 });
   },
   onHandoff(m, from, to, now) {
     m.handoff = { from, to, at: now };
@@ -378,8 +423,10 @@ const relay: MorphStyle = {
 };
 
 // ---- 5 · Elastic (expressive) -------------------------------------------
-const SQUASH = 0.18; // dial: elastic.squash
-const WOBBLE_ZETA = 0.45; // dial: elastic.wobble
+// Body springs settle with the Wobble dial as ζ (spec §4.5); one scratch spec
+// mutated per frame so the dial is live without allocating.
+const ELASTIC_BODY: SpringSpec = { response: 300, damping: 0.45 };
+const ELASTIC_SCALE: SpringSpec = { response: 200, damping: 0.8 };
 
 const elastic: MorphStyle = {
   id: "elastic",
@@ -395,55 +442,49 @@ const elastic: MorphStyle = {
   clearMs: 350,
   cinderDieMs: 250,
   pose(role, m, now) {
+    void now;
     const presence = clamp01(m.presence[role].value);
-    if (reducedActive) return reducedPose(presence);
+    if (reducedActive) return reducedPose(role, presence);
     const aspect = m.body.aspect.value;
-    const radial = 1 + m.body.radial.value - 1;
     if (role === "human") {
       // Amoeba: aspect squash (sy = 1+a, sx = 1/(1+a)), volume-preserving.
       const sy = 1 + aspect;
       const sx = 1 / Math.max(0.4, sy);
-      return {
-        alpha: presence,
-        scale: m.body.scale.value,
-        sx,
-        sy,
-        radial: 1,
-        reveal: 1,
-        lineMul: 1,
-      };
+      return writePose(role, presence, m.body.scale.value, sx, sy);
     }
-    return {
-      alpha: presence,
-      scale: 1,
-      sx: 1,
-      sy: 1,
-      radial: Math.max(0.1, m.body.radial.value),
-      reveal: 1,
-      lineMul: 1,
-    };
+    return writePose(
+      role,
+      presence,
+      1,
+      1,
+      1,
+      Math.max(0.1, m.body.radial.value),
+    );
+  },
+  step(m, now, dt) {
+    void now;
+    ELASTIC_BODY.damping = m.host.morph.elastic.wobble;
+    m.body.aspect.step(dt, ELASTIC_BODY);
+    m.body.radial.step(dt, ELASTIC_BODY);
+    m.body.scale.step(dt, ELASTIC_SCALE);
   },
   onHandoff(m, from, to, now) {
     m.handoff = { from, to, at: now };
-    const windupMs = from && to ? 90 : 50;
-    const settleZeta = from && to ? WOBBLE_ZETA : WOBBLE_ZETA + 0.05;
-    if (from === "human") m.body.aspect.target = -SQUASH;
-    else if (from === "riff") m.body.radial.target = 1 - 1.4 * SQUASH;
+    const windupMs = (from && to ? 90 : 50) / dialSpeed(m);
+    const squash = m.host.morph.elastic.squash * dialIntensity(m);
+    if (from === "human") m.body.aspect.target = -squash;
+    else if (from === "riff") m.body.radial.target = 1 - 1.4 * squash;
     setTimeout(() => {
       m.body.aspect.target = 0;
       m.body.radial.target = 1;
-      // Re-express settle damping by nudging velocity toward the wobble
-      // spec's overshoot character (damping itself is passed in per-step by
-      // the engine from this style's springs, so we only need the target).
-      void settleZeta;
     }, windupMs);
   },
   onBackchannel(m, amount, ms, now) {
     m.backchannel = { at: now, until: now + ms, amount };
-    m.body.aspect.velocity += 0.003 * ms;
+    m.body.aspect.velocity += 0.003 * ms * dialIntensity(m);
   },
   onLanding(m, now) {
-    m.body.radial.velocity += 0.006 * 100;
+    m.body.radial.velocity += 0.006 * 100 * dialIntensity(m);
     void now;
   },
 };
@@ -472,16 +513,9 @@ const shapeshift: MorphStyle = {
     // Alpha never fully vanishes mid-handoff (spec: max of both presences),
     // so the shared body always has *something* on screen while morphing.
     const alpha = Math.max(m.presence.human.value, m.presence.riff.value);
-    if (reducedActive) return reducedPose(role === "human" ? alpha : 0);
-    return {
-      alpha: role === "human" ? alpha : 0, // Burst is drawn by drawRadialMorph, not drawRole, when the pairing applies
-      scale: 1,
-      sx: 1,
-      sy: 1,
-      radial: 1,
-      reveal: 1,
-      lineMul: 1,
-    };
+    if (reducedActive) return reducedPose(role, role === "human" ? alpha : 0);
+    // Burst is drawn by drawRadialMorph, not drawRole, when the pairing applies
+    return writePose(role, role === "human" ? alpha : 0);
   },
   onHandoff(m, from, to, now) {
     m.handoff = { from, to, at: now };

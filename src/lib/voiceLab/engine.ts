@@ -96,9 +96,12 @@ import {
   MORPH_STYLES,
   REDUCED_MOTION_PRESENCE,
   createMotionState,
+  dialSpeed,
   setMorphReducedMotion,
   type MorphId,
   type MotionState,
+  type RolePose,
+  type SpringSpec,
 } from "./morph";
 
 function hexToRgbTuple(hex: string): [number, number, number] {
@@ -333,12 +336,21 @@ export class VoiceLabEngine implements SequenceHost {
   // (DialKit's "voiceLab.morph" key) restore Sean's last pick, same pattern
   // as every other lab control.
   private morphId: MorphId = "inkwash";
-  private motion: MotionState = createMotionState();
+  private motion: MotionState;
   private lastVoiceStateForMorph: VoiceState = "idle";
+  // Last pose applied per role (a reference to morph.ts's per-role scratch
+  // pose) — read by dev-session evidence evals only, never by UI.
+  private lastPose: Record<Role, RolePose | null> = { human: null, riff: null };
+  // Ink & Wash stain throttle (spec §4.4: bleed every 50ms per role).
+  private lastStainAt: Record<Role, number> = { human: 0, riff: 0 };
+  private clearSpec: SpringSpec = { response: 1, damping: 1 };
 
   constructor(canvas: HTMLCanvasElement, config?: EngineConfig) {
     this.canvas = canvas;
     this.config = config ?? defaultEngineConfig();
+    // The motion layer reads dials straight off this config object every
+    // frame (MorphPanel replaces config.morph on each drag), so they're live.
+    this.motion = createMotionState(this.config);
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Canvas 2D context unavailable");
     this.ctx = ctx;
@@ -1181,6 +1193,7 @@ export class VoiceLabEngine implements SequenceHost {
     if (isShapeshiftPair && role === "riff") return;
 
     const pose = style ? style.pose(role, this.motion, t) : null;
+    this.lastPose[role] = pose;
     const presence = morphOn
       ? this.motion.presence[role].value
       : this.presence[role];
@@ -1237,6 +1250,8 @@ export class VoiceLabEngine implements SequenceHost {
       talk,
       reveal: pose?.reveal,
       radial: pose?.radial,
+      stagger: morphOn ? this.config.morph.inkwash.stagger : undefined,
+      nib: morphOn ? this.config.morph.inkwash.nib : undefined,
     };
     if (isShapeshiftPair && role === "human") {
       // The shared radial-morph body (spec §4.2, simplified per morph.ts's
@@ -1280,6 +1295,8 @@ export class VoiceLabEngine implements SequenceHost {
       mark.draw(g);
       this.ctx.restore();
       setLineMul(1);
+      if (style!.id === "inkwash")
+        this.stainOutgoing(role, mark, g, pose.alpha, t);
     } else {
       setAlphaMul(preset.markPeak * presence);
       mark.draw(g);
@@ -1294,6 +1311,41 @@ export class VoiceLabEngine implements SequenceHost {
     // one so backchannel/underlay sparks keep going.
     if (mark.getTipEmitters && (active || !this.lastMarkContext))
       this.lastMarkContext = { mark, g };
+  }
+
+  // Ink & Wash stain (spec §4.4 "Bleed while fading"): while an outgoing
+  // role's alpha sits between 0.05 and 0.9, every 50ms per role, bleed ≤6 of
+  // its outline/tip points into the paper at glowBleedAmount × Stain ×
+  // alpha. A silence hold stains at 0.3×; reduced motion keeps half (color,
+  // not motion).
+  private stainOutgoing(
+    role: Role,
+    mark: MarkDef,
+    g: MarkDrawArgs,
+    alpha: number,
+    t: number,
+  ) {
+    if (!this.config.paperOn || !mark.getTipEmitters) return;
+    if (alpha <= 0.05 || alpha >= 0.9) return;
+    const p = this.motion.presence[role];
+    if (p.value - p.target <= 0.01) return; // only the outgoing role stains
+    if (t - this.lastStainAt[role] < 50 / dialSpeed(this.motion)) return;
+    const d = this.config.morph;
+    const amount =
+      this.config.glowBleedAmount *
+      d.inkwash.stain *
+      Math.max(0, d.intensity) *
+      alpha *
+      (p.target > 0 ? 0.3 : 1) *
+      (this.reducedMotionActive() ? 0.5 : 1);
+    if (amount <= 0) return;
+    this.lastStainAt[role] = t;
+    const tips = mark.getTipEmitters(g);
+    if (!tips.length) return;
+    const stride = Math.ceil(tips.length / 6);
+    const pts: { x: number; y: number }[] = [];
+    for (let i = 0; i < tips.length; i += stride) pts.push(tips[i]);
+    this.dotGrid.bleedAlongPath(pts, hexToRgbTuple(g.color), amount);
   }
 
   private drawVoiceLayer(t: number, dt: number, preset: SequencePreset) {
@@ -1384,50 +1436,51 @@ export class VoiceLabEngine implements SequenceHost {
     const style = MORPH_STYLES[this.morphId as Exclude<MorphId, "off">];
     const reduced = this.reducedMotionActive();
     setMorphReducedMotion(reduced);
+    // Speed dial (spec §4): stepping every style spring/envelope on dt×speed
+    // is exactly "divide every r and ms by Speed".
+    const speed = dialSpeed(this.motion);
+    const sdt = dt * speed;
     const presenceSpec = reduced ? REDUCED_MOTION_PRESENCE : undefined;
     this.motion.presence.human.step(
-      dt,
+      sdt,
       presenceSpec ?? this.motion.presenceSpec.human,
     );
     this.motion.presence.riff.step(
-      dt,
+      sdt,
       presenceSpec ?? this.motion.presenceSpec.riff,
     );
-    this.motion.talk.human.step(dt, style.talk);
-    this.motion.talk.riff.step(dt, style.talk);
+    this.motion.talk.human.step(sdt, style.talk);
+    this.motion.talk.riff.step(sdt, style.talk);
     this.motion.morph.step(
-      dt,
+      sdt,
       this.motion.morph.target > this.motion.morph.value
         ? { response: 420, damping: 0.9 }
         : { response: 180, damping: 1 },
     );
-    this.motion.body.aspect.step(dt, { response: 300, damping: 0.45 });
-    this.motion.body.radial.step(dt, { response: 300, damping: 0.45 });
-    this.motion.body.scale.step(dt, { response: 200, damping: 0.8 });
-    this.motion.bead.step(dt, { response: 120, damping: 0.75 });
-    const clearSpec = reduced
-      ? { response: 400 / 0.755, damping: 1 }
-      : { response: Math.max(60, style.clearMs) / 0.755, damping: 1 };
-    this.motion.jobOut.step(dt, clearSpec);
-    this.motion.onset.human.step(dt, style.onsetAttackMs);
-    this.motion.onset.riff.step(dt, style.onsetAttackMs);
+    this.motion.bead.step(sdt, { response: 120, damping: 0.75 });
+    this.clearSpec.response =
+      (reduced ? 400 : Math.max(60, style.clearMs)) / 0.755;
+    this.motion.jobOut.step(sdt, this.clearSpec);
+    this.motion.onset.human.step(dt, style.onsetAttackMs / speed);
+    this.motion.onset.riff.step(dt, style.onsetAttackMs / speed);
     // F5: wash activity targets the presence spring's *target* (not its
     // current value), so a retarget mid-tween doesn't also snap the wash —
     // the wash's own attack/release is what makes it lag/lead presence.
     this.motion.wash.human.step(
-      dt,
+      sdt,
       this.motion.presence.human.target,
       style.wash.attackMs,
       style.wash.releaseMs,
     );
     this.motion.wash.riff.step(
-      dt,
+      sdt,
       this.motion.presence.riff.target,
       style.wash.attackMs,
       style.wash.releaseMs,
     );
     this.motion.energy.human.step(dt, this.lastLevel.human, 80, 200);
     this.motion.energy.riff.step(dt, this.lastLevel.riff, 80, 200);
+    style.step?.(this.motion, t, sdt);
     // F6: finish the deferred clear teardown once the fade has settled.
     if (
       this.config.jobState === "none" &&
@@ -1440,7 +1493,7 @@ export class VoiceLabEngine implements SequenceHost {
     // Prune cinders whose dieAt fade (F6) has fully finished.
     if (this.cinders.some((c) => c.dieAt)) {
       this.cinders = this.cinders.filter(
-        (c) => !(c.dieAt && t - c.dieAt > style.cinderDieMs),
+        (c) => !(c.dieAt && t - c.dieAt > style.cinderDieMs / speed),
       );
     }
   }
@@ -1673,7 +1726,10 @@ export class VoiceLabEngine implements SequenceHost {
         originX: o.x / W,
         originY: this.config.glowHeight / 100,
         glowSize: this.config.glowSize,
-        edgeAmount: this.config.glowEdgeAmount,
+        // Ink & Wash wet bloom (spec §4.4) swells the wash edge on handoff.
+        edgeAmount:
+          this.config.glowEdgeAmount +
+          (morphOn && this.morphId === "inkwash" ? this.motion.bloom.value : 0),
         grainAmount: this.config.glowGrainAmount,
         layers: this.config.glowLayers,
       });
@@ -1801,7 +1857,8 @@ export class VoiceLabEngine implements SequenceHost {
         t,
         this.jobDuckEnvelope(preset),
         this.morphId !== "off"
-          ? MORPH_STYLES[this.morphId as Exclude<MorphId, "off">].cinderDieMs
+          ? MORPH_STYLES[this.morphId as Exclude<MorphId, "off">].cinderDieMs /
+              dialSpeed(this.motion)
           : 0,
       );
       // Frames → drift cinders → build particles → voice (build-plan.md §3

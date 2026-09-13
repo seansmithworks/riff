@@ -65,7 +65,13 @@ export type MarkDrawArgs = {
   talk?: number;
   reveal?: number;
   radial?: number;
+  // Ink & Wash dials (spec §4.4): per-ray reveal stagger (Burst) and the nib
+  // dot drawn at the reveal head. Only read while reveal < 1.
+  stagger?: number;
+  nib?: boolean;
 };
+
+export type MorphDials = EngineConfig["morph"];
 
 // Sparks-build-the-sketch dials (build-plan.md §4, dotgrid addendum §3).
 export type BuildConfig = {

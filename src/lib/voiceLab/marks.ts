@@ -82,10 +82,9 @@ export function strokeChainPartial(
   seedBase: number,
   alpha: number,
   reveal: number,
-) {
+): number {
   const n = pts.length;
   const segs = Math.max(1, Math.round(n * Math.max(0, Math.min(1, reveal))));
-  if (segs <= 0) return;
   ctx.save();
   ctx.globalAlpha = alpha * alphaMul;
   ctx.strokeStyle = color;
@@ -102,6 +101,19 @@ export function strokeChainPartial(
     });
     ctx.stroke(new Path2D(d));
   }
+  ctx.restore();
+  return segs;
+}
+
+// Ink & Wash nib (dial, spec §4.4): a small dot at the reveal head in the
+// stroke color, alpha 0.6.
+function drawNib(x: number, y: number, color: string) {
+  ctx.save();
+  ctx.globalAlpha = 0.6 * alphaMul;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(x, y, 1.6, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 }
 
@@ -158,6 +170,7 @@ type BurstRay = {
   width: number;
   alpha: number;
   vis: number;
+  rv: number; // this ray's own reveal fraction (1 = fully drawn)
   seed: number;
 };
 
@@ -165,6 +178,7 @@ function burstRays(g: MarkDrawArgs): BurstRay[] {
   const { o, t, bands, onsetPulse, cfg, smear, reveal, radial } = g;
   const smearMul = smear ?? 1;
   const radialMul = radial ?? 1;
+  const stagger = g.stagger ?? 0.6;
   const pool = Math.round(cfg.rayCount);
   const jitterBucket = Math.floor(t / 150);
   const rays: BurstRay[] = [];
@@ -202,7 +216,10 @@ function burstRays(g: MarkDrawArgs): BurstRay[] {
         ? 1
         : Math.max(
             0,
-            Math.min(1, reveal * (1 + 0.6) - 0.6 * (i / Math.max(1, pool - 1))),
+            Math.min(
+              1,
+              reveal * (1 + stagger) - stagger * (i / Math.max(1, pool - 1)),
+            ),
           );
     const len =
       (12 +
@@ -228,6 +245,7 @@ function burstRays(g: MarkDrawArgs): BurstRay[] {
       width,
       alpha: (0.45 + Math.max(0, energyAbove) * 0.5) * eased * revealVis,
       vis: eased * revealVis,
+      rv: revealVis,
       seed: hashSeed(`b-ray-${i}`) + Math.floor(t / 90),
     });
   }
@@ -287,6 +305,9 @@ export const MARKS: MarkDef[] = [
       // hard-cull inline loop below, byte-for-byte, so it stays the A/B
       // baseline.
       if (g.talk !== undefined) {
+        // Rays come back in pool order, so the last partially revealed one
+        // is the reveal head the nib rides on.
+        let head: BurstRay | null = null;
         for (const r of burstRays(g)) {
           strokePath(
             new Path2D(
@@ -300,7 +321,9 @@ export const MARKS: MarkDef[] = [
             r.width,
             r.alpha,
           );
+          if (r.rv > 0 && r.rv < 1) head = r;
         }
+        if (g.nib && head) drawNib(head.x2, head.y2, g.color);
         return;
       }
       const { o, t, bands, onsetPulse, color, cfg, smear } = g;
@@ -1329,7 +1352,18 @@ export const MARKS: MarkDef[] = [
             : Math.max(0.25, 0.6 + level * 0.3);
       const seed = hashSeed("amoeba") + Math.floor(g.t / 220);
       if (reveal !== undefined && reveal < 0.999) {
-        strokeChainPartial(pts, color, cfg.thickness, seed, alpha, reveal);
+        const segs = strokeChainPartial(
+          pts,
+          color,
+          cfg.thickness,
+          seed,
+          alpha,
+          reveal,
+        );
+        if (g.nib) {
+          const head = pts[segs % pts.length];
+          drawNib(head[0], head[1], color);
+        }
       } else {
         strokeChain(pts, color, cfg.thickness, seed, alpha, true);
       }
