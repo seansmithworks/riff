@@ -2,13 +2,9 @@
 
 import { useCallback, useRef, useState } from "react";
 import { useConversation } from "@elevenlabs/react";
-import { useStore, nextJobId } from "@/lib/store";
+import { useStore } from "@/lib/store";
+import { startSketchJob } from "@/lib/sketch-job";
 import type { Artifact } from "@/lib/artifact";
-
-function jobLabel(brief: string): string {
-  const words = brief.trim().split(/\s+/).slice(0, 6).join(" ");
-  return brief.trim().split(/\s+/).length > 6 ? `${words}…` : words;
-}
 
 function artifactSummary(artifact: Artifact): string {
   if (artifact.kind === "wireframe") {
@@ -24,13 +20,11 @@ function artifactSummary(artifact: Artifact): string {
 
 // Module-level so state survives across re-renders of the hook (the
 // clientTools object below is recreated every render).
-// voiceGeneration is a monotonically increasing counter local to the voice
-// path, used only to detect whether a newer voice render_artifact call has
-// superseded this one by the time its fetch resolves. It's separate from the
-// job id (see nextJobId in store.ts, shared with the text path) so that the
-// text rail issuing a job id never falsely marks an in-flight voice response
-// as stale. inFlightRequests tracks how many generations are still pending.
-let voiceGeneration = 0;
+// Newest wins, globally: one canvas shows one stream, so startSketchJob
+// (sketch-job.ts) aborts and supersedes whatever job is running when a new
+// one starts, whether voice or the text rail started either. A typed request
+// supersedes a voice sketch, and a voice call supersedes a typed one.
+// inFlightRequests tracks how many voice sketch jobs haven't settled yet.
 let inFlightRequests = 0;
 
 export type VoiceIssue = "mic-blocked" | "connect-failed" | "dropped" | null;
@@ -39,11 +33,8 @@ export type VoiceIssue = "mic-blocked" | "connect-failed" | "dropped" | null;
 // keeps the zustand store (messages, status) in sync with the session.
 // Must be rendered inside a <ConversationProvider>.
 export function useVoice() {
-  const setArtifact = useStore((s) => s.setArtifact);
   const addMessage = useStore((s) => s.addMessage);
   const setStatus = useStore((s) => s.setStatus);
-  const addJob = useStore((s) => s.addJob);
-  const updateJobStatus = useStore((s) => s.updateJobStatus);
 
   // Additive voice-UI state (VoiceBar/useMicSilence). `phase` covers the
   // signed-url fetch window before the SDK itself reports "connecting".
@@ -120,11 +111,11 @@ export function useVoice() {
       setStatus(mode === "speaking" ? "speaking" : "listening");
     },
     clientTools: {
-      // Fires the generation request in the background and returns to the
-      // agent immediately. Generation takes 11-19s, and ElevenLabs abandons
-      // an in-flight client tool the moment the user speaks again — so this
-      // tool must never await the fetch. The artifact (and status) update
-      // later, out-of-band, when the fetch settles.
+      // Starts the sketch job in the background and returns to the agent
+      // immediately. Generation takes seconds, and ElevenLabs abandons an
+      // in-flight client tool the moment the user speaks again — so this
+      // tool must never await the job. The canvas fills in out-of-band as
+      // the stream's screens close.
       render_artifact: ({
         brief,
         artifact_kind,
@@ -132,43 +123,17 @@ export function useVoice() {
         brief: string;
         artifact_kind: "wireframe" | "flow";
       }) => {
-        const generation = ++voiceGeneration;
-        const requestId = nextJobId();
         inFlightRequests += 1;
         setStatus("thinking");
-        addJob({ id: requestId, label: jobLabel(brief), status: "sketching" });
 
-        const currentArtifact = useStore.getState().artifact;
-
-        fetch("/api/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            brief: `${brief}\n\nRender this as a ${artifact_kind}.`,
-            currentArtifact,
-          }),
-        })
-          .then(async (res) => {
-            if (!res.ok) {
-              throw new Error("generate request failed");
-            }
-            const { artifact } = (await res.json()) as { artifact: Artifact };
-            // Ignore this result if a newer voice render_artifact call has
-            // been issued since — the newest request always wins the canvas.
-            if (generation === voiceGeneration) {
-              setArtifact(artifact);
+        startSketchJob({ brief, artifactKind: artifact_kind, source: "voice" })
+          .done.then((result) => {
+            if (result.status === "done") {
               addMessage({
                 role: "assistant",
-                text: artifactSummary(artifact),
+                text: artifactSummary(result.artifact),
               });
-              updateJobStatus(requestId, "done");
-            } else {
-              updateJobStatus(requestId, "superseded");
-            }
-          })
-          .catch(() => {
-            updateJobStatus(requestId, "failed");
-            if (generation === voiceGeneration) {
+            } else if (result.status === "failed") {
               addMessage({
                 role: "assistant",
                 text: "The canvas failed to update — continue the conversation and try again after the next answer.",

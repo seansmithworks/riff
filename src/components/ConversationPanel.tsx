@@ -83,7 +83,6 @@ function ConversationPanelInner({
   rightInset: number;
 }) {
   const messages = useStore((s) => s.messages);
-  const artifact = useStore((s) => s.artifact);
   const jobs = useStore((s) => s.jobs);
   const voice = useVoice();
 
@@ -100,8 +99,8 @@ function ConversationPanelInner({
   // SketchChipSegment in VoiceBar.tsx, keyed by job.id) owns how long it
   // stays visible after settling, so this stays a plain "last job" read
   // rather than needing to remember to null it back out once done/failed.
-  // "superseded" jobs (an older voice generation an agent's newer call
-  // overtook) show nothing.
+  // "superseded" jobs (an older job a newer voice or text call overtook)
+  // show nothing.
   const lastJob = jobs.length > 0 ? jobs[jobs.length - 1] : null;
   const job: JobChip | null =
     lastJob && lastJob.status !== "superseded"
@@ -114,7 +113,7 @@ function ConversationPanelInner({
           label:
             lastJob.status === "failed"
               ? ""
-              : artifact
+              : lastJob.isEvolve
                 ? "Revising…"
                 : "Sketching…",
         }

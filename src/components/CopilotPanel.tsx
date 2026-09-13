@@ -13,15 +13,9 @@ import {
   useCopilotReadable,
 } from "@copilotkit/react-core";
 import { TextMessage, Role } from "@copilotkit/runtime-client-gql";
-import { useStore, nextJobId } from "@/lib/store";
+import { useStore } from "@/lib/store";
+import { startSketchJob } from "@/lib/sketch-job";
 import type { Artifact } from "@/lib/artifact";
-
-// Matches the treatment in useVoice.ts so both paths look identical in the
-// render-queue status strip.
-function jobLabel(brief: string): string {
-  const words = brief.trim().split(/\s+/).slice(0, 6).join(" ");
-  return brief.trim().split(/\s+/).length > 6 ? `${words}…` : words;
-}
 
 function artifactSummary(artifact: Artifact): string {
   if (artifact.kind === "wireframe") {
@@ -86,7 +80,7 @@ function VoiceTranscriptSync() {
 
 // The single chat surface: transcript (voice + typed, via VoiceTranscriptSync
 // above) and text input in one thread. Drives the same artifact loop as
-// voice (POST /api/generate -> setArtifact) via a CopilotKit action, so
+// voice (startSketchJob in sketch-job.ts) via a CopilotKit action, so
 // typing works identically to speaking.
 export function CopilotPanel({
   open,
@@ -95,10 +89,7 @@ export function CopilotPanel({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const setArtifact = useStore((s) => s.setArtifact);
   const artifact = useStore((s) => s.artifact);
-  const addJob = useStore((s) => s.addJob);
-  const updateJobStatus = useStore((s) => s.updateJobStatus);
 
   useCopilotReadable({
     description:
@@ -127,35 +118,16 @@ export function CopilotPanel({
       },
     ],
     handler: async ({ brief, artifact_kind }) => {
-      const currentArtifact = useStore.getState().artifact;
-      const jobId = nextJobId();
-      addJob({ id: jobId, label: jobLabel(brief), status: "sketching" });
-
-      try {
-        const res = await fetch("/api/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            brief: `${brief}\n\nRender this as a ${artifact_kind}.`,
-            currentArtifact,
-          }),
-        });
-
-        if (!res.ok) {
-          updateJobStatus(jobId, "failed");
-          return "The canvas failed to update — try rephrasing and asking again.";
-        }
-
-        const { artifact: newArtifact } = (await res.json()) as {
-          artifact: Artifact;
-        };
-        setArtifact(newArtifact);
-        updateJobStatus(jobId, "done");
-        return artifactSummary(newArtifact);
-      } catch {
-        updateJobStatus(jobId, "failed");
-        return "The canvas failed to update — try rephrasing and asking again.";
+      const result = await startSketchJob({
+        brief,
+        artifactKind: artifact_kind as Artifact["kind"],
+        source: "text",
+      }).done;
+      if (result.status === "done") return artifactSummary(result.artifact);
+      if (result.status === "superseded") {
+        return "A newer sketch replaced this one. Do not call render_artifact again for this request.";
       }
+      return "The canvas failed to update — try rephrasing and asking again.";
     },
   });
 

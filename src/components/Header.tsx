@@ -62,6 +62,8 @@ function IconButton({
 function ShareButton() {
   const artifact = useStore((s) => s.artifact);
   const messages = useStore((s) => s.messages);
+  // A mid-stream artifact is partial; only a finished sketch is handed off.
+  const sketching = useStore((s) => s.sketch !== null);
   const [shareState, setShareState] = useState<ShareState>("idle");
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
@@ -107,7 +109,7 @@ function ShareButton() {
     <div className="relative">
       <IconButton
         label={shareState === "loading" ? "Sharing…" : "Hand off to build"}
-        disabled={!artifact || shareState === "loading"}
+        disabled={!artifact || sketching || shareState === "loading"}
         onClick={handleShare}
       >
         <svg
