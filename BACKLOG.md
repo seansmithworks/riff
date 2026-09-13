@@ -157,7 +157,7 @@ Build order from `docs/voice-lab-morph-spec.md`, one commit per step:
 - [x] Lab: Stream prototype (A+B, steady pen default, batch baseline) `f17f7f1`
 - [ ] Sean feels stream vs batch in lab → go/no-go on real pipeline A+B (generate.ts streaming, outline head, draft artifact, draw-in)
 - [ ] Option D pencil guesses: held (Sean 2026-09-13: not yet)
-- [ ] Pen pace: steady (Sean 2026-09-13)
+- [x] Pen pace: steady (Sean 2026-09-13) — superseded by **bursts** (his saved Stream panel; baked as default 2026-09-13)
 
 ### wrap-continue (2026-09-13 night)
 
@@ -167,14 +167,14 @@ Build order from `docs/voice-lab-morph-spec.md`, one commit per step:
 
 **Carried (on-objective), each with a strawman to apply unless Sean redlines:**
 
-- [ ] Bake Sean's 2026-09-13 DialKit pass into `/voice-lab` defaults. Values: project memory `dialkit-pass-2026-09-13.json` (read from desktop Chrome on the Vercel preview origin). Verify in a clean browser.
-- [ ] DECIDE OR KILL, pen pace: he accepted "steady" on 2026-09-13 but his saved Stream panel says `bursts`. Strawman: bake `bursts` (his later action), flag in the recap.
-- [ ] Morph style (carried 1×): strawman **Ink & Wash** (kept selected and tuned in his 2026-09-13 pass: stagger 0.15, wetBloom 0.28), which implies two speakers. Apply unless redlined.
-- [ ] Base choreography (carried 2× since 2026-09-12): strawman **Blend**, his saved sequence in both passes. Apply unless redlined.
+- [x] Bake Sean's 2026-09-13 DialKit pass into `/voice-lab` defaults. Values: project memory `dialkit-pass-2026-09-13.json` (read from desktop Chrome on the Vercel preview origin). Verify in a clean browser. **Baked (panels + engine agree), clean-browser verified; evidence untracked in `docs/evidence/defaults/2026-09-13/`.**
+- [x] DECIDE OR KILL, pen pace: he accepted "steady" on 2026-09-13 but his saved Stream panel says `bursts`. **Decided: bursts (Sean 2026-09-13), baked as default.**
+- [x] Morph style (carried 1×): strawman **Ink & Wash** (kept selected and tuned in his 2026-09-13 pass: stagger 0.15, wetBloom 0.28), which implies two speakers. **Applied: Ink & Wash default (Sean 2026-09-13).**
+- [x] Base choreography (carried 2× since 2026-09-12): strawman **Blend**, his saved sequence in both passes. **Applied: Blend default, panel + engine (Sean 2026-09-13).**
 - [ ] Barge-in speed: strawman keep snappy (spec ≤150ms). Apply unless redlined.
-- [ ] Fresh load comes up paused: strawman fix it in the bake commit (VoicePanel mount stops autoplay).
+- [x] Fresh load comes up paused: strawman fix it in the bake commit (VoicePanel mount stops autoplay). **Fixed: VoicePanel's mount push no longer stops autoplay; only a changed voice pick pauses.**
 - [ ] Real pipeline A+B ("the stream"): plan it (adversarial-plan), then build in the real app. Fireworks `stream: true` + closed-object tracker, NDJSON route, `outline` head (keep/changed/new) before `screens`, `platform` first, growing draft artifact, stable screen keys + frame the camera once, draw-in ported from the lab, flows held until all nodes land, abort superseded streams. First spike: confirm streaming with `response_format` json_schema still gives a first chunk at ~1.3s. Base-branch call belongs to the plan: `feat/voice-lab` is 47 ahead / 0 behind main; `feat/voice-ui` is 10 ahead / 2 behind.
 - [ ] Merge feat/voice-lab → main (= prod, per-deploy nod), then Phases 1–3 into the real voice UI (carried 2× since 2026-09-12). React Flow fitView coords remain the Phase-3 blocker.
-- [ ] DECIDE OR KILL (carried 3× since 2026-09-11): origin center vs right, pill vs disc. Strawman: center (his saved toggle in both passes). Pill vs disc stays open; note his saved `centerCircle` is off.
+- [x] DECIDE OR KILL (carried 3× since 2026-09-11): origin center vs right, pill vs disc. **Closed: center; no pill, no disc (Sean 2026-09-13).** Defaults: `origin: center`, `centerCircle` off (panel + engine).
 
 **Parked (off-objective):** feat/load-logo @ `0f52726` (carried 6× since 2026-09-10; kill at the next wrap if still untouched); Option D pencil guesses (held by Sean); options C fan-out and E edit-ops (skipped, cost and consistency); Morph F5 overlap, Elastic timer, and the noticed-not-fixed items above (not duplicated).

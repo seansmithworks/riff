@@ -17,7 +17,8 @@ import {
   W,
   H,
   INK,
-  RIFF_GREEN,
+  HUMAN_VOICE_COLOR,
+  RIFF_VOICE_COLOR,
   GLOW_DEFAULT_STRENGTH,
   GLOW_DEFAULT_SIZE,
   GLOW_DEFAULT_HEIGHT,
@@ -98,7 +99,6 @@ import {
 import {
   SEQUENCE_BY_HOTKEY,
   SEQUENCE_BY_ID,
-  SEQUENCE_PRESETS,
   REDUCED_MOTION_PRESET,
 } from "./sequences";
 import {
@@ -129,7 +129,7 @@ export function defaultEngineConfig(): EngineConfig {
     voiceState: "idle",
     jobState: "none",
     originSide: "center",
-    centerCircleOn: true,
+    centerCircleOn: false,
     onsetRingsOn: true,
     ambientGlowOn: true,
     glowStrength: GLOW_DEFAULT_STRENGTH,
@@ -139,11 +139,11 @@ export function defaultEngineConfig(): EngineConfig {
     glowEdgeSoftness: GLOW_DEFAULT_EDGE_SOFTNESS,
     cindersOn: true,
     showFramesOn: true,
-    // Speaker -> mark assignment: Riff = Burst (green), Human = Amoeba (ink).
+    // Speaker -> mark assignment: Riff = Burst (green), Human = Amoeba (violet).
     humanMarkId: "amoeba",
     riffMarkId: "burst",
-    humanColor: INK,
-    riffColor: RIFF_GREEN,
+    humanColor: HUMAN_VOICE_COLOR,
+    riffColor: RIFF_VOICE_COLOR,
     markConfigsByRole: {
       human: defaultMarkConfigs(),
       riff: defaultMarkConfigs(),
@@ -160,55 +160,55 @@ export function defaultEngineConfig(): EngineConfig {
     glowStyle: "both",
     glowHumanColor: "#2F6FED",
     glowRiffColor: "#F5C518",
-    glowMixSoftness: 0.4,
-    glowFlowSpeed: 1,
-    glowBlobScale: 1,
+    glowMixSoftness: 0.85,
+    glowFlowSpeed: 1.5,
+    glowBlobScale: 1.6,
     glowBlobCount: 3,
     glowEdgeAmount: 0.35,
-    glowGrainAmount: 0.4,
+    glowGrainAmount: 0.3,
     glowLayers: 2,
     glowRoleColor: 0.8,
-    glowBleedAmount: 0.5,
+    glowBleedAmount: 0.9,
     paperOn: true,
-    paperPitch: 16,
-    paperDotSize: 0.9,
-    paperBaseOpacity: 0.5,
+    paperPitch: 12,
+    paperDotSize: 1,
+    paperBaseOpacity: 0.3,
     buildConfig: {
       flightSpeed: 1,
       arc: 0.18,
-      densityFrame: 2.5,
-      densityBlocks: 2.0,
-      densityDetails: 1.2,
-      tierGapMs: -100,
+      densityFrame: 3,
+      densityBlocks: 3,
+      densityDetails: 3,
+      tierGapMs: 120,
       speculativeFrame: "construction",
       guideDots: "dots",
-      arrival: "dotsLead",
+      arrival: "comet",
       snapToGrid: true,
       dotPop: 0.6,
-      waitEmberRate: 12,
+      waitEmberRate: 8,
     },
     discStretchAmount: 0.35,
     discSquishBounce: 0.35,
     discWobble: 0.15,
     morph: {
-      speed: 1,
+      speed: 0.9,
       intensity: 1,
-      breath: { scale: 0.88 },
-      shapeshift: { sproutDelay: 0.15, backchannelSprout: 0.18 },
+      breath: { scale: 1 },
+      shapeshift: { sproutDelay: 0.1, backchannelSprout: 0.18 },
       relay: {
         gatherMs: 140,
         holdMs: 60,
         releasePunch: 0.6,
         landingBead: true,
       },
-      inkwash: { stagger: 0.6, stain: 0.6, wetBloom: 0.15, nib: true },
+      inkwash: { stagger: 0.15, stain: 0.6, wetBloom: 0.28, nib: true },
       elastic: { squash: 0.18, wobble: 0.45 },
     },
-    // Sean 2026-09-13: stream (A+B) with a steady pen is the default; batch
+    // Sean 2026-09-13: stream (A+B) with a bursts pen is the default; batch
     // stays selectable as the A/B baseline.
     stream: {
       mode: "stream",
-      pace: "steady",
+      pace: "bursts",
       bufferMs: 1500,
       outlineMs: 1500,
       arriveMs: [2000, 5500],
@@ -298,7 +298,9 @@ export class VoiceLabEngine implements SequenceHost {
   private onVisibilityChange = () => this.scheduleLoop();
 
   // ---- Choreography state ----
-  private activeSequence: SequencePreset = SEQUENCE_PRESETS[0];
+  // Blend is the base choreography (Sean 2026-09-13), matching the Sequence
+  // panel's default.
+  private activeSequence: SequencePreset = SEQUENCE_BY_ID["blend"];
   private prevSequenceId: string = this.activeSequence.id;
   private timeScale = 1; // Z = 0.25x slow motion
   player: SequencePlayer = new SequencePlayer(this);

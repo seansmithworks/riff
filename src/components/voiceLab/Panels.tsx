@@ -5,8 +5,8 @@ import { useDialKit, useDialKitController } from "dialkit";
 import { useEngine, type EngineHandle } from "./EngineContext";
 import { MARKS } from "@/lib/voiceLab/marks";
 import {
-  INK,
-  RIFF_GREEN,
+  HUMAN_VOICE_COLOR,
+  RIFF_VOICE_COLOR,
   GLOW_DEFAULT_STRENGTH,
   GLOW_DEFAULT_SIZE,
   GLOW_DEFAULT_HEIGHT,
@@ -166,12 +166,12 @@ function MorphPanel() {
         ],
         default: "inkwash",
       },
-      speed: [1, 0.5, 2, 0.05],
+      speed: [0.9, 0.5, 2, 0.05],
       intensity: [1, 0, 1.5, 0.05],
-      breath: { _collapsed: true, scale: [0.88, 0.7, 1, 0.01] },
+      breath: { _collapsed: true, scale: [1, 0.7, 1, 0.01] },
       shapeshift: {
         _collapsed: true,
-        sproutDelay: [0.15, 0, 0.6, 0.05],
+        sproutDelay: [0.1, 0, 0.6, 0.05],
         backchannelSprout: [0.18, 0, 0.5, 0.02],
       },
       relay: {
@@ -183,9 +183,9 @@ function MorphPanel() {
       },
       inkwash: {
         _collapsed: true,
-        stagger: [0.6, 0, 1.5, 0.05],
+        stagger: [0.15, 0, 1.5, 0.05],
         stain: [0.6, 0, 1, 0.05],
-        wetBloom: [0.15, 0, 0.4, 0.01],
+        wetBloom: [0.28, 0, 0.4, 0.01],
         nib: true,
       },
       elastic: {
@@ -286,7 +286,7 @@ function StreamPanel() {
           { value: "steady", label: "Steady pen" },
           { value: "bursts", label: "Bursts" },
         ],
-        default: "steady",
+        default: "bursts",
       },
       bufferMs: [1500, 0, 4000, 100],
       outlineMs: [1500, 0, 6000, 100],
@@ -362,9 +362,15 @@ function VoicePanel() {
   );
   const state = raw.state as string;
 
+  // Picking a voice state takes manual control (pauses the player), like
+  // Shift+1..5. Only a changed pick does that: the first push of the
+  // restored value on mount must not, or every load comes up paused.
+  const prevStateRef = useRef<string | null>(null);
   useEffect(() => {
     if (!handle) return;
-    handle.autoplay.stop();
+    if (prevStateRef.current !== null && prevStateRef.current !== state)
+      handle.autoplay.stop();
+    prevStateRef.current = state;
     handle.engine.setVoiceState(state as never);
   }, [handle, state]);
 
@@ -503,18 +509,18 @@ function GlowPanel() {
       },
       fluidHumanColor: "#2F6FED",
       fluidRiffColor: "#F5C518",
-      fluidMixSoftness: [0.6, 0, 1, 0.05],
-      fluidFlowSpeed: [1.1, 0, 2, 0.05],
-      fluidBlobScale: [1.25, 0.5, 2, 0.05],
+      fluidMixSoftness: [0.85, 0, 1, 0.05],
+      fluidFlowSpeed: [1.5, 0, 2, 0.05],
+      fluidBlobScale: [1.6, 0.5, 2, 0.05],
       fluidBlobCount: [3, 1, 4, 1],
       // Ink-and-wash dials (addendum §4).
       fluidEdge: [0.7, 0, 1, 0.05],
-      fluidGrain: [0.6, 0, 1, 0.05],
+      fluidGrain: [0.3, 0, 1, 0.05],
       fluidLayers: [3, 1, 3, 1],
       // Role-color dominance (addendum §3).
       roleColor: [0.75, 0, 1, 0.05],
       // Stroke-bleed (addendum §4 "ties to the drawing elements").
-      bleedAmount: [0.6, 0, 1, 0.05],
+      bleedAmount: [0.9, 0, 1, 0.05],
     },
     { id: "glow", persist: persistKey("glow") },
   );
@@ -638,9 +644,9 @@ function PaperPanel() {
     "Paper",
     {
       paperOn: true,
-      pitch: [16, 12, 24, 1],
-      dotSize: [0.9, 0.6, 1.6, 0.05],
-      baseOpacity: [0.5, 0.1, 1, 0.05],
+      pitch: [12, 12, 24, 1],
+      dotSize: [1, 0.6, 1.6, 0.05],
+      baseOpacity: [0.3, 0.1, 1, 0.05],
     },
     { persist: persistKey("paper") },
   );
@@ -813,12 +819,12 @@ function BuildPanel() {
   const raw = useDialKit(
     "Build",
     {
-      flightSpeed: [1.3, 0.5, 2, 0.05],
+      flightSpeed: [1, 0.5, 2, 0.05],
       arc: [0.27, 0, 0.5, 0.01],
-      densityFrame: [3.6, 0.5, 6, 0.1],
-      densityBlocks: [3.8, 0.5, 6, 0.1],
-      densityDetails: [3.9, 0.5, 6, 0.1],
-      tierGapMs: [180, -200, 300, 10],
+      densityFrame: [3, 0.5, 6, 0.1],
+      densityBlocks: [3, 0.5, 6, 0.1],
+      densityDetails: [3, 0.5, 6, 0.1],
+      tierGapMs: [120, -200, 300, 10],
       speculativeFrame: {
         type: "select",
         options: [
@@ -843,11 +849,11 @@ function BuildPanel() {
           { value: "dotsLead", label: "Dots lead" },
           { value: "comet", label: "Comet" },
         ],
-        default: "dotsLead",
+        default: "comet",
       },
       snapToGrid: true,
       dotPop: [0.8, 0, 1, 0.05],
-      waitEmberRate: [18, 4, 24, 1],
+      waitEmberRate: [8, 4, 24, 1],
     },
     { persist: persistKey("build") },
   );
@@ -888,13 +894,13 @@ export default function VoiceLabPanels() {
         role="human"
         title="Human voice"
         defaultMarkId="amoeba"
-        defaultColor={INK}
+        defaultColor={HUMAN_VOICE_COLOR}
       />
       <RoleVoicePanel
         role="riff"
         title="Riff voice"
         defaultMarkId="burst"
-        defaultColor={RIFF_GREEN}
+        defaultColor={RIFF_VOICE_COLOR}
       />
       <CinderPanel />
       <BuildPanel />
