@@ -27,6 +27,35 @@ export type CanvasSlot = {
   live: boolean;
 };
 
+/**
+ * The next slots by id, keeping the previous object for every slot that
+ * draws the same thing, so a screen node re-renders only when its own slot
+ * changes (WireframeCanvas.tsx). Elements compare by reference first (the
+ * store carries landed elements across events) and deep-equal otherwise (a
+ * closed screen or done re-parses the same content).
+ */
+export function reuseUnchangedSlots(
+  previous: ReadonlyMap<string, CanvasSlot>,
+  next: CanvasSlot[],
+): Map<string, CanvasSlot> {
+  return new Map(
+    next.map((slot) => {
+      const prior = previous.get(slot.id);
+      const same =
+        prior !== undefined &&
+        prior.name === slot.name &&
+        prior.state === slot.state &&
+        prior.live === slot.live &&
+        prior.elements.length === slot.elements.length &&
+        prior.elements.every(
+          (element, i) =>
+            element === slot.elements[i] || sameJson(element, slot.elements[i]),
+        );
+      return [slot.id, same ? prior : slot];
+    }),
+  );
+}
+
 export function artifactSlots(screens: Screen[]): CanvasSlot[] {
   return screens.map((screen) => ({
     id: screen.id,

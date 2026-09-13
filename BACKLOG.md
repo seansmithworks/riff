@@ -86,8 +86,14 @@
 - [x] **Step 4. One client job runner (`sketch-job.ts`) and a store draft.** Voice and text both call `startSketchJob` (NDJSON, newest wins globally, aborts the previous fetch). Store `sketch` slice: head fields, outline, base, closed screens, closed elements per stream screen index, per-screen `changed`; screens commit to `artifact` on close, done sets the final artifact. The canvas mode (per screen vs per element) is not picked. Replay R2-1: outline at 1439ms, s1's 5 elements accumulate, s1 commits at 3911ms. Supersede at 1.5s: job 1 `superseded`, server `aborted by client after 1507ms`, job 1's outline held until job 2's head at 2463ms. Supersede after s1: next body carried `currentArtifact [s1]`, `pendingScreens [s2,s3]`, `unfinishedFirstSketch: true`. Live x1: `[sketch] ... head 1554ms first-ink 1808ms s1 3484ms screens 3 end 8385ms` (1 Fireworks call).
 - [ ] **Step 5. Canvas: outlines, ink, camera framed once.** Needs decision 1 (per screen vs per element) first.
   - Decision 1: per element (Sean 2026-09-13). Draw treatment: Pen, 1200 px/s (Sean 2026-09-13).
-  - [ ] Pencil outline color zinc-400 (`textTertiary`), a design call for Sean to confirm.
-- [ ] **Step 6. Races, failures, review (all on replay).**
+  - [x] Pencil outline color zinc-400 (`textTertiary`): confirmed, Sean 2026-09-13.
+  - [x] `PEN_MAX_SPEEDUP` 20× kept (Sean 2026-09-13).
+- [ ] **Step 6. Races, failures, review (all on replay).** B1–B11 pass; screenshots untracked in `docs/evidence/stream/step6/`, synthetic replays `S6-*` in the spike folder. Open: Sean's mic session, the reviewer pass.
   - [ ] **Sean: one live voice session with a real mic** (Step 4 acceptance, can't run headless): no `Voice connection error`, and the sketch still streams while the agent talks.
-  - [ ] Replay can't check "keep landed ids" (the fixture content is fixed); the final count of 3 after an unfinished-first-sketch supersede needs one live check.
+  - [x] Keep landed ids, live (F4): supersede at job 1's s1 sent `currentArtifact [s1]`, `pendingScreens [s2,s3]`, `unfinishedFirstSketch`; final `s1,s2,s3`.
+  - [ ] F4's 3-screen rule is prompt-only: the same supersede with a brief that adds a screen ("Add a screen where they pay") ended `s1..s4` (live, glm-5p2). Enforce in `generate.ts` or accept.
+  - [x] A1: every element event re-rendered every screen node. Now a memoized node reads its own slot from a per-slot store. Desktop replay: s1/s2/s3 render 10/18/16 times and 28 of 28 element events re-render only the inking node (old model 39/47/45, 2 of 28).
+  - [x] A2: no reorders in the 15 candidate runs (R2–R4 outline order matches base), so frames keep x by index with a comment, no move animation.
+  - [x] A3: first-ink now fires when the pen reaches an element, stroke or not. No-stroke replay `-` → 1073ms; reduced motion 1820ms.
+  - [x] B1 supersede before head (no fit, no frames until job 2's head). B2 supersede mid-ink (s1 kept: 0 remounts, same ink key). B3 error after s1 (s1 stays, "Sketch failed", nothing stuck). B4 flow at done. B5 desktop. B6 chat open mid-stream: one refit. B7 both directions: newest wins, 0 re-calls, the text rail got the do-not-retry string. B9 reduced motion: no nib, 27 of 27 elements crossfade. B10 hidden tab: dt unclamped by design, no jank on refocus. B11 3-job chain: 4 fits (2 heads, chat open, done's 4→3).
   - [ ] Stale comment in `src/app/api/generate/route.ts:23-25` still says useVoice/CopilotPanel use the JSON path. Left alone (file under review during Step 4).

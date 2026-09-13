@@ -73,8 +73,8 @@ function mark(job: RunningJob, name: string) {
 
 /**
  * `sketch:first-ink`: the canvas calls this when the job's first element
- * stroke starts drawing (InkScope.tsx). Ink from a job that is no longer
- * running doesn't count.
+ * starts to show (InkScope.tsx), whether or not it has a stroke. Ink from a
+ * job that is no longer running doesn't count.
  */
 export function markFirstInk(jobId: number): void {
   const job = running;

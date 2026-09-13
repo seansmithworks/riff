@@ -13,8 +13,9 @@
 //                                 paint; never again on resize)
 //   handle.cancel()               the scope unmounted: stop, and put back
 //                                 everything the treatment changed
-// The treatment calls el.started() once, when the element's first mark
-// starts to draw; that is the `sketch:first-ink` mark.
+// The treatment calls el.started() when the element first starts to show
+// (its first mark draws, or it has no stroke and its fills or text appear);
+// that is the `sketch:first-ink` mark. Repeat calls are ignored.
 
 /**
  * Sketch stroke colors, from DESIGN.md tokens. Pencil is textTertiary
@@ -198,6 +199,12 @@ class PenScreen implements ScreenInk {
   }
 
   private tick = (now: number) => {
+    // dt is deliberately unclamped. After a hidden tab (no frames), the first
+    // frame's budget covers the whole gap, so everything that arrived
+    // meanwhile finishes at once. Nobody watched that time; replaying it
+    // would put the drawing further behind the stream. Strokes that only get
+    // geometry on that first visible frame (no resize events while hidden)
+    // finish through catch-up instead.
     const dt = Math.max(0, now - this.last);
     this.last = now;
     this.draw(now, dt);
@@ -249,8 +256,11 @@ class PenScreen implements ScreenInk {
         break;
       }
       this.maxLag = Math.max(this.maxLag, now - item.owner.arrival);
+      // The pen has reached this element, so it starts to show: its first
+      // stroke draws or, with no drawable stroke, its fills wash or its
+      // text writes.
+      item.owner.ink.started();
       const total = lengthOf(item);
-      if (total > 0) item.owner.ink.started();
       const needMs = ((total - item.dist) / speed) * 1000;
       if (needMs <= budget) {
         item.dist = total;

@@ -1,6 +1,16 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useRef } from "react";
+import {
+  createContext,
+  memo,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -16,6 +26,7 @@ import { BatteryFull, SignalHigh, Wifi } from "lucide-react";
 import type { Artifact, Element } from "@/lib/artifact";
 import {
   artifactSlots,
+  reuseUnchangedSlots,
   sketchSlots,
   type CanvasSlot,
 } from "@/lib/canvas-slots";
@@ -68,23 +79,56 @@ function HomeIndicator({ seedKey }: { seedKey: string }) {
   );
 }
 
+type SlotStore = {
+  get(id: string): CanvasSlot | undefined;
+  subscribe(listener: () => void): () => void;
+  publish(slots: CanvasSlot[]): void;
+};
+
+// Each screen node subscribes to its own slot. publish() keeps the previous
+// object for every slot that draws the same thing, so an element event
+// re-renders only the node whose screen it landed on.
+function createSlotStore(): SlotStore {
+  let slots: ReadonlyMap<string, CanvasSlot> = new Map();
+  const listeners = new Set<() => void>();
+  return {
+    get: (id) => slots.get(id),
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    publish(next) {
+      slots = reuseUnchangedSlots(slots, next);
+      for (const listener of listeners) listener();
+    },
+  };
+}
+
 type CanvasState = {
-  slots: Map<string, CanvasSlot>;
+  slots: SlotStore;
   jobId: number | null;
   reducedMotion: boolean;
 };
 
-// Slot content reaches frames through context, not node data: React Flow
-// re-adopts and re-measures (hidden) any node whose object changes, so nodes
-// change only when the slot ids or platform do.
-const CanvasContext = createContext<CanvasState | null>(null);
+// Slot content reaches frames through a per-slot store, not node data: React
+// Flow re-adopts and re-measures (hidden) any node whose object changes, so
+// nodes change only when the slot ids or platform do.
+const CanvasContext = createContext<CanvasState>({
+  slots: createSlotStore(),
+  jobId: null,
+  reducedMotion: false,
+});
 
 function ScreenFrameNode({ id, data }: NodeProps) {
   const canvas = useContext(CanvasContext);
-  const slot = canvas?.slots.get(id);
+  const read = () => canvas.slots.get(id);
+  const slot = useSyncExternalStore(canvas.slots.subscribe, read, read);
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production") recordNodeRender(id);
+  });
   // React Flow applies node changes a commit after the slots change, so a
   // removed slot's node can render once more.
-  if (!canvas || !slot) return null;
+  if (!slot) return null;
   return (
     <ScreenInkProvider
       slot={slot}
@@ -153,7 +197,18 @@ function PhoneFrame({ slot }: { slot: CanvasSlot }) {
   );
 }
 
-const nodeTypes = { screenFrame: ScreenFrameNode };
+// Memoized: React Flow re-renders every node whenever the canvas re-renders,
+// and a node's own slot (not its props) is what changes during a stream.
+const nodeTypes = { screenFrame: memo(ScreenFrameNode) };
+
+// Dev-only render log: window.__riffNodeRenders, one entry per commit a
+// screen node rendered in.
+function recordNodeRender(id: string) {
+  const w = window as unknown as {
+    __riffNodeRenders?: { at: number; id: string }[];
+  };
+  (w.__riffNodeRenders ??= []).push({ at: Math.round(performance.now()), id });
+}
 
 type FitRecord = {
   at: number;
@@ -197,15 +252,17 @@ function WireframeCanvasInner({
   const frameWidth = platform === "desktop" ? DESKTOP_FRAME_WIDTH : FRAME_WIDTH;
   const jobId = sketch?.jobId ?? null;
 
+  const [slotStore] = useState(createSlotStore);
+  // Before paint, so a node never shows its previous slot for a frame.
+  useLayoutEffect(() => slotStore.publish(slots), [slotStore, slots]);
   const canvas = useMemo<CanvasState>(
-    () => ({
-      slots: new Map(slots.map((slot) => [slot.id, slot])),
-      jobId,
-      reducedMotion,
-    }),
-    [slots, jobId, reducedMotion],
+    () => ({ slots: slotStore, jobId, reducedMotion }),
+    [slotStore, jobId, reducedMotion],
   );
 
+  // x is by slot index, so a reorder at the same count would move frames
+  // without a transition. None of the 15 candidate-schema spike runs
+  // reorders base ids (Step 6 check), so there's no move animation.
   const idsKey = JSON.stringify(slots.map((slot) => slot.id));
   const nodes: Node[] = useMemo(
     () =>
