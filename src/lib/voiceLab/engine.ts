@@ -1486,10 +1486,12 @@ export class VoiceLabEngine implements SequenceHost {
       this.lastBoilAt = this.markT;
     }
 
-    if (!morphOn) {
-      this.onsetPulse *= Math.pow(0.86, dt / 16.7);
-      this.riffOnsetPulse *= Math.pow(0.86, dt / 16.7);
-    }
+    // These pulses decay in every mode: Morph styles draw from motion.onset,
+    // but the job channel's "onsets" emit still reads these, and without the
+    // decay they stuck at 1 after the first onset, spawning cinders off the
+    // speaker's tips every frame (the spawn point then jumped at handoffs).
+    this.onsetPulse *= Math.pow(0.86, dt / 16.7);
+    this.riffOnsetPulse *= Math.pow(0.86, dt / 16.7);
 
     this.lastMarkContext = null;
     const activeRole: Role | null =
