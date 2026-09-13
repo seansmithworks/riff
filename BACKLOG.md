@@ -82,7 +82,7 @@
   | R4 candidate, tab bar edit | 324 | 744 | 952 | 2360 | 4614 | 6290 |
 
 - [x] **Step 2. Contract, tracker and merge.** `ARTIFACT_STREAM_JSON_SCHEMA` + `validateArtifact` into `artifact.ts`, new `artifact-stream.ts`, `tests/artifact-stream.test.ts` on spike fixtures. `npm test` 18/18: chunking-invariant events (whole, per char, every split, 50 seeds) on R2-1, R2-2, R3-1, R3-2 and a reordered-keys fixture; head buffering; element-before-screen; deep-equal unchanged; both M4 cases; synthetic before→after equals `artifact-after.json`.
-- [ ] **Step 3. Streaming `/api/generate` with dev-only replay.**
+- [x] **Step 3. Streaming `/api/generate` with dev-only replay.** NDJSON when the request sends `Accept: application/x-ndjson`; the JSON path (useVoice/CopilotPanel until Step 4) is unchanged. Stream request body byte-identical to the spike's R2-1/R3-1/R4-2 bodies. Live R2 ×3 heads received at 1194 / 2143 / 907ms (line 1251ms; run 2 missed, and replay shows the pipeline adds ~5ms). Abort after first screen: Fireworks read stopped 2ms after client abort, chunks 298 → 298. Replay R2-1 head t=1433ms vs fixture 1428ms. Idle watchdog 9s, hard cap 45s (arithmetic in `generate.ts`).
 - [ ] **Step 4. One client job runner (`sketch-job.ts`) and a store draft.**
 - [ ] **Step 5. Canvas: outlines, ink, camera framed once.** Needs decision 1 (per screen vs per element) first.
 - [ ] **Step 6. Races, failures, review (all on replay).**
