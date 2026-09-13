@@ -117,23 +117,16 @@ type ScheduleDraft = {
   targets: { x: number; y: number; arrive: number }[];
 };
 
-// Builds the full landing BuildPlan: tier 0 → 1 → 2 timeline (wave-major
-// across frames, 90ms frame offset), fitted to the preset's own tempo and
-// clamped so it never overruns the preset's next "clear" beat.
-export function planBuild(
+// Tier 0 → 1 → 2 path timeline (wave-major across frames, 90ms frame
+// offset) at normal draw speed, before any cap or tempo. Shared by planBuild
+// and the stream prototype's per-frame span (frameBuildMs).
+function layoutBuildPaths(
   frames: Frame[],
-  now: number,
   cfg: BuildConfig,
   cinderCfg: CinderConfig,
   inkStaggerMsIn: number,
-  clearAt: number | null,
-  center: { x: number; y: number },
-  driftLaunchPoints: { x: number; y: number }[],
-  reducedMotion = false,
-  // Still Water etc. ("nothing travels", build-plan.md §2): ink-only landing,
-  // mirrors the reducedMotion → emptyParticleBlock() branch below.
-  noParticles = false,
-): BuildPlan {
+  reducedMotion: boolean,
+): { paths: BuildPath[]; rawEnd: number; masterScale: number } {
   // Reduced motion (build-plan.md §3): tiers crossfade in order at a flat
   // 300ms each, no stagger, no particles — enforced here (durations) and in
   // scheduleParticles (empty pool) rather than adding a second draw path.
@@ -187,13 +180,62 @@ export function planBuild(
   const settleMs = SETTLE_MS * masterScale;
   const rawEnd =
     Math.max(0, ...paths.map((p) => p.startMs + p.durMs)) + settleMs;
+  return { paths, rawEnd, masterScale };
+}
+
+// Stream prototype (stream.ts): one frame's build span at tempo 1, so the
+// steady pen can pick its tempo before anything is planned.
+export function frameBuildMs(
+  frame: Frame,
+  cfg: BuildConfig,
+  cinderCfg: CinderConfig,
+  inkStaggerMs: number,
+  reducedMotion: boolean,
+): number {
+  return layoutBuildPaths([frame], cfg, cinderCfg, inkStaggerMs, reducedMotion)
+    .rawEnd;
+}
+
+// Builds the full landing BuildPlan: tier 0 → 1 → 2 timeline (wave-major
+// across frames, 90ms frame offset), fitted to the preset's own tempo and
+// clamped so it never overruns the preset's next "clear" beat.
+export function planBuild(
+  frames: Frame[],
+  now: number,
+  cfg: BuildConfig,
+  cinderCfg: CinderConfig,
+  inkStaggerMsIn: number,
+  clearAt: number | null,
+  center: { x: number; y: number },
+  driftLaunchPoints: { x: number; y: number }[],
+  reducedMotion = false,
+  // Still Water etc. ("nothing travels", build-plan.md §2): ink-only landing,
+  // mirrors the reducedMotion → emptyParticleBlock() branch below.
+  noParticles = false,
+  // Stream prototype (stream.ts): when set, the timeline runs at this tempo
+  // and skips both caps — the stream's own schedule already decided when
+  // this frame inks.
+  streamTempo: number | null = null,
+): BuildPlan {
+  const { paths, rawEnd, masterScale } = layoutBuildPaths(
+    frames,
+    cfg,
+    cinderCfg,
+    inkStaggerMsIn,
+    reducedMotion,
+  );
 
   const coldCap = COLD_CAP_MS * masterScale;
   const beatCap =
     clearAt !== null ? Math.max(0, clearAt - now - BEAT_TAIL_MS) : null;
   const finalCap = beatCap !== null ? Math.min(coldCap, beatCap) : coldCap;
-  const scale = rawEnd > finalCap && rawEnd > 0 ? finalCap / rawEnd : 1;
-  if (scale < 1) {
+  const scale =
+    streamTempo !== null
+      ? streamTempo
+      : rawEnd > finalCap && rawEnd > 0
+        ? finalCap / rawEnd
+        : 1;
+  if (scale !== 1) {
     for (const p of paths) {
       p.startMs *= scale;
       p.durMs *= scale;
@@ -475,4 +517,66 @@ export function drawBuildParticles(
 
 export function buildDone(plan: BuildPlan, now: number): boolean {
   return now >= plan.endAt && plan.particles.activeCount === 0;
+}
+
+// Stream prototype (stream.ts): folds one frame's freshly planned build (its
+// own start time, sparks recruited at its own arrival) into the job's running
+// plan, so drawFrames, updateBuild, drawBuildParticles and the Morph clear
+// teardown keep reading one plan. Runs once per frame arrival, never per
+// render frame.
+export function mergeBuildPlan(into: BuildPlan, add: BuildPlan) {
+  const shift = add.startAt - into.startAt;
+  for (const p of add.paths) {
+    p.startMs += shift;
+    into.paths.push(p);
+    const arr = into.pathsByFrame.get(p.frameId);
+    if (arr) arr.push(p);
+    else into.pathsByFrame.set(p.frameId, [p]);
+  }
+  for (const [frameId, t2] of add.tier2ByFrame)
+    into.tier2ByFrame.set(frameId, {
+      paths: t2.paths,
+      lastEnd: t2.lastEnd + shift,
+    });
+  into.endAt = Math.max(into.endAt, add.endAt);
+  into.particles = mergeParticles(into.particles, add.particles);
+}
+
+// Particle times are absolute, so blocks concatenate as-is; the not-yet-
+// launched tail of `a` and all of `b` are re-sorted into one launch order.
+function mergeParticles(a: ParticleBlock, b: ParticleBlock): ParticleBlock {
+  if (b.total === 0) return a;
+  const total = a.total + b.total;
+  const cat = (x: Float32Array, y: Float32Array) => {
+    const out = new Float32Array(total);
+    out.set(x);
+    out.set(y, a.total);
+    return out;
+  };
+  const launchAt = cat(a.launchAt, b.launchAt);
+  const pending: number[] = [];
+  for (let i = a.schedCursor; i < a.total; i++) pending.push(a.order[i]);
+  for (let i = 0; i < b.total; i++) pending.push(a.total + b.order[i]);
+  pending.sort((p, q) => launchAt[p] - launchAt[q]);
+  const order = new Int32Array(total);
+  order.set(a.order.subarray(0, a.schedCursor));
+  order.set(pending, a.schedCursor);
+  const activeIdx = new Int32Array(total);
+  activeIdx.set(a.activeIdx.subarray(0, a.activeCount));
+  return {
+    total,
+    px: cat(a.px, b.px),
+    py: cat(a.py, b.py),
+    sx: cat(a.sx, b.sx),
+    sy: cat(a.sy, b.sy),
+    tx: cat(a.tx, b.tx),
+    ty: cat(a.ty, b.ty),
+    launchAt,
+    arriveAt: cat(a.arriveAt, b.arriveAt),
+    side: cat(a.side, b.side),
+    order,
+    schedCursor: a.schedCursor,
+    activeIdx,
+    activeCount: a.activeCount,
+  };
 }

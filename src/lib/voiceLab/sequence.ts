@@ -152,6 +152,10 @@ export interface SequenceHost {
   getVoiceState(): VoiceState;
   startSketch(): void;
   landNow(): void;
+  // The job's `ready` beat, once the landing policy lets it through. Batch
+  // lands every frame; the stream prototype ignores it (its own per-frame
+  // part arrivals replace the single ready).
+  jobReady(): void;
   setJobState(state: "none" | "sketching" | "landing"): void;
   triggerAnticipation(depth: number, ms: number): void;
   triggerBackchannel(presence: number, ms: number): void;
@@ -209,7 +213,7 @@ export class SequencePlayer {
       const held = t - this.jobReadyAt;
       const gapNow = this.host.isVoiceGap();
       if (gapNow || held >= this.preset.landing.maxHoldMs) {
-        this.host.landNow();
+        this.host.jobReady();
         this.jobReadyAt = null;
       }
     }
@@ -264,7 +268,7 @@ export class SequencePlayer {
       if (beat.event === "start") this.host.startSketch();
       else if (beat.event === "clear") this.host.setJobState("none");
       else if (beat.event === "ready") {
-        if (this.preset.landing.policy === "immediate") this.host.landNow();
+        if (this.preset.landing.policy === "immediate") this.host.jobReady();
         else this.jobReadyAt = t;
       }
     }

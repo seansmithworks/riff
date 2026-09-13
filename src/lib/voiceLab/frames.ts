@@ -696,7 +696,14 @@ export function drawFrames(
       drawSpeculativeFrame(ctx, f, speculative);
       continue;
     }
-    const framePaths = plan.pathsByFrame.get(f.id) ?? [];
+    const framePaths = plan.pathsByFrame.get(f.id);
+    // Stream prototype: a frame whose part hasn't arrived has no paths in the
+    // job's running plan yet, so it keeps its speculative look (the outline
+    // head) until it inks. Batch plans always cover every frame.
+    if (!framePaths) {
+      drawSpeculativeFrame(ctx, f, speculative);
+      continue;
+    }
     ctx.save();
     ctx.globalAlpha =
       (f.landed ? 1 : Math.min(1, (t - f.landStartedAt) / cfg.landDurationMs)) *

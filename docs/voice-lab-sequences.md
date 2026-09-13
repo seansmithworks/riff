@@ -193,3 +193,15 @@ Four asks off the 10-preset review, all wired to dials (`src/lib/voiceLab/fluidG
 **New "Build" DialKit panel** (`persistKey("build")`, after Cinders & land): Flight speed (0.5-2, default 1), Arc (0-0.5, default 0.18), Density frame/blocks/details (2.5/2.0/1.2), Tier gap (-200…300ms, default -100, negative = overlap), Speculative frame (Off/Construction/Full ink, default Construction), Guide dots (Off/Lit dots/Lit dots + faint lines, default Lit dots), Arrival (Dots lead/Comet, default Dots lead), Snap to grid (default on), Dot pop (0-1, default 0.6).
 
 **Preset changes.** `sequence.ts#BASE.landing.inkStaggerMs` moved from 0 (no-op before Phase B) to 40 — it is now the per-path stagger within a build tier, consumed by `planBuild`. No preset beat timelines or other values changed.
+
+## 10. Stream prototype (2026-09-13)
+
+Fakes progressive-sketch options A+B from the research. Stream panel (after Morph); `T` flips batch/stream, `Shift+T` flips steady/bursts. Model: `src/lib/voiceLab/stream.ts`. Mode, pace, and dials latch at job start.
+
+- **Batch** is today's job: the speculative layer from job start, then one `ready` landing builds every frame at once.
+- **Stream** shows nothing until `outlineMs` (1.5s), when every frame gets its speculative look (the outline head). Each frame then inks when its part arrives: `frame1Ms` 2.0s, `frame2Ms` 5.5s after job start, in schema (x) order. The preset's `ready` beat is ignored. `L` makes every remaining part arrive now.
+- **Bursts:** a frame inks at normal build speed the moment it arrives.
+- **Steady pen (default):** ink starts at the first arrival and runs at one tempo, the fastest (at most normal speed) at which the pen is never idle longer than `bufferMs` (1.5s) before the next part. A frame never starts before it arrives or before the previous frame finishes.
+- Each frame's landing is a normal `planBuild` over that one frame (sparks, tip burst, Relay bead aimed at it), uncapped by the clear beat and merged into the job's running plan (`mergeBuildPlan`).
+- Reduced motion: frames crossfade in one at a time at their arrivals; there is no pen to pace.
+- The lab has two frames, so there are two arrival dials, not the research's three beats (2.0 / 5.5 / 9.0s); Blend clears 9.4s after job start. The lab has no evolve/diff re-ink path.

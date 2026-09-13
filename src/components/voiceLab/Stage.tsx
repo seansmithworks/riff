@@ -161,6 +161,19 @@ export default function Stage({ children }: { children: React.ReactNode }) {
         engine.cycleMorph(e.shiftKey ? -1 : 1);
         return;
       }
+      // Stream prototype: T flips batch/stream, Shift+T steady/bursts (T is
+      // unbound here, in DialKit and in Agentation). Applies from the next job.
+      if (e.key.toLowerCase() === "t") {
+        if (e.shiftKey)
+          engine.setStreamPace(
+            engine.getStreamPace() === "steady" ? "bursts" : "steady",
+          );
+        else
+          engine.setStreamMode(
+            engine.getStreamMode() === "stream" ? "batch" : "stream",
+          );
+        return;
+      }
       if (e.key.toLowerCase() === "s") {
         autoplay.stop();
         engine.startSketch();
@@ -292,7 +305,8 @@ export default function Stage({ children }: { children: React.ReactNode }) {
               <div className="flex items-center justify-between gap-2">
                 <span>
                   {status.sequenceHotkey} · {status.sequenceName} —{" "}
-                  {status.sequenceThesis} — morph: {status.morphLabel}
+                  {status.sequenceThesis} — morph: {status.morphLabel} — stream:{" "}
+                  {status.streamLabel}
                 </span>
                 <span className="shrink-0 text-[#a1a1aa]">
                   {status.sequencePlaying ? "▶" : "❚❚"}

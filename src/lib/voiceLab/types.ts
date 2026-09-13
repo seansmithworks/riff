@@ -1,5 +1,7 @@
 // Framework-agnostic types for the voice-lab Canvas2D engine.
 
+import type { StreamConfig } from "./stream";
+
 export type VoiceState =
   "idle" | "you-talking" | "riff-talking" | "silence" | "dead-mic";
 
@@ -210,4 +212,7 @@ export type EngineConfig = {
     };
     elastic: { squash: number; wobble: number };
   };
+  // Stream prototype (stream.ts): batch vs stream (A+B), steady vs bursts
+  // pen, and the arrival dials. The engine latches it at each job start.
+  stream: StreamConfig;
 };

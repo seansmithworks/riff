@@ -154,3 +154,7 @@ Build order from `docs/voice-lab-morph-spec.md`, one commit per step:
 - [ ] Landing particle and ink-bleed color follows the wrong role (`activeRoleAndMarkId` reports human during silence) — noticed, not fixed
 - [ ] `burstUnderlay` is dead (typed and set by presets but never read) — noticed, not fixed
 - [ ] Burst boil runs at ~11Hz, above the reduced-motion 3Hz guidance — noticed, not fixed
+- [ ] Lab: Stream prototype (A+B, steady pen default, batch baseline)
+- [ ] Sean feels stream vs batch in lab → go/no-go on real pipeline A+B (generate.ts streaming, outline head, draft artifact, draw-in)
+- [ ] Option D pencil guesses: held (Sean 2026-09-13: not yet)
+- [ ] Pen pace: steady (Sean 2026-09-13)

@@ -262,6 +262,84 @@ function MorphPanel() {
   return null;
 }
 
+// Stream prototype (src/lib/voiceLab/stream.ts): batch (today) vs stream
+// (A+B), steady pen vs bursts, and the arrival dials (ms after job start; the
+// lab has two frames). Same idempotent select<->engine sync as MorphPanel, so
+// the T / Shift+T hotkeys and __voiceLabEngine evals keep the selects in
+// step. Everything applies from the next job (the engine latches at start).
+function StreamPanel() {
+  const handle = useEngine();
+  const controller = useDialKitController(
+    "Stream",
+    {
+      mode: {
+        type: "select",
+        options: [
+          { value: "batch", label: "Batch (today)" },
+          { value: "stream", label: "Stream (A+B)" },
+        ],
+        default: "stream",
+      },
+      pace: {
+        type: "select",
+        options: [
+          { value: "steady", label: "Steady pen" },
+          { value: "bursts", label: "Bursts" },
+        ],
+        default: "steady",
+      },
+      bufferMs: [1500, 0, 4000, 100],
+      outlineMs: [1500, 0, 6000, 100],
+      frame1Ms: [2000, 0, 9000, 100],
+      frame2Ms: [5500, 0, 9000, 100],
+    },
+    { persist: persistKey("stream") },
+  );
+
+  const controllerRef = useRef(controller);
+  useEffect(() => {
+    controllerRef.current = controller;
+  }, [controller]);
+
+  const mode = controller.values.mode as string;
+  const pace = controller.values.pace as string;
+  useEffect(() => {
+    if (!handle) return;
+    if (mode === handle.engine.getStreamMode()) return;
+    handle.engine.setStreamMode(mode as never);
+  }, [handle, mode]);
+
+  useEffect(() => {
+    if (!handle) return;
+    if (pace === handle.engine.getStreamPace()) return;
+    handle.engine.setStreamPace(pace as never);
+  }, [handle, pace]);
+
+  const bufferMs = controller.values.bufferMs as number;
+  const outlineMs = controller.values.outlineMs as number;
+  const frame1Ms = controller.values.frame1Ms as number;
+  const frame2Ms = controller.values.frame2Ms as number;
+  useEffect(() => {
+    if (!handle) return;
+    const s = handle.engine.config.stream;
+    s.bufferMs = bufferMs;
+    s.outlineMs = outlineMs;
+    s.arriveMs = [frame1Ms, frame2Ms];
+  }, [handle, bufferMs, outlineMs, frame1Ms, frame2Ms]);
+
+  useEffect(() => {
+    if (!handle) return;
+    return handle.engine.onStatusChange((status) => {
+      const c = controllerRef.current;
+      const live = c.getValues();
+      if (status.streamMode !== live.mode) c.setValue("mode", status.streamMode);
+      if (status.streamPace !== live.pace) c.setValue("pace", status.streamPace);
+    });
+  }, [handle]);
+
+  return null;
+}
+
 // ---- Voice channel: idle / you-talking / riff-talking / silence / dead-mic
 // `autoplay` used to live here; it's now the Sequence panel's `play` toggle
 // above (spec §5) — everything else about manual voice-state selection is
@@ -800,6 +878,7 @@ export default function VoiceLabPanels() {
     <>
       <SequencePanel />
       <MorphPanel />
+      <StreamPanel />
       <VoicePanel />
       <JobPanel />
       <TogglesPanel />

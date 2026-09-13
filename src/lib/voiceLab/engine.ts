@@ -68,8 +68,17 @@ import {
   planBuild,
   updateBuild,
   drawBuildParticles,
+  frameBuildMs,
+  mergeBuildPlan,
   type BuildPlan,
 } from "./build";
+import {
+  planStreamSchedule,
+  streamLabel,
+  type StreamMode,
+  type StreamPace,
+  type StreamSchedule,
+} from "./stream";
 import type {
   EngineConfig,
   VoiceState,
@@ -195,6 +204,15 @@ export function defaultEngineConfig(): EngineConfig {
       inkwash: { stagger: 0.6, stain: 0.6, wetBloom: 0.15, nib: true },
       elastic: { squash: 0.18, wobble: 0.45 },
     },
+    // Sean 2026-09-13: stream (A+B) with a steady pen is the default; batch
+    // stays selectable as the A/B baseline.
+    stream: {
+      mode: "stream",
+      pace: "steady",
+      bufferMs: 1500,
+      outlineMs: 1500,
+      arriveMs: [2000, 5500],
+    },
   };
 }
 
@@ -224,6 +242,10 @@ export type EngineStatus = {
   // Morph lab (spec §5): current style, for the caption and MorphPanel sync.
   morphId: MorphId;
   morphLabel: string;
+  // Stream prototype: caption label + StreamPanel sync.
+  streamLabel: string;
+  streamMode: StreamMode;
+  streamPace: StreamPace;
 };
 
 const ZERO_TWEEN: Tween = {
@@ -354,6 +376,18 @@ export class VoiceLabEngine implements SequenceHost {
   // Relay landing bead (spec §4.3): tip sparks wait for the bead to arrive.
   private pendingLandSparks = 0;
 
+  // ---- Stream prototype (stream.ts) ----
+  // Latched at job start (mode, pace, dials, tempo), so a mid-job change
+  // applies from the next job and never splits one. Null = batch job.
+  private streamJob: {
+    startAt: number;
+    schedule: StreamSchedule;
+    outlineShown: boolean;
+    next: number; // index into streamOrder of the next frame to ink
+  } | null = null;
+  // Frames in schema order (x), the order planBuild inks them.
+  private streamOrder: Frame[];
+
   constructor(canvas: HTMLCanvasElement, config?: EngineConfig) {
     this.canvas = canvas;
     this.config = config ?? defaultEngineConfig();
@@ -381,6 +415,7 @@ export class VoiceLabEngine implements SequenceHost {
     document.body.appendChild(measureSvg);
 
     this.frames = createFrames(this.measurePath);
+    this.streamOrder = [...this.frames].sort((a, b) => a.x - b.x);
 
     this.dotGrid = new DotGrid(
       W,
@@ -442,6 +477,9 @@ export class VoiceLabEngine implements SequenceHost {
       effectiveColorMix: this.effectiveColorMix(),
       morphId: this.morphId,
       morphLabel: MORPH_LABELS[this.morphId],
+      streamLabel: streamLabel(this.config.stream),
+      streamMode: this.config.stream.mode,
+      streamPace: this.config.stream.pace,
     };
     for (const cb of this.statusListeners) cb(status);
   }
@@ -593,6 +631,30 @@ export class VoiceLabEngine implements SequenceHost {
     this.setMorph(next);
   }
 
+  // ---- Stream prototype surface (stream.ts) ----
+  // Mode/pace take effect at the next job start (the engine latches them).
+  getStreamMode(): StreamMode {
+    return this.config.stream.mode;
+  }
+
+  getStreamPace(): StreamPace {
+    return this.config.stream.pace;
+  }
+
+  setStreamMode(mode: StreamMode) {
+    if (mode !== "batch" && mode !== "stream") return;
+    if (mode === this.config.stream.mode) return;
+    this.config.stream.mode = mode;
+    this.emitStatus();
+  }
+
+  setStreamPace(pace: StreamPace) {
+    if (pace !== "steady" && pace !== "bursts") return;
+    if (pace === this.config.stream.pace) return;
+    this.config.stream.pace = pace;
+    this.emitStatus();
+  }
+
   // Full reset for a fresh preset run: job cleared, presences at 0, cinders
   // cleared (spec §5 "reset, play from 0").
   private resetSequenceState() {
@@ -601,6 +663,7 @@ export class VoiceLabEngine implements SequenceHost {
     this.dustPuffs = [];
     this.config.jobState = "none";
     this.config.voiceState = "idle";
+    this.streamJob = null;
     const t = this.now();
     this.presence.human = 0;
     this.presence.riff = 0;
@@ -832,6 +895,8 @@ export class VoiceLabEngine implements SequenceHost {
       this.dustPuffs = [];
       this.buildPlan = null;
       this.sketchStartTime = this.now();
+      this.streamJob =
+        this.config.stream.mode === "stream" ? this.beginStreamJob() : null;
       if (this.cindersEnabled())
         spawnDustPuff(
           this.getOrigin(),
@@ -843,7 +908,8 @@ export class VoiceLabEngine implements SequenceHost {
       // its own landing.policy (immediate/nextGap) decides when `ready`
       // lands, and under slow-mo this timer would force-land before that.
       // Manual `S` with the player paused still auto-lands as before.
-      if (!this.player.playing) {
+      // A streamed job lands its own frames on its part schedule.
+      if (!this.player.playing && !this.streamJob) {
         this.autoLandTimer = setTimeout(() => {
           if (this.config.jobState === "sketching") this.setJobState("landing");
         }, 14000);
@@ -851,6 +917,7 @@ export class VoiceLabEngine implements SequenceHost {
     }
     if (next === "landing") this.beginLanding();
     if (next === "none") {
+      this.streamJob = null;
       // F6 clear: a Morph style keeps the plan alive and drives jobOut to 0
       // over clearMs instead of vanishing in one frame — stepMotion() runs
       // resetFrames/nulls the plan once the spring settles below 0.01. Old
@@ -872,26 +939,115 @@ export class VoiceLabEngine implements SequenceHost {
   }
 
   landNow() {
+    // Stream: landing means every part that hasn't arrived arrives now.
+    if (this.streamJob) {
+      this.streamLandRemaining();
+      return;
+    }
     this.setJobState("landing");
   }
 
-  private beginLanding() {
+  jobReady() {
+    if (this.streamJob) return;
+    this.landNow();
+  }
+
+  private beginStreamJob() {
     const preset = this.effectivePreset();
-    const now = this.now();
+    const rm = this.reducedMotionActive();
+    const s = this.config.stream;
+    // Arrival dials are loop time, like beats; builds run on the wall clock,
+    // so slow-mo stretches the arrivals but not the pen's own draw speed.
+    const ts = this.timeScale;
+    const spans = this.streamOrder.map(
+      (f) =>
+        frameBuildMs(
+          f,
+          this.config.buildConfig,
+          this.config.cinderConfig,
+          preset.landing.inkStaggerMs,
+          rm,
+        ) + preset.landing.hitStopMs,
+    );
+    return {
+      startAt: this.sketchStartTime,
+      schedule: planStreamSchedule(
+        {
+          ...s,
+          outlineMs: s.outlineMs / ts,
+          arriveMs: s.arriveMs.map((a) => a / ts),
+        },
+        spans,
+        rm,
+      ),
+      outlineShown: false,
+      next: 0,
+    };
+  }
+
+  // Once per render frame while a streamed job sketches: shows the outline
+  // head, then lands each frame at its scheduled ink start. Allocates only on
+  // those events.
+  private tickStream(t: number) {
+    const job = this.streamJob;
+    if (!job || this.config.jobState !== "sketching") return;
+    const elapsed = t - job.startAt;
+    if (!job.outlineShown && elapsed >= job.schedule.outlineMs)
+      job.outlineShown = true;
+    const starts = job.schedule.inkStartMs;
+    while (job.next < this.streamOrder.length && elapsed >= starts[job.next]) {
+      job.outlineShown = true;
+      const plan = this.landFrames(
+        [this.streamOrder[job.next]],
+        job.startAt + starts[job.next],
+        job.schedule.tempo,
+      );
+      if (this.buildPlan) mergeBuildPlan(this.buildPlan, plan);
+      else this.buildPlan = plan;
+      job.next++;
+    }
+    if (job.next >= this.streamOrder.length) {
+      this.config.jobState = "landing";
+      this.emitStatus();
+    }
+  }
+
+  private streamLandRemaining() {
+    const job = this.streamJob;
+    if (!job) return;
+    const elapsed = this.now() - job.startAt;
+    const starts = job.schedule.inkStartMs;
+    for (let i = job.next; i < starts.length; i++)
+      starts[i] = Math.min(starts[i], elapsed);
+  }
+
+  private beginLanding() {
+    this.buildPlan = this.landFrames(this.frames, this.now(), null);
+  }
+
+  // One landing over `frames`, starting at `now`. Batch lands every frame at
+  // once (streamTempo null). The stream prototype lands one frame per part
+  // arrival at its pen tempo and merges the result into the job's plan.
+  private landFrames(
+    frames: Frame[],
+    now: number,
+    streamTempo: number | null,
+  ): BuildPlan {
+    const preset = this.effectivePreset();
     // The ink/crossfade build always runs on landing (build-plan.md §3's
     // reduced-motion tier crossfade included) — only particle scheduling
     // (drift-cinder recruitment, pooled sparks) depends on cinders being
     // enabled. Cinders off (or reduced motion, folded into cindersEnabled())
     // must not stall the frame on guide dots forever.
     const cindersOn = this.cindersEnabled();
-    resetFrames(this.frames);
+    resetFrames(frames);
     // F0 landing-timestamp ownership: every frame gets landStartedAt here,
     // unconditionally, before the cindersOn branch below. Previously this
     // was only ever set inside beginLandingImpl's own resetFrames+stamp,
     // which only ran when cinders were on — so Cinders-off landings drew
     // cards at t=0 forever (landStartedAt stuck at 0), i.e. full alpha, no
     // fade.
-    for (const f of this.frames) f.landStartedAt = now;
+    for (const f of frames) f.landStartedAt = now;
     if (this.morphId !== "off") {
       this.motion.jobOut.set(1);
       MORPH_STYLES[this.morphId as Exclude<MorphId, "off">].onLanding?.(
@@ -906,7 +1062,7 @@ export class VoiceLabEngine implements SequenceHost {
         land.x0 = o.x;
         land.y0 = this.config.centerCircleOn ? o.y : o.y - 15;
         let best = Infinity;
-        for (const f of this.frames) {
+        for (const f of frames) {
           const bx = f.x + f.w / 2;
           const by = f.y + f.h;
           const d2 = (bx - land.x0) ** 2 + (by - land.y0) ** 2;
@@ -934,7 +1090,7 @@ export class VoiceLabEngine implements SequenceHost {
         )
         .map((c) => ({ x: c.x, y: c.y }));
       this.cinders = beginLandingImpl(
-        this.frames,
+        frames,
         this.cinders,
         this.config.cinderConfig,
         now,
@@ -966,13 +1122,16 @@ export class VoiceLabEngine implements SequenceHost {
         );
       }
     }
-    const clearAt = this.player.nextBeatAt(
-      now,
-      this.timeScale,
-      (b) => b.kind === "job" && b.event === "clear",
-    );
-    this.buildPlan = planBuild(
-      this.frames,
+    const clearAt =
+      streamTempo !== null
+        ? null
+        : this.player.nextBeatAt(
+            now,
+            this.timeScale,
+            (b) => b.kind === "job" && b.event === "clear",
+          );
+    return planBuild(
+      frames,
       buildStartAt,
       this.config.buildConfig,
       this.config.cinderConfig,
@@ -982,6 +1141,7 @@ export class VoiceLabEngine implements SequenceHost {
       launchPoints.length ? launchPoints : [origin],
       this.reducedMotionActive(),
       preset.job.emit === "none" || !cindersOn,
+      streamTempo,
     );
   }
 
@@ -1910,6 +2070,7 @@ export class VoiceLabEngine implements SequenceHost {
     this.updateMarkClock(t, dt, preset);
     this.player.tick(t, this.timeScale);
     if (this.morphId !== "off") this.stepMotion(t, dt);
+    if (this.streamJob) this.tickStream(t);
 
     // Job channel — cinders + landing frames render independent of voice.
     if (this.buildPlan) {
@@ -1935,8 +2096,10 @@ export class VoiceLabEngine implements SequenceHost {
           // sketching — otherwise the speculative layer (which draws
           // whenever no plan exists, regardless of job state) re-lights
           // within a few frames of clear.
+          // Stream prototype: nothing until the outline head arrives.
           speculativeFrame:
-            this.config.jobState === "sketching"
+            this.config.jobState === "sketching" &&
+            (!this.streamJob || this.streamJob.outlineShown)
               ? this.config.buildConfig.speculativeFrame
               : "off",
           guideDots: this.config.buildConfig.guideDots,
