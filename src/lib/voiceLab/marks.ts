@@ -1419,14 +1419,15 @@ export function defaultMarkConfigs(): Record<string, Record<string, number>> {
 // Relay's baton-pass bead (spec §4.3) — a small roughEllipse drawn between
 // the two roles' draw calls, same pattern as drawMicDisc.
 export function drawBead(
-  o: { x: number; y: number },
+  x: number,
+  y: number,
   color: string,
   radius: number,
   alpha: number,
 ) {
   if (radius <= 0.3 || alpha <= 0.01) return;
   const seed = hashSeed("relay-bead");
-  const d = roughEllipse(o.x, o.y, radius, radius, {
+  const d = roughEllipse(x, y, radius, radius, {
     seed,
     roughness: SKETCH_ROUGHNESS * 0.6,
     boil: 0,
@@ -1548,8 +1549,9 @@ function parseHex(hex: string): [number, number, number] | null {
     ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)]
     : null;
 }
-// sRGB lerp between the two role colors, cached per 1/64 step of t.
-function shapeshiftColor(a: string, b: string, t: number): string {
+// sRGB lerp between two hex colors, cached per 1/64 step of t (Shapeshift's
+// body, Relay's bead).
+export function mixHexColor(a: string, b: string, t: number): string {
   const q = Math.round(Math.max(0, Math.min(1, t)) * 64);
   if (a === ssColA && b === ssColB && q === ssColQ) return ssColStr;
   ssColA = a;
@@ -1647,7 +1649,7 @@ export function drawShapeshiftBody(
     }
   }
 
-  const color = shapeshiftColor(gHuman.color, gRiff.color, m1);
+  const color = mixHexColor(gHuman.color, gRiff.color, m1);
   const seedBucket = Math.floor(gHuman.t / (220 + (90 - 220) * m1));
   const burstBaseW = 1.25 * 0.8 * rc.thickness;
 

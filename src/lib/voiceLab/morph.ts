@@ -166,7 +166,34 @@ export type MotionState = {
   presenceSpec: Record<Role, SpringSpec>;
   // Ink & Wash wet bloom (spec §4.4): added to the wash edge amount.
   bloom: Envelope;
+  // Wash envelope target override for this frame (Relay's hold); −1 = none.
+  washHold: number;
+  relay: RelayState;
   host: MorphHost;
+};
+
+// Relay's handoff timeline (spec §4.3). "pass" = A gathers into the bead and
+// B releases out of it; "rest" = no incoming speaker, every role follows its
+// presence target (a silence holder coils, the rest gather away).
+export type RelayState = {
+  kind: "rest" | "pass";
+  from: Role | null; // A — whoever was visibly holding the floor
+  to: Role | null; // B
+  at: number;
+  released: boolean;
+  scale: Record<Role, Spring>;
+  alpha: Record<Role, Envelope>;
+  gatherSpec: Record<Role, SpringSpec>;
+  beadMix: number; // bead color 0 = A .. 1 = B
+  bc: Spring; // backchannel bead offset 0..1
+  land: {
+    on: boolean;
+    at: number;
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+  };
 };
 
 export function createMotionState(host: MorphHost): MotionState {
@@ -188,8 +215,27 @@ export function createMotionState(host: MorphHost): MotionState {
       riff: { response: 200, damping: 1 },
     },
     bloom: new Envelope(),
+    washHold: -1,
+    relay: {
+      kind: "rest",
+      from: null,
+      to: null,
+      at: 0,
+      released: true,
+      scale: { human: new Spring(), riff: new Spring() },
+      alpha: { human: new Envelope(), riff: new Envelope() },
+      gatherSpec: {
+        human: { response: 185, damping: 1 },
+        riff: { response: 119, damping: 1 },
+      },
+      beadMix: 0,
+      bc: new Spring(),
+      land: { on: false, at: 0, x0: 0, y0: 0, x1: 0, y1: 0 },
+    },
     host,
   };
+  m.relay.scale.human.set(0.08);
+  m.relay.scale.riff.set(0.08);
   m.body.radial.set(1);
   m.body.scale.set(1);
   m.jobOut.set(1);
@@ -232,6 +278,9 @@ export type MorphStyle = {
   ): void;
   onBackchannel?(m: MotionState, amount: number, ms: number, now: number): void;
   onLanding?(m: MotionState, now: number): void;
+  // Seeds style-owned state from the current presence when the style is
+  // switched to mid-loop, so nothing jumps.
+  onEnter?(m: MotionState, now: number): void;
 };
 
 // Reduced motion (spec §2 "Reduced motion (toggle or OS), every style"):
@@ -382,6 +431,35 @@ const inkWash: MorphStyle = {
 };
 
 // ---- 3 · Relay (handoff) -----------------------------------------------
+// Handoff timeline A → B from handoff.at (spec §4.3), stepped on the frame
+// clock (no timers):
+//   gather   A's scale → 0.08 via {gatherMs/0.755, 1}; alpha =
+//            smoothstep(0.1, 0.35, scale); pivot = bead anchor (o.x,
+//            o.y − 15), or o when the disc is on
+//   bead     springs to 1 from 60% of gather {120, .7}, to 0 at release
+//            {120, 1}; color lerps A → B
+//   hold     holdMs; both wash envelopes target 0.5 (brand green)
+//   release  B's scale 0.08 → 1 via {360, .65} (Riff) / {240, .75} (human),
+//            alpha 0 → 1 over its first 60ms, onset.trigger(releasePunch)
+// you → riff uses the gatherMs/holdMs dials; riff → you and loop wrap gather
+// 90 and release at 60; idle → you releases at 60 out of the squiggle.
+const ROLES: Role[] = ["human", "riff"];
+const PIVOT_BEAD = { x: 0, y: -15 };
+const PIVOT_ORIGIN = { x: 0, y: 0 };
+const RELAY_RELEASE: Record<Role, SpringSpec> = {
+  riff: { response: 360, damping: 0.65 }, // 7% overshoot
+  human: { response: 240, damping: 0.75 },
+};
+const RELAY_COIL: SpringSpec = { response: 400, damping: 1 };
+const RELAY_BEAD_UP: SpringSpec = { response: 120, damping: 0.7 };
+const RELAY_BEAD_DOWN: SpringSpec = { response: 120, damping: 1 };
+const RELAY_BC: SpringSpec = { response: 260, damping: 0.5 };
+
+function relayGatherMs(m: MotionState, role: Role | null): number {
+  if (role === "human") return m.host.morph.relay.gatherMs;
+  return role === "riff" ? 90 : 60; // null = the idle squiggle
+}
+
 const relay: MorphStyle = {
   id: "relay",
   label: MORPH_LABELS.relay,
@@ -396,31 +474,137 @@ const relay: MorphStyle = {
   clearMs: 450,
   cinderDieMs: 400,
   pose(role, m, now) {
+    void now;
     const presence = clamp01(m.presence[role].value);
     if (reducedActive) return reducedPose(role, presence);
-    const gathering = m.handoff.from === role && now - m.handoff.at < 400;
-    const scale = gathering
-      ? Math.max(0.08, presence)
-      : Math.max(0.08, presence);
-    return writePose(role, presence, scale, 1, 1, 1, 1, 1, { x: 0, y: -15 });
+    const r = m.relay;
+    return writePose(
+      role,
+      clamp01(r.alpha[role].value),
+      Math.max(0, r.scale[role].value),
+      1,
+      1,
+      1,
+      1,
+      1,
+      m.host.centerCircleOn ? PIVOT_ORIGIN : PIVOT_BEAD,
+    );
+  },
+  step(m, now, dt) {
+    const r = m.relay;
+    const e = (now - r.at) * dialSpeed(m);
+    const A = r.from;
+    const B = r.to;
+    const pass = r.kind === "pass";
+    const gatherMs = relayGatherMs(m, A);
+    const releaseAt = !pass
+      ? Infinity
+      : A === "human"
+        ? gatherMs + m.host.morph.relay.holdMs
+        : 60;
+    for (const role of ROLES) {
+      const sc = r.scale[role];
+      const al = r.alpha[role];
+      const holdTarget = m.presence[role].target;
+      let spec: SpringSpec;
+      let alphaTarget: number;
+      if (pass && role === B && e >= releaseAt) {
+        if (!r.released) {
+          r.released = true;
+          if (al.value < 0.01) sc.set(0.08);
+          if (!reducedActive)
+            m.onset[role].trigger(
+              m.host.morph.relay.releasePunch * dialIntensity(m),
+            );
+        }
+        sc.target = 1;
+        spec = RELAY_RELEASE[role];
+        alphaTarget = 1;
+      } else if (!pass && holdTarget > 0.01) {
+        // Holds the floor with no incoming speaker: a silence holder coils.
+        sc.target = holdTarget >= 1 ? 1 : 0.55;
+        spec = RELAY_COIL;
+        alphaTarget = holdTarget;
+      } else {
+        // Gather into the bead: A, a not-yet-released B, or a bystander.
+        // A role that is already invisible parks at bead size silently.
+        if (al.value < 0.01 && sc.value > 0.08) sc.set(0.08);
+        spec = r.gatherSpec[role];
+        spec.response = relayGatherMs(m, role) / 0.755;
+        sc.target = 0.08;
+        alphaTarget = smoothstep(0.1, 0.35, sc.value);
+      }
+      sc.step(dt, spec);
+      // Attack tc 20ms ≈ the spec's 60ms alpha ramp; release follows the
+      // gather's smoothstep closely.
+      al.step(dt, alphaTarget, 20, 12);
+    }
+
+    // Bead: from 60% of the gather until release (a gather with nobody
+    // incoming just ends at the gather's end).
+    const beadEnd = pass ? releaseAt : A ? gatherMs : -1;
+    const beadTarget =
+      !reducedActive && e >= 0.6 * gatherMs && e < beadEnd ? 1 : 0;
+    m.bead.target = beadTarget;
+    m.bead.step(
+      dt,
+      beadTarget > m.bead.value ? RELAY_BEAD_UP : RELAY_BEAD_DOWN,
+    );
+    r.beadMix = pass
+      ? clamp01((e - 0.6 * gatherMs) / Math.max(1, releaseAt - 0.6 * gatherMs))
+      : 0;
+    // Hold: both washes → 0.5 so the pigment mix reads brand green.
+    m.washHold = pass && e >= gatherMs && e < releaseAt ? 0.5 : -1;
+
+    // Backchannel bead: out for the first ~half period, then springs back.
+    const bc = m.backchannel;
+    r.bc.target =
+      bc.amount > 0 && now >= bc.at && (now - bc.at) * dialSpeed(m) < 130
+        ? 1
+        : 0;
+    r.bc.step(dt, RELAY_BC);
   },
   onHandoff(m, from, to, now) {
     m.handoff = { from, to, at: now };
-    m.bead.target = 1;
-    m.bead.step(0, { response: 120, damping: 0.7 });
-    setTimeout(
-      () => {
-        m.bead.target = 0;
-      },
-      from && to ? 200 : 60,
-    );
+    const r = m.relay;
+    r.at = now;
+    r.to = to;
+    // Loop wrap (silence → you) has no talking "from", but the coiled Burst
+    // is still on screen: it is A.
+    r.from =
+      from ??
+      (to !== "riff" && m.presence.riff.value > 0.05
+        ? "riff"
+        : to !== "human" && m.presence.human.value > 0.05
+          ? "human"
+          : null);
+    r.kind = to ? "pass" : "rest";
+    r.released = false;
   },
   onBackchannel(m, amount, ms, now) {
     m.backchannel = { at: now, until: now + ms, amount };
-    m.bead.target = Math.min(0.85, amount * 2.4);
-    setTimeout(() => {
-      m.bead.target = 0;
-    }, 200);
+  },
+  // Landing bead (dial): the coiled bead travels to the nearest frame; the
+  // engine fills in the path and fires the tip sparks on arrival.
+  onLanding(m, now) {
+    m.relay.land.on = m.host.morph.relay.landingBead && !reducedActive;
+    m.relay.land.at = now;
+  },
+  onEnter(m, now) {
+    const r = m.relay;
+    r.kind = "rest";
+    r.from = null;
+    r.to = null;
+    r.at = now - 10000;
+    r.released = true;
+    for (const role of ROLES) {
+      const target = m.presence[role].target;
+      r.scale[role].set(target > 0.01 ? (target >= 1 ? 1 : 0.55) : 0.08);
+      r.alpha[role].value = clamp01(m.presence[role].value);
+    }
+    m.bead.set(0);
+    r.bc.set(0);
+    r.land.on = false;
   },
 };
 

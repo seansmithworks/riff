@@ -41,6 +41,7 @@ import {
   drawIdleSquiggle,
   drawShapeshiftBody,
   SHAPESHIFT_BODY_MARK,
+  mixHexColor,
   strokeChain,
 } from "./marks";
 import {
@@ -98,8 +99,10 @@ import {
   REDUCED_MOTION_PRESENCE,
   createMotionState,
   dialSpeed,
+  easeInOutCubic,
   setMorphReducedMotion,
   shapeshiftSprout,
+  smoothstep,
   type MorphId,
   type MotionState,
   type RolePose,
@@ -348,6 +351,8 @@ export class VoiceLabEngine implements SequenceHost {
   private clearSpec: SpringSpec = { response: 1, damping: 1 };
   // Whether Shapeshift's shared body drew last frame (dev evidence evals).
   private shapeshiftBodyActive = false;
+  // Relay landing bead (spec §4.3): tip sparks wait for the bead to arrive.
+  private pendingLandSparks = 0;
 
   constructor(canvas: HTMLCanvasElement, config?: EngineConfig) {
     this.canvas = canvas;
@@ -576,7 +581,9 @@ export class VoiceLabEngine implements SequenceHost {
         this.config.voiceState === "riff-talking" ? 1 : 0,
       );
       this.retargetMotionForState(this.config.voiceState, t);
+      MORPH_STYLES[id].onEnter?.(this.motion, t);
     }
+    this.pendingLandSparks = 0;
     this.emitStatus();
   }
 
@@ -891,6 +898,25 @@ export class VoiceLabEngine implements SequenceHost {
         this.motion,
         now,
       );
+      // Relay landing bead: fly from the bead anchor to the nearest frame's
+      // bottom-center.
+      const land = this.motion.relay.land;
+      if (this.morphId === "relay" && land.on) {
+        const o = this.getOrigin();
+        land.x0 = o.x;
+        land.y0 = this.config.centerCircleOn ? o.y : o.y - 15;
+        let best = Infinity;
+        for (const f of this.frames) {
+          const bx = f.x + f.w / 2;
+          const by = f.y + f.h;
+          const d2 = (bx - land.x0) ** 2 + (by - land.y0) ** 2;
+          if (d2 < best) {
+            best = d2;
+            land.x1 = bx;
+            land.y1 = by;
+          }
+        }
+      }
     }
     // Recruit drift cinders (bearing-sorted from the origin) as the pooled
     // spark particles' launch points (build-plan.md §2/§3) — this happens
@@ -924,16 +950,21 @@ export class VoiceLabEngine implements SequenceHost {
     const buildStartAt = now + preset.landing.hitStopMs;
     if (preset.landing.riffNod) this.riffOnsetPulse = 1;
     if (cindersOn && preset.landing.tipBurst > 0) {
-      const emitters = this.lastMarkContext?.mark.getTipEmitters
-        ? this.lastMarkContext.mark.getTipEmitters(this.lastMarkContext.g)
-        : [];
-      spawnTipSparks(
-        this.getOrigin(),
-        emitters,
-        preset.landing.tipBurst,
-        this.dustPuffs,
-        now,
-      );
+      if (this.morphId === "relay" && this.motion.relay.land.on) {
+        // Fired from the bead's arrival point in stepMotion.
+        this.pendingLandSparks = preset.landing.tipBurst;
+      } else {
+        const emitters = this.lastMarkContext?.mark.getTipEmitters
+          ? this.lastMarkContext.mark.getTipEmitters(this.lastMarkContext.g)
+          : [];
+        spawnTipSparks(
+          this.getOrigin(),
+          emitters,
+          preset.landing.tipBurst,
+          this.dustPuffs,
+          now,
+        );
+      }
     }
     const clearAt = this.player.nextBeatAt(
       now,
@@ -1327,6 +1358,59 @@ export class VoiceLabEngine implements SequenceHost {
       this.lastMarkContext = { mark, g };
   }
 
+  private drawRelayBeads(o: { x: number; y: number }, t: number) {
+    const m = this.motion;
+    const r = m.relay;
+    const intensity = Math.max(0, this.config.morph.intensity);
+    const human = this.config.humanColor;
+    const riff = this.config.riffColor;
+    // Bead anchor = the pose pivot: (o.x, o.y − 15), or o when the disc is on.
+    const px = o.x;
+    const py = this.config.centerCircleOn ? o.y : o.y - 15;
+    setAlphaMul(1);
+    if (m.bead.value > 0.02) {
+      const a = r.from ?? r.to;
+      const b = r.to ?? r.from;
+      drawBead(
+        px,
+        py,
+        mixHexColor(
+          a === "riff" ? riff : human,
+          b === "riff" ? riff : human,
+          r.beadMix,
+        ),
+        9 * m.bead.value * intensity,
+        Math.min(0.9, m.bead.value),
+      );
+    }
+    // Backchannel: a green bead springs 10px out of Amoeba's top and back.
+    if (Math.abs(r.bc.value) > 0.01) {
+      const cfg = this.config.markConfigsByRole.human[this.config.humanMarkId];
+      const s = this.lastPose.human ? this.lastPose.human.scale : 1;
+      const topY = py + (o.y - 30 - (cfg?.baseRadius ?? 37) - py) * s;
+      drawBead(
+        px,
+        topY - 10 * r.bc.value * intensity,
+        riff,
+        5,
+        Math.min(0.85, m.backchannel.amount * 2.4) *
+          smoothstep(0, 0.25, Math.abs(r.bc.value)),
+      );
+    }
+    // Landing: the coiled bead travels to the nearest frame over 260ms.
+    if (r.land.on) {
+      const p = Math.min(1, ((t - r.land.at) * dialSpeed(m)) / 260);
+      const k = easeInOutCubic(p);
+      drawBead(
+        r.land.x0 + (r.land.x1 - r.land.x0) * k,
+        r.land.y0 + (r.land.y1 - r.land.y0) * k,
+        riff,
+        9 * intensity * smoothstep(0, 0.15, p) * (1 - smoothstep(0.85, 1, p)),
+        0.9,
+      );
+    }
+  }
+
   // Ink & Wash stain (spec §4.4 "Bleed while fading"): while an outgoing
   // role's alpha sits between 0.05 and 0.9, every 50ms per role, bleed ≤6 of
   // its outline/tip points into the paper at glowBleedAmount × Stain ×
@@ -1402,27 +1486,10 @@ export class VoiceLabEngine implements SequenceHost {
       activeRole === "riff" ? ["human", "riff"] : ["riff", "human"];
     for (const role of order) this.drawRole(role, t, dt, activeRole, preset);
 
-    // Relay's baton-pass bead (spec §4.3) draws after both roles, at the
-    // disc pivot, so it reads on top of whichever mark is mid-gather.
-    if (morphOn && this.morphId === "relay" && this.motion.bead.value > 0.02) {
-      const bx = o.x,
-        by = o.y - 15;
-      const fromColor =
-        this.motion.handoff.from === "riff"
-          ? this.config.riffColor
-          : this.config.humanColor;
-      const toColor =
-        this.motion.handoff.to === "riff"
-          ? this.config.riffColor
-          : this.config.humanColor;
-      setAlphaMul(1);
-      drawBead(
-        { x: bx, y: by },
-        this.motion.handoff.to ? toColor : fromColor,
-        9 * this.motion.bead.value,
-        Math.min(0.9, this.motion.bead.value),
-      );
-    }
+    // Relay's beads (spec §4.3) draw after both roles so they read on top of
+    // whichever mark is mid-gather. Reduced motion draws none.
+    if (morphOn && this.morphId === "relay" && !this.reducedMotionActive())
+      this.drawRelayBeads(o, t);
 
     if (activeRole === null) {
       if (state === "dead-mic") drawFlatline(o, this.config.humanColor);
@@ -1465,7 +1532,6 @@ export class VoiceLabEngine implements SequenceHost {
     );
     this.motion.talk.human.step(sdt, style.talk);
     this.motion.talk.riff.step(sdt, style.talk);
-    this.motion.bead.step(sdt, { response: 120, damping: 0.75 });
     this.clearSpec.response =
       (reduced ? 400 : Math.max(60, style.clearMs)) / 0.755;
     this.motion.jobOut.step(sdt, this.clearSpec);
@@ -1474,21 +1540,41 @@ export class VoiceLabEngine implements SequenceHost {
     // F5: wash activity targets the presence spring's *target* (not its
     // current value), so a retarget mid-tween doesn't also snap the wash —
     // the wash's own attack/release is what makes it lag/lead presence.
+    // Style-owned springs/timelines first, so a Relay hold can steer this
+    // frame's wash targets.
+    this.motion.washHold = -1;
+    style.step?.(this.motion, t, sdt);
+    const washHold = this.motion.washHold;
     this.motion.wash.human.step(
       sdt,
-      this.motion.presence.human.target,
+      washHold >= 0 ? washHold : this.motion.presence.human.target,
       style.wash.attackMs,
       style.wash.releaseMs,
     );
     this.motion.wash.riff.step(
       sdt,
-      this.motion.presence.riff.target,
+      washHold >= 0 ? washHold : this.motion.presence.riff.target,
       style.wash.attackMs,
       style.wash.releaseMs,
     );
     this.motion.energy.human.step(dt, this.lastLevel.human, 80, 200);
     this.motion.energy.riff.step(dt, this.lastLevel.riff, 80, 200);
-    style.step?.(this.motion, t, sdt);
+    // Relay landing bead arrival → the deferred tip-spark burst.
+    const land = this.motion.relay.land;
+    if (
+      this.pendingLandSparks > 0 &&
+      (!land.on || (t - land.at) * speed >= 260)
+    ) {
+      spawnTipSparks(
+        this.getOrigin(),
+        [{ x: land.x1, y: land.y1, angle: -Math.PI / 2 }],
+        this.pendingLandSparks,
+        this.dustPuffs,
+        t,
+      );
+      this.pendingLandSparks = 0;
+      land.on = false;
+    }
     // F6: finish the deferred clear teardown once the fade has settled.
     if (
       this.config.jobState === "none" &&
