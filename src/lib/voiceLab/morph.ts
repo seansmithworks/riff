@@ -27,7 +27,9 @@ export class Spring {
   step(dtMs: number, s: SpringSpec) {
     const steps = Math.max(1, Math.ceil(dtMs / 4));
     const h = dtMs / steps / 1000; // seconds per substep
-    const wn = (2 * Math.PI) / Math.max(1, s.response / 1000); // rad/s
+    // response is the undamped period in ms; guard it against 0 before the
+    // ms → s conversion (guarding after clamped every period to ≥1s).
+    const wn = (2 * Math.PI) / (Math.max(1, s.response) / 1000); // rad/s
     const zeta = s.damping;
     for (let i = 0; i < steps; i++) {
       const accel =
