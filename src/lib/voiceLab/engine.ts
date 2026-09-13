@@ -34,9 +34,12 @@ import {
   defaultMarkConfigs,
   setMarksContext,
   setAlphaMul,
+  setLineMul,
   drawMicDisc,
+  drawBead,
   drawFlatline,
   drawIdleSquiggle,
+  drawShapeshiftBody,
   strokeChain,
 } from "./marks";
 import {
@@ -87,6 +90,16 @@ import {
   SEQUENCE_PRESETS,
   REDUCED_MOTION_PRESET,
 } from "./sequences";
+import {
+  MORPH_IDS,
+  MORPH_LABELS,
+  MORPH_STYLES,
+  REDUCED_MOTION_PRESENCE,
+  createMotionState,
+  setMorphReducedMotion,
+  type MorphId,
+  type MotionState,
+} from "./morph";
 
 function hexToRgbTuple(hex: string): [number, number, number] {
   const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex.trim());
@@ -160,6 +173,20 @@ export function defaultEngineConfig(): EngineConfig {
     discStretchAmount: 0.35,
     discSquishBounce: 0.35,
     discWobble: 0.15,
+    morph: {
+      speed: 1,
+      intensity: 1,
+      breath: { scale: 0.88 },
+      shapeshift: { sproutDelay: 0.15, backchannelSprout: 0.18 },
+      relay: {
+        gatherMs: 140,
+        holdMs: 60,
+        releasePunch: 0.6,
+        landingBead: true,
+      },
+      inkwash: { stagger: 0.6, stain: 0.6, wetBloom: 0.15, nib: true },
+      elastic: { squash: 0.18, wobble: 0.45 },
+    },
   };
 }
 
@@ -186,6 +213,9 @@ export type EngineStatus = {
   // Effective colorMix (Sean's dial x preset hueBias) — Stage's buildGlow
   // needs this in its dep list so a preset switch retunes the glow shape.
   effectiveColorMix: number;
+  // Morph lab (spec §5): current style, for the caption and MorphPanel sync.
+  morphId: MorphId;
+  morphLabel: string;
 };
 
 const ZERO_TWEEN: Tween = {
@@ -298,6 +328,14 @@ export class VoiceLabEngine implements SequenceHost {
     return this.frameT || performance.now();
   }
 
+  // ---- Morph lab (docs/voice-lab-morph-spec.md) ----
+  // Default on fresh install is Ink & Wash (spec §5) — persisted overrides
+  // (DialKit's "voiceLab.morph" key) restore Sean's last pick, same pattern
+  // as every other lab control.
+  private morphId: MorphId = "inkwash";
+  private motion: MotionState = createMotionState();
+  private lastVoiceStateForMorph: VoiceState = "idle";
+
   constructor(canvas: HTMLCanvasElement, config?: EngineConfig) {
     this.canvas = canvas;
     this.config = config ?? defaultEngineConfig();
@@ -381,6 +419,8 @@ export class VoiceLabEngine implements SequenceHost {
       sequencePlaying: this.player.playing,
       slowMo: this.timeScale !== 1,
       effectiveColorMix: this.effectiveColorMix(),
+      morphId: this.morphId,
+      morphLabel: MORPH_LABELS[this.morphId],
     };
     for (const cb of this.statusListeners) cb(status);
   }
@@ -491,6 +531,45 @@ export class VoiceLabEngine implements SequenceHost {
     return this.timeScale !== 1;
   }
 
+  // ---- Morph lab surface (spec §5) ----
+  getMorph(): MorphId {
+    return this.morphId;
+  }
+
+  // Switching style never restarts the loop (spec §5 "Live switching"), so
+  // Sean can A/B mid-loop: presence springs seed from whatever the previous
+  // path's current value was, velocity 0, rather than snapping to 0/1.
+  setMorph(id: MorphId) {
+    if (!MORPH_IDS.includes(id) || id === this.morphId) return;
+    const wasOff = this.morphId === "off";
+    this.morphId = id;
+    if (id !== "off") {
+      const t = this.now();
+      const seedFrom = wasOff
+        ? { human: this.presence.human, riff: this.presence.riff }
+        : {
+            human: this.motion.presence.human.value,
+            riff: this.motion.presence.riff.value,
+          };
+      this.motion.presence.human.set(seedFrom.human);
+      this.motion.presence.riff.set(seedFrom.riff);
+      this.motion.talk.human.set(
+        this.config.voiceState === "you-talking" ? 1 : 0,
+      );
+      this.motion.talk.riff.set(
+        this.config.voiceState === "riff-talking" ? 1 : 0,
+      );
+      this.retargetMotionForState(this.config.voiceState, t);
+    }
+    this.emitStatus();
+  }
+
+  cycleMorph(dir: 1 | -1) {
+    const idx = MORPH_IDS.indexOf(this.morphId);
+    const next = MORPH_IDS[(idx + dir + MORPH_IDS.length) % MORPH_IDS.length];
+    this.setMorph(next);
+  }
+
   // Full reset for a fresh preset run: job cleared, presences at 0, cinders
   // cleared (spec §5 "reset, play from 0").
   private resetSequenceState() {
@@ -553,6 +632,20 @@ export class VoiceLabEngine implements SequenceHost {
       const floor = this.silenceRiffFloor();
       this.retargetPresence("riff", floor, preset.handoff.riffOut, this.now());
     }, ms);
+
+    if (this.morphId !== "off") {
+      const style = MORPH_STYLES[this.morphId as Exclude<MorphId, "off">];
+      this.motion.presenceSpec.riff = style.riffIn;
+      this.motion.presence.riff.target = Math.max(
+        presence,
+        this.motion.presence.riff.value,
+      );
+      style.onBackchannel?.(this.motion, presence, ms, t);
+      setTimeout(() => {
+        this.motion.presenceSpec.riff = style.riffOut;
+        this.motion.presence.riff.target = this.silenceRiffFloor();
+      }, ms);
+    }
   }
 
   private silenceRiffFloor(): number {
@@ -571,7 +664,60 @@ export class VoiceLabEngine implements SequenceHost {
     if (next === "you-talking") this.nextSyntheticOnsetAt = 0;
     if (next === "riff-talking") this.nextRiffOnsetAt = 0;
     this.retargetPresenceForState(next);
+    if (this.morphId !== "off") this.retargetMotionForState(next, this.now());
     this.emitStatus();
+  }
+
+  // Morph-layer counterpart to retargetPresenceForState: same target rules
+  // (who's entering, who holds the floor in silence), but retargets the
+  // motion layer's springs — using the active style's own spring specs — and
+  // fires the style's onHandoff hook exactly when the active role actually
+  // changes (not on every beat, e.g. anticipation/backchannel beats never
+  // land here).
+  private retargetMotionForState(next: VoiceState, t: number) {
+    const style = MORPH_STYLES[this.morphId as Exclude<MorphId, "off">];
+    const preset = this.effectivePreset();
+    const prevState = this.lastVoiceStateForMorph;
+    this.lastVoiceStateForMorph = next;
+
+    let humanTarget = 0;
+    let riffTarget = 0;
+    const enteringRole: Role | null =
+      next === "you-talking"
+        ? "human"
+        : next === "riff-talking"
+          ? "riff"
+          : null;
+    if (next === "you-talking") humanTarget = 1;
+    else if (next === "riff-talking") riffTarget = 1;
+    else if (next === "silence") {
+      if (preset.silenceHolder === "human") humanTarget = 1;
+      if (preset.silenceHolder === "riff") riffTarget = 0.25;
+    }
+
+    this.motion.presenceSpec.human =
+      humanTarget > this.motion.presence.human.value
+        ? style.humanIn
+        : style.humanOut;
+    this.motion.presenceSpec.riff =
+      riffTarget > this.motion.presence.riff.value
+        ? style.riffIn
+        : style.riffOut;
+    this.motion.presence.human.target = humanTarget;
+    this.motion.presence.riff.target = riffTarget;
+    this.motion.talk.human.target = next === "you-talking" ? 1 : 0;
+    this.motion.talk.riff.target = next === "riff-talking" ? 1 : 0;
+
+    const fromRole: Role | null =
+      prevState === "you-talking"
+        ? "human"
+        : prevState === "riff-talking"
+          ? "riff"
+          : null;
+    if (fromRole !== enteringRole) {
+      this.motion.handoff = { from: fromRole, to: enteringRole, at: t };
+      style.onHandoff?.(this.motion, fromRole, enteringRole, t);
+    }
   }
 
   private retargetPresence(
@@ -651,7 +797,15 @@ export class VoiceLabEngine implements SequenceHost {
     this.config.jobState = next;
     if (next === "sketching") {
       resetFrames(this.frames);
-      this.cinders = [];
+      // F6 (morph spec §2): a Morph style fades old cinders out over
+      // cinderDieMs instead of wiping the array in one frame.
+      if (this.morphId !== "off") {
+        const now = this.now();
+        for (const c of this.cinders) if (!c.dieAt) c.dieAt = now;
+        this.motion.jobOut.set(1);
+      } else {
+        this.cinders = [];
+      }
       this.dustPuffs = [];
       this.buildPlan = null;
       this.sketchStartTime = this.now();
@@ -674,8 +828,18 @@ export class VoiceLabEngine implements SequenceHost {
     }
     if (next === "landing") this.beginLanding();
     if (next === "none") {
-      resetFrames(this.frames);
-      this.buildPlan = null;
+      // F6 clear: a Morph style keeps the plan alive and drives jobOut to 0
+      // over clearMs instead of vanishing in one frame — stepMotion() runs
+      // resetFrames/nulls the plan once the spring settles below 0.01. Old
+      // cinders get the same dieAt treatment as job start, above.
+      if (this.morphId !== "off") {
+        const now = this.now();
+        for (const c of this.cinders) if (!c.dieAt) c.dieAt = now;
+        this.motion.jobOut.target = 0;
+      } else {
+        resetFrames(this.frames);
+        this.buildPlan = null;
+      }
     }
     this.emitStatus();
   }
@@ -705,6 +869,13 @@ export class VoiceLabEngine implements SequenceHost {
     // cards at t=0 forever (landStartedAt stuck at 0), i.e. full alpha, no
     // fade.
     for (const f of this.frames) f.landStartedAt = now;
+    if (this.morphId !== "off") {
+      this.motion.jobOut.set(1);
+      MORPH_STYLES[this.morphId as Exclude<MorphId, "off">].onLanding?.(
+        this.motion,
+        now,
+      );
+    }
     // Recruit drift cinders (bearing-sorted from the origin) as the pooled
     // spark particles' launch points (build-plan.md §2/§3) — this happens
     // before ensuring the drift floor below so a fast landing (few cinders
@@ -995,8 +1166,28 @@ export class VoiceLabEngine implements SequenceHost {
     activeRole: Role | null,
     preset: SequencePreset,
   ) {
-    const presence = this.presence[role];
-    if (presence <= 0.01) return;
+    const morphOn = this.morphId !== "off";
+    const style = morphOn
+      ? MORPH_STYLES[this.morphId as Exclude<MorphId, "off">]
+      : null;
+    // Shapeshift only reads as a continuous morph for the Amoeba/Burst
+    // pairing (spec §4.2) — Burst is then drawn by the shared radial-morph
+    // pass in drawVoiceLayer instead of here, and every other pairing (and
+    // every other style) falls back to this generic pose path.
+    const isShapeshiftPair =
+      style?.id === "shapeshift" &&
+      this.config.humanMarkId === "amoeba" &&
+      this.config.riffMarkId === "burst";
+    if (isShapeshiftPair && role === "riff") return;
+
+    const pose = style ? style.pose(role, this.motion, t) : null;
+    const presence = morphOn
+      ? this.motion.presence[role].value
+      : this.presence[role];
+    const cullAlpha = pose ? pose.alpha : presence;
+    if (cullAlpha <= 0.01) return;
+    if (morphOn) this.presence[role] = presence;
+
     const o = this.getOrigin();
     const active = role === activeRole;
     const markId =
@@ -1004,6 +1195,7 @@ export class VoiceLabEngine implements SequenceHost {
     const color =
       role === "human" ? this.config.humanColor : this.config.riffColor;
     const mark = MARK_BY_ID[markId];
+    const talk = morphOn ? this.motion.talk[role].value : undefined;
     let bands: number[];
     let level: number;
     let onsetPulse: number;
@@ -1016,14 +1208,14 @@ export class VoiceLabEngine implements SequenceHost {
       bands = BAR_ORDER.map((i) => this.smoothedUser[i]);
       level = bands.reduce((a, b) => a + b, 0) / bands.length;
       if (active) this.maybeDetectOnset(t, level);
-      onsetPulse = this.onsetPulse;
+      onsetPulse = morphOn ? this.motion.onset.human.value : this.onsetPulse;
     } else {
       const data = this.riffLevelData(t, active);
       this.smoothedAgent = computeBands(data, this.smoothedAgent);
       bands = BAR_ORDER.map((i) => this.smoothedAgent[i]);
       level = bands.reduce((a, b) => a + b, 0) / bands.length;
       if (active) this.maybeDetectRiffOnset(t);
-      onsetPulse = this.riffOnsetPulse;
+      onsetPulse = morphOn ? this.motion.onset.riff.value : this.riffOnsetPulse;
     }
     this.lastLevel[role] = level;
     const smear = this.smearFramesLeft[role] > 0 ? 1.6 : 1;
@@ -1039,12 +1231,59 @@ export class VoiceLabEngine implements SequenceHost {
         role === "human"
           ? this.config.markConfigsByRole.human[markId]
           : this.config.markConfigsByRole.riff[markId],
-      mode: active ? "talking" : "silence",
+      mode: (morphOn ? talk! >= 0.5 : active) ? "talking" : "silence",
       presence,
       smear,
+      talk,
+      reveal: pose?.reveal,
+      radial: pose?.radial,
     };
-    setAlphaMul(preset.markPeak * presence);
-    mark.draw(g);
+    if (isShapeshiftPair && role === "human") {
+      // The shared radial-morph body (spec §4.2, simplified per morph.ts's
+      // comment on drawShapeshiftBody) replaces both roles' ordinary
+      // mark.draw() calls — built here so it has both roles' live band data
+      // in the same frame.
+      const riffData = this.riffLevelData(t, activeRole === "riff");
+      this.smoothedAgent = computeBands(riffData, this.smoothedAgent);
+      const riffBands = BAR_ORDER.map((i) => this.smoothedAgent[i]);
+      const riffLevel = riffBands.reduce((a, b) => a + b, 0) / riffBands.length;
+      this.lastLevel.riff = riffLevel;
+      if (activeRole === "riff") this.maybeDetectRiffOnset(t);
+      const gRiff: MarkDrawArgs = {
+        o,
+        t: this.markT,
+        level: riffLevel,
+        bands: riffBands,
+        onsetPulse: this.motion.onset.riff.value,
+        boilFrame: this.boilFrame,
+        color: this.config.riffColor,
+        cfg: this.config.markConfigsByRole.riff[this.config.riffMarkId],
+        mode: this.motion.talk.riff.value >= 0.5 ? "talking" : "silence",
+        presence: this.motion.presence.riff.value,
+        smear: this.smearFramesLeft.riff > 0 ? 1.6 : 1,
+        talk: this.motion.talk.riff.value,
+      };
+      setAlphaMul(1);
+      drawShapeshiftBody(g, gRiff, this.motion.morph.value);
+    } else if (pose) {
+      setAlphaMul(preset.markPeak * pose.alpha);
+      setLineMul(pose.lineMul);
+      const pivot = pose.pivot
+        ? { x: o.x + pose.pivot.x, y: o.y + pose.pivot.y }
+        : markId === "amoeba"
+          ? { x: o.x, y: o.y - 30 }
+          : o;
+      this.ctx.save();
+      this.ctx.translate(pivot.x, pivot.y);
+      this.ctx.scale(pose.scale * pose.sx, pose.scale * pose.sy);
+      this.ctx.translate(-pivot.x, -pivot.y);
+      mark.draw(g);
+      this.ctx.restore();
+      setLineMul(1);
+    } else {
+      setAlphaMul(preset.markPeak * presence);
+      mark.draw(g);
+    }
     setAlphaMul(1);
     if (this.smearFramesLeft[role] > 0) this.smearFramesLeft[role]--;
     if (role === "human" && active && this.config.onsetRingsOn)
@@ -1060,9 +1299,15 @@ export class VoiceLabEngine implements SequenceHost {
   private drawVoiceLayer(t: number, dt: number, preset: SequencePreset) {
     const o = this.getOrigin();
     const state = this.config.voiceState;
+    const morphOn = this.morphId !== "off";
 
-    this.presence.human = this.evalPresence("human", t);
-    this.presence.riff = this.evalPresence("riff", t);
+    // Off keeps the original tween-eval path; drawRole assigns
+    // this.presence[role] from the motion springs directly when Morph is on
+    // (F1 "Off: the motion layer is not consulted").
+    if (!morphOn) {
+      this.presence.human = this.evalPresence("human", t);
+      this.presence.riff = this.evalPresence("riff", t);
+    }
 
     const squash = this.computeDiscSquash(t, dt, preset);
     if (this.config.centerCircleOn) drawMicDisc(o, INK, squash.sx, squash.sy);
@@ -1072,8 +1317,10 @@ export class VoiceLabEngine implements SequenceHost {
       this.lastBoilAt = this.markT;
     }
 
-    this.onsetPulse *= Math.pow(0.86, dt / 16.7);
-    this.riffOnsetPulse *= Math.pow(0.86, dt / 16.7);
+    if (!morphOn) {
+      this.onsetPulse *= Math.pow(0.86, dt / 16.7);
+      this.riffOnsetPulse *= Math.pow(0.86, dt / 16.7);
+    }
 
     this.lastMarkContext = null;
     const activeRole: Role | null =
@@ -1089,10 +1336,112 @@ export class VoiceLabEngine implements SequenceHost {
       activeRole === "riff" ? ["human", "riff"] : ["riff", "human"];
     for (const role of order) this.drawRole(role, t, dt, activeRole, preset);
 
+    // Relay's baton-pass bead (spec §4.3) draws after both roles, at the
+    // disc pivot, so it reads on top of whichever mark is mid-gather.
+    if (morphOn && this.morphId === "relay" && this.motion.bead.value > 0.02) {
+      const bx = o.x,
+        by = o.y - 15;
+      const fromColor =
+        this.motion.handoff.from === "riff"
+          ? this.config.riffColor
+          : this.config.humanColor;
+      const toColor =
+        this.motion.handoff.to === "riff"
+          ? this.config.riffColor
+          : this.config.humanColor;
+      setAlphaMul(1);
+      drawBead(
+        { x: bx, y: by },
+        this.motion.handoff.to ? toColor : fromColor,
+        9 * this.motion.bead.value,
+        Math.min(0.9, this.motion.bead.value),
+      );
+    }
+
     if (activeRole === null) {
       if (state === "dead-mic") drawFlatline(o, this.config.humanColor);
-      else if (state === "idle" && this.presence.human < 0.02)
-        drawIdleSquiggle(o, t, this.config.humanColor, 0);
+      else if (state === "idle") {
+        if (morphOn) {
+          // F7: the squiggle fades with presence instead of cutting at a
+          // hard 0.02 threshold.
+          const alpha = Math.max(0, 1 - this.presence.human * 3.3);
+          if (alpha > 0.01) {
+            setAlphaMul(alpha);
+            drawIdleSquiggle(o, t, this.config.humanColor, 0);
+            setAlphaMul(1);
+          }
+        } else if (this.presence.human < 0.02) {
+          drawIdleSquiggle(o, t, this.config.humanColor, 0);
+        }
+      }
+    }
+  }
+
+  // Steps every spring/envelope/pulse on the motion layer once per frame
+  // (spec §2 F1 "Integration") — only when a Morph style is active; Off
+  // never touches `this.motion` at all.
+  private stepMotion(t: number, dt: number) {
+    const style = MORPH_STYLES[this.morphId as Exclude<MorphId, "off">];
+    const reduced = this.reducedMotionActive();
+    setMorphReducedMotion(reduced);
+    const presenceSpec = reduced ? REDUCED_MOTION_PRESENCE : undefined;
+    this.motion.presence.human.step(
+      dt,
+      presenceSpec ?? this.motion.presenceSpec.human,
+    );
+    this.motion.presence.riff.step(
+      dt,
+      presenceSpec ?? this.motion.presenceSpec.riff,
+    );
+    this.motion.talk.human.step(dt, style.talk);
+    this.motion.talk.riff.step(dt, style.talk);
+    this.motion.morph.step(
+      dt,
+      this.motion.morph.target > this.motion.morph.value
+        ? { response: 420, damping: 0.9 }
+        : { response: 180, damping: 1 },
+    );
+    this.motion.body.aspect.step(dt, { response: 300, damping: 0.45 });
+    this.motion.body.radial.step(dt, { response: 300, damping: 0.45 });
+    this.motion.body.scale.step(dt, { response: 200, damping: 0.8 });
+    this.motion.bead.step(dt, { response: 120, damping: 0.75 });
+    const clearSpec = reduced
+      ? { response: 400 / 0.755, damping: 1 }
+      : { response: Math.max(60, style.clearMs) / 0.755, damping: 1 };
+    this.motion.jobOut.step(dt, clearSpec);
+    this.motion.onset.human.step(dt, style.onsetAttackMs);
+    this.motion.onset.riff.step(dt, style.onsetAttackMs);
+    // F5: wash activity targets the presence spring's *target* (not its
+    // current value), so a retarget mid-tween doesn't also snap the wash —
+    // the wash's own attack/release is what makes it lag/lead presence.
+    this.motion.wash.human.step(
+      dt,
+      this.motion.presence.human.target,
+      style.wash.attackMs,
+      style.wash.releaseMs,
+    );
+    this.motion.wash.riff.step(
+      dt,
+      this.motion.presence.riff.target,
+      style.wash.attackMs,
+      style.wash.releaseMs,
+    );
+    this.motion.energy.human.step(dt, this.lastLevel.human, 80, 200);
+    this.motion.energy.riff.step(dt, this.lastLevel.riff, 80, 200);
+    // F6: finish the deferred clear teardown once the fade has settled.
+    if (
+      this.config.jobState === "none" &&
+      this.motion.jobOut.value < 0.01 &&
+      this.buildPlan
+    ) {
+      resetFrames(this.frames);
+      this.buildPlan = null;
+    }
+    // Prune cinders whose dieAt fade (F6) has fully finished.
+    if (this.cinders.some((c) => c.dieAt)) {
+      this.cinders = this.cinders.filter(
+        (c) => !(c.dieAt && t - c.dieAt > style.cinderDieMs),
+      );
     }
   }
 
@@ -1299,28 +1648,35 @@ export class VoiceLabEngine implements SequenceHost {
       // footprint instead of roaming the whole card.
       const o = this.getOrigin();
       const t0 = performance.now();
-      renderFluidGlow(
-        fctx,
-        t,
-        this.presence.human * (0.4 + 0.6 * this.lastLevel.human),
-        this.presence.riff * (0.4 + 0.6 * this.lastLevel.riff),
-        {
-          humanColor: this.config.glowHumanColor,
-          riffColor: this.config.glowRiffColor,
-          mixSoftness: this.config.glowMixSoftness,
-          flowSpeed: this.config.glowFlowSpeed,
-          blobScale: this.config.glowBlobScale,
-          blobCount: this.config.glowBlobCount,
-          hueBias: this.roleColorDominance(),
-          opacity,
-          originX: o.x / W,
-          originY: this.config.glowHeight / 100,
-          glowSize: this.config.glowSize,
-          edgeAmount: this.config.glowEdgeAmount,
-          grainAmount: this.config.glowGrainAmount,
-          layers: this.config.glowLayers,
-        },
-      );
+      // F5 (morph spec §2): wash activity decoupled from the fast presence
+      // spring when a Morph style is active — it follows the style's own
+      // wash envelope (attack/release) instead, so the cloud retints on the
+      // handoff's own cadence instead of snapping with presence.
+      const morphOn = this.morphId !== "off";
+      const humanActivity = morphOn
+        ? this.motion.wash.human.value *
+          (0.4 + 0.6 * this.motion.energy.human.value)
+        : this.presence.human * (0.4 + 0.6 * this.lastLevel.human);
+      const riffActivity = morphOn
+        ? this.motion.wash.riff.value *
+          (0.4 + 0.6 * this.motion.energy.riff.value)
+        : this.presence.riff * (0.4 + 0.6 * this.lastLevel.riff);
+      renderFluidGlow(fctx, t, humanActivity, riffActivity, {
+        humanColor: this.config.glowHumanColor,
+        riffColor: this.config.glowRiffColor,
+        mixSoftness: this.config.glowMixSoftness,
+        flowSpeed: this.config.glowFlowSpeed,
+        blobScale: this.config.glowBlobScale,
+        blobCount: this.config.glowBlobCount,
+        hueBias: this.roleColorDominance(),
+        opacity,
+        originX: o.x / W,
+        originY: this.config.glowHeight / 100,
+        glowSize: this.config.glowSize,
+        edgeAmount: this.config.glowEdgeAmount,
+        grainAmount: this.config.glowGrainAmount,
+        layers: this.config.glowLayers,
+      });
       if (this.fieldMsLog) this.fieldMsLog(performance.now() - t0);
       if (showDots && this.config.paperOn) this.tintDotsFromField(opacity);
     }
@@ -1382,6 +1738,7 @@ export class VoiceLabEngine implements SequenceHost {
     const preset = this.effectivePreset();
     this.updateMarkClock(t, dt, preset);
     this.player.tick(t, this.timeScale);
+    if (this.morphId !== "off") this.stepMotion(t, dt);
 
     // Job channel — cinders + landing frames render independent of voice.
     if (this.buildPlan) {
@@ -1420,6 +1777,7 @@ export class VoiceLabEngine implements SequenceHost {
           snapToGrid: this.config.buildConfig.snapToGrid,
           dotPop: this.config.buildConfig.dotPop,
         },
+        this.morphId !== "off" ? this.motion.jobOut.value : 1,
       );
     if (this.cindersEnabled()) {
       if (this.config.jobState === "sketching")
@@ -1442,6 +1800,9 @@ export class VoiceLabEngine implements SequenceHost {
         this.getOrigin(),
         t,
         this.jobDuckEnvelope(preset),
+        this.morphId !== "off"
+          ? MORPH_STYLES[this.morphId as Exclude<MorphId, "off">].cinderDieMs
+          : 0,
       );
       // Frames → drift cinders → build particles → voice (build-plan.md §3
       // draw-order note), so the sparks read on top of the ambient drift.

@@ -337,6 +337,10 @@ export type Cinder = {
   targetAngle: number;
   landStart: number;
   flightMs?: number;
+  // F6 (morph spec §2): set instead of wiping the array on job start/clear
+  // when a Morph style is active, so old cinders fade over cinderDieMs
+  // rather than vanishing in one frame.
+  dieAt?: number;
 };
 
 export type DustPuff = {
@@ -562,9 +566,10 @@ function strokeShape(
   ctx: CanvasRenderingContext2D,
   path2d: Path2D,
   width: number,
+  alphaMul = 1,
 ) {
   ctx.save();
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = alphaMul;
   ctx.strokeStyle = INK;
   ctx.lineWidth = width;
   ctx.lineCap = "round";
@@ -681,7 +686,11 @@ export function drawFrames(
   plan: BuildPlan | null,
   speculative: SpeculativeOpts,
   buildOpts: BuildRenderOpts,
+  // F6 (morph spec §2): a Morph style's clear drives this down over
+  // clearMs instead of nulling the plan in one frame — 1 = today's behavior.
+  alphaMul = 1,
 ) {
+  if (alphaMul <= 0.01) return;
   for (const f of frames) {
     if (!plan) {
       drawSpeculativeFrame(ctx, f, speculative);
@@ -689,9 +698,9 @@ export function drawFrames(
     }
     const framePaths = plan.pathsByFrame.get(f.id) ?? [];
     ctx.save();
-    ctx.globalAlpha = f.landed
-      ? 1
-      : Math.min(1, (t - f.landStartedAt) / cfg.landDurationMs);
+    ctx.globalAlpha =
+      (f.landed ? 1 : Math.min(1, (t - f.landStartedAt) / cfg.landDurationMs)) *
+      alphaMul;
     ctx.shadowColor = "rgba(0,0,0,0.12)";
     ctx.shadowBlur = 16;
     ctx.shadowOffsetY = 4;
@@ -701,9 +710,14 @@ export function drawFrames(
     ctx.restore();
 
     if (f.landed) {
-      strokeShape(ctx, f.paths.outline.path2d, f.paths.outline.strokeWidth);
+      strokeShape(
+        ctx,
+        f.paths.outline.path2d,
+        f.paths.outline.strokeWidth,
+        alphaMul,
+      );
       for (const el of f.paths.elements)
-        strokeShape(ctx, el.path2d, el.strokeWidth);
+        strokeShape(ctx, el.path2d, el.strokeWidth, alphaMul);
       continue;
     }
 
@@ -794,6 +808,7 @@ export function drawCinders(
   origin: { x: number; y: number },
   t: number,
   duckAlpha = 1,
+  cinderDieMs = 0,
 ) {
   ctx.save();
   ctx.strokeStyle = INK;
@@ -805,9 +820,16 @@ export function drawCinders(
       // not just more of them dying at the same pace.
       const distFromOrigin = Math.hypot(c.x - origin.x, c.y - origin.y);
       const fade = Math.max(0.15, 1 - distFromOrigin / 1200);
+      // F6: a Morph style's job start/clear sets dieAt instead of wiping the
+      // array, so old cinders ease out over cinderDieMs.
+      const dieFade =
+        c.dieAt && cinderDieMs > 0
+          ? Math.max(0, 1 - (t - c.dieAt) / cinderDieMs)
+          : 1;
+      if (dieFade <= 0) continue;
       const angle = Math.atan2(c.vy, c.vx);
       const hl = c.len / 2;
-      ctx.globalAlpha = fade * 0.8 * duckAlpha;
+      ctx.globalAlpha = fade * 0.8 * duckAlpha * dieFade;
       ctx.lineWidth = 1.25;
       ctx.beginPath();
       ctx.moveTo(c.x - Math.cos(angle) * hl, c.y - Math.sin(angle) * hl);

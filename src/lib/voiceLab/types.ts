@@ -57,6 +57,14 @@ export type MarkDrawArgs = {
   // Motion-smear multiplier applied to reach/length during a handoff's
   // smearFrames window (1 = no smear, 1.6 = the spec's incoming reach ×1.6).
   smear?: number;
+  // Morph layer additions (docs/voice-lab-morph-spec.md §2 F2/F4): continuous
+  // 0..1 talk-mode blend (undefined when Morph is Off, so marks fall back to
+  // the discrete `mode` string), a 0..1 draw-on fraction for Ink & Wash, and
+  // a ray-length multiplier for Elastic/Shapeshift. Both default to "no
+  // effect" when absent/1 so every mark's Off behavior is unchanged.
+  talk?: number;
+  reveal?: number;
+  radial?: number;
 };
 
 // Sparks-build-the-sketch dials (build-plan.md §4, dotgrid addendum §3).
@@ -173,4 +181,27 @@ export type EngineConfig = {
   discStretchAmount: number;
   discSquishBounce: number;
   discWobble: number;
+  // Morph lab dials (docs/voice-lab-morph-spec.md §5) — style selection lives
+  // on the engine (setMorph/getMorph), not here, since it drives its own
+  // spring retargeting on change; this only holds the per-style tuner values
+  // the MorphPanel exposes.
+  morph: {
+    speed: number;
+    intensity: number;
+    breath: { scale: number };
+    shapeshift: { sproutDelay: number; backchannelSprout: number };
+    relay: {
+      gatherMs: number;
+      holdMs: number;
+      releasePunch: number;
+      landingBead: boolean;
+    };
+    inkwash: {
+      stagger: number;
+      stain: number;
+      wetBloom: number;
+      nib: boolean;
+    };
+    elastic: { squash: number; wobble: number };
+  };
 };

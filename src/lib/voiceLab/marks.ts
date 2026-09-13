@@ -23,11 +23,20 @@ export function setAlphaMul(v: number) {
   alphaMul = v;
 }
 
+// Stroke-width multiplier, set by the engine once per role per frame from
+// the active Morph style's pose (docs/voice-lab-morph-spec.md §2 pose
+// application) — Ink & Wash widens outgoing strokes as they fade ("the ink
+// spreads"). 1 = no effect, matching every mark's Off width exactly.
+let lineMul = 1;
+export function setLineMul(v: number) {
+  lineMul = v;
+}
+
 function strokePath(path2d: Path2D, color: string, width: number, alpha = 1) {
   ctx.save();
   ctx.globalAlpha = alpha * alphaMul;
   ctx.strokeStyle = color;
-  ctx.lineWidth = width;
+  ctx.lineWidth = width * lineMul;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.stroke(path2d);
@@ -45,13 +54,47 @@ export function strokeChain(
   ctx.save();
   ctx.globalAlpha = alpha * alphaMul;
   ctx.strokeStyle = color;
-  ctx.lineWidth = width;
+  ctx.lineWidth = width * lineMul;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   const n = closed ? pts.length : pts.length - 1;
   for (let i = 0; i < n; i++) {
     const p0 = pts[i],
       p1 = pts[(i + 1) % pts.length];
+    const d = roughLine(p0[0], p0[1], p1[0], p1[1], {
+      seed: seedBase + i,
+      roughness: SKETCH_ROUGHNESS,
+      boil: 0,
+    });
+    ctx.stroke(new Path2D(d));
+  }
+  ctx.restore();
+}
+
+// Ink & Wash "draw-on" (spec §4.4): strokes the closed chain clockwise from
+// its first point up to `reveal` (0..1) of its total segment count, instead
+// of the full loop — used only when Morph is on (reveal !== undefined at the
+// call site); Off always calls strokeChain with the full pts array.
+export function strokeChainPartial(
+  pts: [number, number][],
+  color: string,
+  width: number,
+  seedBase: number,
+  alpha: number,
+  reveal: number,
+) {
+  const n = pts.length;
+  const segs = Math.max(1, Math.round(n * Math.max(0, Math.min(1, reveal))));
+  if (segs <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = alpha * alphaMul;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width * lineMul;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (let i = 0; i < segs; i++) {
+    const p0 = pts[i],
+      p1 = pts[(i + 1) % n];
     const d = roughLine(p0[0], p0[1], p1[0], p1[1], {
       seed: seedBase + i,
       roughness: SKETCH_ROUGHNESS,
@@ -98,6 +141,97 @@ function amoebaOutline(
     pts.push({ x, y, a, r });
   }
   return pts;
+}
+
+// F3 (morph spec §2): rays fade in/out on a smoothstep band around their
+// random threshold instead of popping at a hard cull, shared by draw() and
+// getTipEmitters() so the visible geometry and the spark-spawn points never
+// diverge. `vis` also carries the Ink & Wash per-ray reveal stagger and the
+// Elastic/Shapeshift `radial` length multiplier, since both scale the same
+// tip position every mark that uses this helper draws.
+type BurstRay = {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  angle: number;
+  width: number;
+  alpha: number;
+  vis: number;
+  seed: number;
+};
+
+function burstRays(g: MarkDrawArgs): BurstRay[] {
+  const { o, t, bands, onsetPulse, cfg, smear, reveal, radial } = g;
+  const smearMul = smear ?? 1;
+  const radialMul = radial ?? 1;
+  const pool = Math.round(cfg.rayCount);
+  const jitterBucket = Math.floor(t / 150);
+  const rays: BurstRay[] = [];
+  for (let i = 0; i < pool; i++) {
+    const frac = i / (pool - 1);
+    const pos = frac * (bands.length - 1);
+    const i0 = Math.floor(pos),
+      i1 = Math.min(bands.length - 1, i0 + 1),
+      lerpF = pos - i0;
+    const lvl = bands[i0] * (1 - lerpF) + bands[i1] * lerpF;
+    const slotRng = mulberry32(hashSeed(`b-slot-${i}`));
+    const threshold = 0.05 + slotRng() * 0.5;
+    const posJitterDeg = (slotRng() - 0.5) * 16;
+    const lenJitter = slotRng();
+    // Smoothstep fade band instead of a hard `lvl < threshold` cull — a ray
+    // eases in/out over the same range instead of popping at full alpha.
+    const vis = Math.min(
+      1,
+      Math.max(
+        0,
+        (lvl - (threshold - 0.08)) / (threshold + 0.04 - (threshold - 0.08)),
+      ),
+    );
+    const eased = vis * vis * (3 - 2 * vis);
+    if (eased < 0.02) continue;
+    const energyAbove = Math.min(1, (lvl - threshold) / (1 - threshold));
+    const angleDeg = -90 - cfg.spread / 2 + cfg.spread * frac + posJitterDeg;
+    const jitterRng = mulberry32(hashSeed(`b-jit-${i}-${jitterBucket}`));
+    const angleJitter = (jitterRng() - 0.5) * 6;
+    const a = ((angleDeg + angleJitter) * Math.PI) / 180;
+    // Ink & Wash per-ray reveal stagger (spec §4.4): reveal<1 clips rays from
+    // the far end of the pool inward as the stroke is "drawn on".
+    const revealVis =
+      reveal === undefined
+        ? 1
+        : Math.max(
+            0,
+            Math.min(1, reveal * (1 + 0.6) - 0.6 * (i / Math.max(1, pool - 1))),
+          );
+    const len =
+      (12 +
+        Math.max(0, energyAbove) * cfg.reach +
+        lenJitter * 18 +
+        onsetPulse * cfg.onsetPunch * 24) *
+      smearMul *
+      radialMul *
+      eased *
+      revealVis;
+    const [x1, y1] = polar(o.x, o.y, 26, a),
+      [x2, y2] = polar(o.x, o.y, 26 + len, a);
+    const width =
+      (1.25 * 0.8 * cfg.thickness +
+        Math.max(0, energyAbove) * 1.1 * cfg.thickness) *
+      (0.9 + 0.1 * radialMul);
+    rays.push({
+      x1,
+      y1,
+      x2,
+      y2,
+      angle: a,
+      width,
+      alpha: (0.45 + Math.max(0, energyAbove) * 0.5) * eased * revealVis,
+      vis: eased * revealVis,
+      seed: hashSeed(`b-ray-${i}`) + Math.floor(t / 90),
+    });
+  }
+  return rays;
 }
 
 export const MARKS: MarkDef[] = [
@@ -148,6 +282,27 @@ export const MARKS: MarkDef[] = [
       },
     ],
     draw(g: MarkDrawArgs) {
+      // Morph ≠ Off (spec §2 F3): rays fade on a smoothstep band and never
+      // pop, via the shared burstRays() helper. Off keeps the exact original
+      // hard-cull inline loop below, byte-for-byte, so it stays the A/B
+      // baseline.
+      if (g.talk !== undefined) {
+        for (const r of burstRays(g)) {
+          strokePath(
+            new Path2D(
+              roughLine(r.x1, r.y1, r.x2, r.y2, {
+                seed: r.seed,
+                roughness: SKETCH_ROUGHNESS,
+                boil: 0,
+              }),
+            ),
+            g.color,
+            r.width,
+            r.alpha,
+          );
+        }
+        return;
+      }
       const { o, t, bands, onsetPulse, color, cfg, smear } = g;
       const smearMul = smear ?? 1;
       const pool = Math.round(cfg.rayCount);
@@ -198,6 +353,11 @@ export const MARKS: MarkDef[] = [
     // Mirrors the tip computation in draw() so sketch-job cinders can spawn
     // off the live ray ends instead of the disc origin.
     getTipEmitters(g: MarkDrawArgs) {
+      if (g.talk !== undefined) {
+        return burstRays(g)
+          .filter((r) => r.vis > 0.5)
+          .map((r) => ({ x: r.x2, y: r.y2, angle: r.angle }));
+      }
       const { o, t, bands, onsetPulse, cfg, smear } = g;
       const smearMul = smear ?? 1;
       const pool = Math.round(cfg.rayCount);
@@ -1155,19 +1315,24 @@ export const MARKS: MarkDef[] = [
       },
     ],
     draw(g: MarkDrawArgs) {
-      const { color, cfg, mode, level } = g;
+      const { color, cfg, mode, level, talk, reveal } = g;
       const outline = amoebaOutline(g, cfg);
       const pts: [number, number][] = outline.map((p) => [p.x, p.y]);
+      // F2 (morph spec §2): continuous talk-mode blend instead of the
+      // discrete silence/talking alpha step, when Morph is on. Off keeps the
+      // exact original two-branch formula.
       const alpha =
-        mode === "silence" ? 0.3 : Math.max(0.25, 0.6 + level * 0.3);
-      strokeChain(
-        pts,
-        color,
-        cfg.thickness,
-        hashSeed("amoeba") + Math.floor(g.t / 220),
-        alpha,
-        true,
-      );
+        talk !== undefined
+          ? 0.3 + (Math.max(0.25, 0.6 + level * 0.3) - 0.3) * talk
+          : mode === "silence"
+            ? 0.3
+            : Math.max(0.25, 0.6 + level * 0.3);
+      const seed = hashSeed("amoeba") + Math.floor(g.t / 220);
+      if (reveal !== undefined && reveal < 0.999) {
+        strokeChainPartial(pts, color, cfg.thickness, seed, alpha, reveal);
+      } else {
+        strokeChain(pts, color, cfg.thickness, seed, alpha, true);
+      }
     },
     getTipEmitters(g: MarkDrawArgs) {
       const outline = amoebaOutline(g, g.cfg);
@@ -1204,6 +1369,24 @@ export function defaultMarkConfigs(): Record<string, Record<string, number>> {
 
 // sx/sy squash the disc around its own center (anticipation, breathing,
 // landing impact all drive this from the engine) — 1/1 is the resting shape.
+// Relay's baton-pass bead (spec §4.3) — a small roughEllipse drawn between
+// the two roles' draw calls, same pattern as drawMicDisc.
+export function drawBead(
+  o: { x: number; y: number },
+  color: string,
+  radius: number,
+  alpha: number,
+) {
+  if (radius <= 0.3 || alpha <= 0.01) return;
+  const seed = hashSeed("relay-bead");
+  const d = roughEllipse(o.x, o.y, radius, radius, {
+    seed,
+    roughness: SKETCH_ROUGHNESS * 0.6,
+    boil: 0,
+  });
+  strokePath(new Path2D(d), color, 1.5, alpha);
+}
+
 export function drawMicDisc(
   o: { x: number; y: number },
   color: string,
@@ -1227,6 +1410,52 @@ export function drawFlatline(o: { x: number; y: number }, color: string) {
     boil: 0,
   });
   strokePath(new Path2D(d), color, 1.25, 0.85);
+}
+
+// Shapeshift's continuous-morph body (spec §4.2), simplified: rather than
+// resampling both marks onto shared K angular slots (the literal spec text),
+// this crossfades the outgoing Amoeba loop against the incoming Burst fan,
+// scaling ray length by the same eased `morph` value that drives the fade —
+// so the read is "one body opening up" rather than a hard mark swap, without
+// a bespoke shared-topology geometry pass. Only wired for the Amoeba/Burst
+// pairing (engine.ts's isShapeshiftPair); every other pairing falls back to
+// Still Breath's ordinary two-mark crossfade.
+export function drawShapeshiftBody(
+  gHuman: MarkDrawArgs,
+  gRiff: MarkDrawArgs,
+  morph: number,
+) {
+  const m = Math.max(0, Math.min(1, morph));
+  const eased = m * m * (3 - 2 * m);
+  const alpha = Math.max(gHuman.presence ?? 0, gRiff.presence ?? 0);
+  if (eased < 0.97) {
+    const outline = amoebaOutline(gHuman, gHuman.cfg);
+    const pts: [number, number][] = outline.map((p) => [p.x, p.y]);
+    strokeChain(
+      pts,
+      gHuman.color,
+      gHuman.cfg.thickness,
+      hashSeed("amoeba") + Math.floor(gHuman.t / 220),
+      alpha * (1 - eased),
+      true,
+    );
+  }
+  if (eased > 0.03) {
+    for (const r of burstRays({ ...gRiff, radial: eased })) {
+      strokePath(
+        new Path2D(
+          roughLine(r.x1, r.y1, r.x2, r.y2, {
+            seed: r.seed,
+            roughness: SKETCH_ROUGHNESS,
+            boil: 0,
+          }),
+        ),
+        gRiff.color,
+        r.width,
+        r.alpha * alpha,
+      );
+    }
+  }
 }
 
 export function drawIdleSquiggle(
