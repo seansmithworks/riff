@@ -254,6 +254,18 @@ const ZERO_TWEEN: Tween = {
   ease: { kind: "bezier", p: [0.25, 0.1, 0.25, 1] },
 };
 
+const ROLES: Role[] = ["human", "riff"];
+
+// Host-mode sleep threshold for springs, envelopes and followers.
+const SETTLE_EPS = 5e-4;
+
+function springAtRest(s: { value: number; velocity: number; target: number }) {
+  return (
+    Math.abs(s.value - s.target) < SETTLE_EPS &&
+    Math.abs(s.velocity) < SETTLE_EPS * 10
+  );
+}
+
 export class VoiceLabEngine implements SequenceHost {
   config: EngineConfig;
   private canvas: HTMLCanvasElement;
@@ -310,6 +322,10 @@ export class VoiceLabEngine implements SequenceHost {
   private mql: MediaQueryList;
   private statusListeners: Set<(s: EngineStatus) => void> = new Set();
   private destroyed = false;
+  // ---- Host-mode lifecycle ----
+  private sleeping = false;
+  private glowTarget = 0;
+  private timers = new Set<ReturnType<typeof setTimeout>>();
   private onMqlChange = () => this.scheduleLoop();
   private onVisibilityChange = () => this.scheduleLoop();
 
@@ -658,6 +674,7 @@ export class VoiceLabEngine implements SequenceHost {
     }
     this.pendingLandSparks = 0;
     this.emitStatus();
+    this.wake();
   }
 
   cycleMorph(dir: 1 | -1) {
@@ -733,6 +750,7 @@ export class VoiceLabEngine implements SequenceHost {
     this.anticipationStart = this.now();
     this.anticipationMs = ms;
     this.anticipationDepth = depth;
+    this.wake();
   }
 
   // Riff "mm-hm": bumps Riff's presence briefly without taking the floor
@@ -762,11 +780,21 @@ export class VoiceLabEngine implements SequenceHost {
         this.motion.presence.riff.value,
       );
       style.onBackchannel?.(this.motion, presence, ms, t);
-      setTimeout(() => {
+      this.later(() => {
         this.motion.presenceSpec.riff = style.riffOut;
         this.motion.presence.riff.target = this.silenceRiffFloor();
       }, ms);
     }
+    this.wake();
+  }
+
+  // setTimeout that destroy() cancels.
+  private later(fn: () => void, ms: number) {
+    const id = setTimeout(() => {
+      this.timers.delete(id);
+      fn();
+    }, ms);
+    this.timers.add(id);
   }
 
   private silenceRiffFloor(): number {
@@ -787,6 +815,7 @@ export class VoiceLabEngine implements SequenceHost {
     this.retargetPresenceForState(next);
     if (this.morphId !== "off") this.retargetMotionForState(next, this.now());
     this.emitStatus();
+    this.wake();
   }
 
   // Morph-layer counterpart to retargetPresenceForState: same target rules
@@ -1230,6 +1259,7 @@ export class VoiceLabEngine implements SequenceHost {
   // React. Null clears it.
   setLevelSource(role: Role, source: LevelSource | null) {
     this.levelSources[role] = source;
+    this.wake();
   }
 
   // ---- Real mic (lab toggle) ----
@@ -2008,6 +2038,7 @@ export class VoiceLabEngine implements SequenceHost {
   attachGlow(els: { cyan: HTMLElement; green: HTMLElement }) {
     this.glowCyanEl = els.cyan;
     this.glowGreenEl = els.green;
+    this.wake();
   }
 
   // Fluid "shader" glow canvas (ask 1) — lives inside the same never-
@@ -2024,6 +2055,7 @@ export class VoiceLabEngine implements SequenceHost {
   attachGlowFluid(canvas: HTMLCanvasElement) {
     this.glowFluidCanvas = canvas;
     this.glowFluidCtx = canvas.getContext("2d");
+    this.wake();
   }
 
   // Loop progress bar, driven the same way as glow: written directly onto a
@@ -2041,6 +2073,7 @@ export class VoiceLabEngine implements SequenceHost {
     const target =
       preset.glow.level[this.config.voiceState] *
       (1 - preset.glow.follow + preset.glow.follow * voiceLevel);
+    this.glowTarget = target;
     const tc =
       target > this.glowFollower
         ? preset.envelope.attackMs
@@ -2203,7 +2236,10 @@ export class VoiceLabEngine implements SequenceHost {
         : 0;
     this.updateGlow(t, dt, preset, voiceLevel);
 
-    if (this.host) return;
+    if (this.host) {
+      if (this.settled(t, preset)) this.sleeping = true;
+      return;
+    }
 
     // Progress bar: written directly, every frame, never through setState.
     // Everything else in EngineStatus only changes on real beats/state
@@ -2306,6 +2342,7 @@ export class VoiceLabEngine implements SequenceHost {
 
   scheduleLoop() {
     if (this.destroyed) return;
+    this.sleeping = false;
     this.emitStatus();
     if (this.rafId) {
       cancelAnimationFrame(this.rafId);
@@ -2321,20 +2358,99 @@ export class VoiceLabEngine implements SequenceHost {
       this.renderFrame(performance.now());
       return;
     }
+    // A frame that settles a host loop sets `sleeping`; the loop then stops
+    // requesting frames until wake().
     if (this.reducedMotionActive()) {
-      this.staticIntervalId = setInterval(
-        () => this.renderFrame(performance.now()),
-        100,
-      );
-      this.renderFrame(performance.now());
+      const tick = () => {
+        this.renderFrame(performance.now());
+        if (this.sleeping && this.staticIntervalId) {
+          clearInterval(this.staticIntervalId);
+          this.staticIntervalId = null;
+        }
+      };
+      this.staticIntervalId = setInterval(tick, 100);
+      tick();
     } else {
       this.lastT = performance.now();
       const loop = (t: number) => {
         this.renderFrame(t);
-        this.rafId = requestAnimationFrame(loop);
+        this.rafId = this.sleeping ? null : requestAnimationFrame(loop);
       };
       this.rafId = requestAnimationFrame(loop);
     }
+  }
+
+  // Restarts a sleeping host loop. Engine setters call it; a host that writes
+  // engine.config directly calls it afterwards.
+  wake() {
+    if (this.sleeping) this.scheduleLoop();
+  }
+
+  get isSleeping(): boolean {
+    return this.sleeping;
+  }
+
+  // Host mode sleeps only when nothing on screen can change without new
+  // input: voice idle, no pending timer or anticipation, and every spring,
+  // envelope and pulse the active style draws from at rest (the wash faded
+  // out, the glow follower at its target).
+  private settled(t: number, preset: SequencePreset): boolean {
+    if (this.config.voiceState !== "idle") return false;
+    if (this.timers.size > 0 || this.backchannelTimer) return false;
+    if (this.rings.length > 0) return false;
+    if (t < this.anticipationStart + this.anticipationMs) return false;
+    if (Math.abs(this.glowTarget - this.glowFollower) > SETTLE_EPS)
+      return false;
+    if (
+      this.config.centerCircleOn &&
+      (preset.breathe.periodMs > 0 ||
+        Math.abs(this.discSx - 1) > SETTLE_EPS ||
+        Math.abs(this.discSy - 1) > SETTLE_EPS ||
+        Math.abs(this.discVx) > SETTLE_EPS ||
+        Math.abs(this.discVy) > SETTLE_EPS)
+    )
+      return false;
+    if (this.morphId === "off") {
+      for (const role of ROLES) {
+        const pt = this.presenceTween[role];
+        if (t - pt.start < pt.tween.ms || this.presence[role] > SETTLE_EPS)
+          return false;
+      }
+      return true;
+    }
+    const m = this.motion;
+    for (const role of ROLES) {
+      if (!springAtRest(m.presence[role]) || !springAtRest(m.talk[role]))
+        return false;
+      // Wash activity is wash × energy, so a faded wash settles the field.
+      if (m.wash[role].value > SETTLE_EPS || m.onset[role].value > 0)
+        return false;
+    }
+    const speed = dialSpeed(m);
+    // Ink & Wash reveal and wet-bloom windows run on the handoff clock.
+    if ((t - m.handoff.at) * speed < 300) return false;
+    if (m.bloom.value > SETTLE_EPS) return false;
+    if (m.backchannel.amount > 0 && t < m.backchannel.until + 300 / speed)
+      return false;
+    if (this.morphId === "relay") {
+      if (!springAtRest(m.bead) || !springAtRest(m.relay.bc)) return false;
+      for (const role of ROLES)
+        if (
+          !springAtRest(m.relay.scale[role]) ||
+          m.relay.alpha[role].value > SETTLE_EPS
+        )
+          return false;
+    }
+    if (this.morphId === "shapeshift" && !springAtRest(m.morph)) return false;
+    if (
+      this.morphId === "elastic" &&
+      (m.body.releaseAt > 0 ||
+        !springAtRest(m.body.aspect) ||
+        !springAtRest(m.body.radial) ||
+        !springAtRest(m.body.scale))
+    )
+      return false;
+    return true;
   }
 
   setReducedMotion(on: boolean) {
@@ -2391,6 +2507,8 @@ export class VoiceLabEngine implements SequenceHost {
       this.canvas.height = backingHeight;
     const scale = backingWidth / W;
     this.ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    // A resized backing store is blank; a sleeping host redraws once.
+    this.wake();
   }
 
   destroy() {
@@ -2399,9 +2517,15 @@ export class VoiceLabEngine implements SequenceHost {
     if (this.staticIntervalId) clearInterval(this.staticIntervalId);
     if (this.autoLandTimer) clearTimeout(this.autoLandTimer);
     if (this.backchannelTimer) clearTimeout(this.backchannelTimer);
+    for (const id of this.timers) clearTimeout(id);
+    this.timers.clear();
     this.mql.removeEventListener("change", this.onMqlChange);
     document.removeEventListener("visibilitychange", this.onVisibilityChange);
+    this.levelSources = { human: null, riff: null };
     this.disableRealMic();
+    this.statusListeners.clear();
+    this.measureSvg?.remove();
+    this.measureSvg = null;
   }
 }
 
