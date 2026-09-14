@@ -187,6 +187,8 @@ export function VoiceBar({
   caption,
   captionTone,
   hintKind,
+  captionLift,
+  barRef,
   getUserData,
   getAgentData,
   onStart,
@@ -204,6 +206,11 @@ export function VoiceBar({
   caption: string | null;
   captionTone: "user" | "agent";
   hintKind: HintKind | null;
+  // Gap between the bar and the caption slot, sized by VoiceStage so the
+  // voice marks sit between them (bar, then marks, then caption).
+  captionLift: number;
+  // The pill VoiceStage anchors the voice layer to.
+  barRef: React.Ref<HTMLDivElement>;
   getUserData: () => Uint8Array;
   getAgentData: () => Uint8Array;
   onStart: () => void;
@@ -257,7 +264,10 @@ export function VoiceBar({
 
         <div className="pointer-events-auto relative flex flex-col items-center">
           {showCaptionSlot && (
-            <div className="absolute bottom-full mb-2 w-max max-w-[calc(100vw-24px)] sm:max-w-[560px]">
+            <div
+              className="absolute bottom-full w-max max-w-[calc(100vw-24px)] sm:max-w-[560px]"
+              style={{ marginBottom: captionLift }}
+            >
               {hintKind ? (
                 <VoiceHint
                   kind={hintKind}
@@ -272,7 +282,10 @@ export function VoiceBar({
             </div>
           )}
 
-          <div className="flex h-14 items-center gap-0 rounded-full border border-zinc-200 bg-white/95 p-1.5 shadow-lg backdrop-blur-sm">
+          <div
+            ref={barRef}
+            className="flex h-14 items-center gap-0 rounded-full border border-zinc-200 bg-white/95 p-1.5 shadow-lg backdrop-blur-sm"
+          >
             {layout === "idle" ? (
               <button
                 type="button"

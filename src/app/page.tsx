@@ -54,11 +54,21 @@ export default function Home() {
     <div className="flex h-screen w-screen flex-col bg-[#f4f4f5]">
       <RiffLogo />
       <Header />
-      <main className="flex-1 overflow-hidden">
-        <ArtifactCanvas
-          onOpenChat={() => setChatOpen(true)}
-          rightInset={rightInset}
+      {/* Isolated so the voice wash can sit under the canvas content: the
+          slot is the background layer (VoiceStage.tsx portals the wash into
+          it), and the canvas, its nodes and its dot grid paint above it. */}
+      <main className="relative isolate flex-1 overflow-hidden">
+        <div
+          id="riff-voice-wash-slot"
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
         />
+        <div className="relative z-10 h-full w-full">
+          <ArtifactCanvas
+            onOpenChat={() => setChatOpen(true)}
+            rightInset={rightInset}
+          />
+        </div>
       </main>
       <ConversationPanel
         chatOpen={chatOpen}

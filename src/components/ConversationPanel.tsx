@@ -6,6 +6,7 @@ import { useStore } from "@/lib/store";
 import { useVoice } from "@/hooks/useVoice";
 import { useMicSilence } from "@/hooks/useMicSilence";
 import { VoiceBar, type VoiceState, type JobChip } from "@/components/VoiceBar";
+import { VoiceStage } from "@/components/VoiceStage";
 import type { HintKind } from "@/components/VoiceHint";
 
 const DEV = process.env.NODE_ENV !== "production";
@@ -171,6 +172,11 @@ function ConversationPanelInner({
     };
   }, []);
 
+  // The voice layer anchors to the bar and sets how far the caption lifts
+  // to clear the marks (VoiceStage.tsx).
+  const barRef = useRef<HTMLDivElement | null>(null);
+  const [captionLift, setCaptionLift] = useState(8);
+
   const lastMessage = messages[messages.length - 1] ?? null;
 
   let voiceState: VoiceState;
@@ -270,30 +276,47 @@ function ConversationPanelInner({
     }
   };
 
+  const getUserData = devOverride
+    ? getSyntheticData
+    : voice.getInputByteFrequencyData;
+  const getAgentData = devOverride
+    ? getSyntheticData
+    : voice.getOutputByteFrequencyData;
+
   return (
-    <VoiceBar
-      voiceState={voiceState}
-      job={effectiveJob}
-      chatOpen={chatOpen}
-      rightInset={rightInset}
-      caption={caption}
-      captionTone={captionTone}
-      hintKind={hintKind}
-      getUserData={
-        devOverride ? getSyntheticData : voice.getInputByteFrequencyData
-      }
-      getAgentData={
-        devOverride ? getSyntheticData : voice.getOutputByteFrequencyData
-      }
-      onStart={voice.start}
-      onStop={voice.stop}
-      onToggleChat={onToggleChat}
-      onDismissHint={handleDismissHint}
-      onHintPrimary={handleHintPrimary}
-      onTypeInstead={handleTypeInstead}
-      onSwitchMicDevice={(deviceId) =>
-        voice.changeInputDevice({ inputDeviceId: deviceId })
-      }
-    />
+    <>
+      <VoiceBar
+        voiceState={voiceState}
+        job={effectiveJob}
+        chatOpen={chatOpen}
+        rightInset={rightInset}
+        caption={caption}
+        captionTone={captionTone}
+        hintKind={hintKind}
+        captionLift={captionLift}
+        barRef={barRef}
+        getUserData={getUserData}
+        getAgentData={getAgentData}
+        onStart={voice.start}
+        onStop={voice.stop}
+        onToggleChat={onToggleChat}
+        onDismissHint={handleDismissHint}
+        onHintPrimary={handleHintPrimary}
+        onTypeInstead={handleTypeInstead}
+        onSwitchMicDevice={(deviceId) =>
+          voice.changeInputDevice({ inputDeviceId: deviceId })
+        }
+      />
+      <VoiceStage
+        voiceState={voiceState}
+        fixture={devOverride !== null}
+        getInputData={getUserData}
+        getOutputData={getAgentData}
+        userTurnCount={voice.userTurnCount}
+        barRef={barRef}
+        rightInset={rightInset}
+        onCaptionLift={setCaptionLift}
+      />
+    </>
   );
 }
