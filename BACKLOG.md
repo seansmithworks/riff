@@ -119,10 +119,10 @@
 - [x] Phase 1: tooltip. Native `title` out of VoiceBar icon buttons and Header; shared app tooltip. Done: `408c013` `3e171bf` `a53b5f4`; reviewed; Sean confirmed in his browser (2026-09-13).
 - [x] Phase 2: voice layer on real audio. Engine host mode first (`levelFor(role)` at every `drawRole` branch, cleared transparent canvas, job channel off, `tuning.ts` single source, calibration dials), then real-app mount. Sean live mic review. Built and reviewed: engine host mode `7b0c0f7..d20a1d7` (merged `92d330f`), mount `28af166..90a39ae`, typed-only thinking glow `2daec5d` (adds `source` to Job; one-line `sketch-job.ts` change). Marks only exercised with synthetic/injected audio in headless; Sean's live mic calibration pass not confirmed before ship.
 - [ ] Phase 3: paper. React Flow `<Background>` retuned to Sean's values plus a tint layer inside React Flow. Sean review. Skipped for the first ship (Sean 2026-09-13: "lets ship to vercel").
-- [ ] Phase 4: ship on Sean's nod (fast-forward push, curl prod, one live session).
+- [x] Phase 4: ship on Sean's nod (fast-forward push, curl prod, one live session). Shipped 2026-09-13: pushed `feat/voice-real:main` `e39b54f..a6d761a`; Vercel prod deploy READY, prod serves the new build (verified by marker `riff-voice-wash-slot`).
 - [ ] Sean call: size voice placement for normal speech (loud Burst currently overlaps the empty-state links "or type it · See an example"; caption sits 316px above the bar at 1440).
 - [ ] Sean call: hide the idle squiggle until a session starts.
-- [ ] Sean call: sketch frame fill: 1 white / 2 see-through / 3 60% white (mocks in orchestrator scratchpad `frames-mock/`; rec 3).
+- [ ] Sean call: sketch frame fill: 1 white / 2 see-through / 3 60% white (mocks `docs/plans/riff-voice-real/mocks/frames-*.png`; rec 3).
 - [ ] Sean call: onset pulse never reaches marks under Ink & Wash (lab too, morph.ts:525); judge in live mic pass.
 - [ ] Yield squash is invisible because Sean's tuning has the mic disc off.
 - [ ] Live mic calibration pass with `?dials=1`, then bake values into `tuning.ts`.
@@ -240,3 +240,15 @@ Build order from `docs/voice-lab-morph-spec.md`, one commit per step:
 - [x] DECIDE OR KILL (carried 3× since 2026-09-11): origin center vs right, pill vs disc. **Closed: center; no pill, no disc (Sean 2026-09-13).** Defaults: `origin: center`, `centerCircle` off (panel + engine).
 
 **Parked (off-objective):** feat/load-logo @ `0f52726` (carried 6× since 2026-09-10; kill at the next wrap if still untouched); Option D pencil guesses (held by Sean); options C fan-out and E edit-ops (skipped, cost and consistency); Morph F5 overlap, Elastic timer, and the noticed-not-fixed items above (not duplicated).
+
+### wrap-continue (2026-09-13 late night, voice UI shipped)
+
+**Done since the night checkpoint:** Phases 0-2 built and reviewed, Phase 4 shipped to prod `a6d761a`. Captures in `docs/plans/riff-voice-real/captures/{mount,engine,tooltip}/`.
+
+- [ ] Sean: one live voice session on prod (voice + streaming sketch never exercised on Vercel prod). Carried.
+- [ ] Apply or redline the voice strawmen: placement sized for normal speech; hide idle squiggle until a session starts; frames option 3 (60% white). Sean has seen the captures and mocks.
+- [ ] Phase 3 paper: React Flow `<Background>` retuned to Sean's paper values + wash-tinted dots layer. Carried.
+- [ ] Remove merged worktrees when convenient: `feat-voice-engine`, `feat-stream`, `feat-stream-canvas`. Parked.
+- [ ] Revisit whether the pill bar is still needed once the marks are in (Sean 2026-09-13). Parked.
+- [ ] Revisit whether `/voice-lab` should stay public on prod (Sean: "public for now"). Parked.
+- [ ] DECIDE OR KILL: `feat/load-logo` @ `0f52726` (carried 9× since 2026-09-10). Parked.
