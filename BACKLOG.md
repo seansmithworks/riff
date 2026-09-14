@@ -252,3 +252,12 @@ Build order from `docs/voice-lab-morph-spec.md`, one commit per step:
 - [ ] Revisit whether the pill bar is still needed once the marks are in (Sean 2026-09-13). Parked.
 - [ ] Revisit whether `/voice-lab` should stay public on prod (Sean: "public for now"). Parked.
 - [ ] DECIDE OR KILL: `feat/load-logo` @ `0f52726` (carried 9× since 2026-09-10). Parked.
+
+### wrap-continue (2026-09-13, shelved for later)
+
+Sean shelved the voice thread for a later `ccp` pickup; no work this session. All items above stay open as written, plus:
+
+- [ ] Live mic calibration pass with `?dials=1`, bake into `tuning.ts` (line 128). Carried 2× since 2026-09-13.
+- [ ] Prod voice check + strawmen + Phase 3 paper (lines 248–250). Carried 2× since 2026-09-13.
+- [ ] DECIDE OR KILL: `feat/load-logo` @ `0f52726` (carried 10× since 2026-09-10). Parked.
+- Note: untracked `docs/evidence/stream/spike-2026-09-13` is a symlink into `feat-stream`; not committed on purpose.
