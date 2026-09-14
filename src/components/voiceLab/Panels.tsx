@@ -4,15 +4,10 @@ import { useEffect, useRef } from "react";
 import { useDialKit, useDialKitController } from "dialkit";
 import { useEngine, type EngineHandle } from "./EngineContext";
 import { MARKS } from "@/lib/voiceLab/marks";
-import {
-  HUMAN_VOICE_COLOR,
-  RIFF_VOICE_COLOR,
-  GLOW_DEFAULT_STRENGTH,
-  GLOW_DEFAULT_SIZE,
-  GLOW_DEFAULT_HEIGHT,
-  GLOW_DEFAULT_COLOR_MIX,
-  GLOW_DEFAULT_EDGE_SOFTNESS,
-} from "@/lib/voiceLab/constants";
+// Every tuned default below reads tuning.ts, the same values the engine's
+// own defaults use. Panel titles and control keys never change (renaming one
+// resets Sean's saved dials).
+import { TUNED } from "@/lib/voiceLab/tuning";
 import { VOICE_STATE_LABELS, type Role } from "@/lib/voiceLab/types";
 import { SEQUENCE_PRESETS } from "@/lib/voiceLab/sequences";
 
@@ -90,7 +85,7 @@ function SequencePanel() {
         // Fresh install (no persisted Sequence value) opens on the Blend
         // strawman — the orchestrator's recommended combination — not the
         // Hard Cut control (spec §4 row 11).
-        default: "blend",
+        default: TUNED.sequence,
       },
       play: true,
     },
@@ -164,34 +159,42 @@ function MorphPanel() {
           { value: "inkwash", label: "4 · Ink & Wash" },
           { value: "elastic", label: "5 · Elastic" },
         ],
-        default: "inkwash",
+        default: TUNED.morph.style,
       },
-      speed: [0.9, 0.5, 2, 0.05],
-      intensity: [1, 0, 1.5, 0.05],
-      breath: { _collapsed: true, scale: [1, 0.7, 1, 0.01] },
+      speed: [TUNED.morph.speed, 0.5, 2, 0.05],
+      intensity: [TUNED.morph.intensity, 0, 1.5, 0.05],
+      breath: {
+        _collapsed: true,
+        scale: [TUNED.morph.breath.scale, 0.7, 1, 0.01],
+      },
       shapeshift: {
         _collapsed: true,
-        sproutDelay: [0.1, 0, 0.6, 0.05],
-        backchannelSprout: [0.18, 0, 0.5, 0.02],
+        sproutDelay: [TUNED.morph.shapeshift.sproutDelay, 0, 0.6, 0.05],
+        backchannelSprout: [
+          TUNED.morph.shapeshift.backchannelSprout,
+          0,
+          0.5,
+          0.02,
+        ],
       },
       relay: {
         _collapsed: true,
-        gatherMs: [140, 60, 300, 10],
-        holdMs: [60, 0, 200, 10],
-        releasePunch: [0.6, 0, 1.5, 0.05],
-        landingBead: true,
+        gatherMs: [TUNED.morph.relay.gatherMs, 60, 300, 10],
+        holdMs: [TUNED.morph.relay.holdMs, 0, 200, 10],
+        releasePunch: [TUNED.morph.relay.releasePunch, 0, 1.5, 0.05],
+        landingBead: TUNED.morph.relay.landingBead,
       },
       inkwash: {
         _collapsed: true,
-        stagger: [0.15, 0, 1.5, 0.05],
-        stain: [0.6, 0, 1, 0.05],
-        wetBloom: [0.28, 0, 0.4, 0.01],
-        nib: true,
+        stagger: [TUNED.morph.inkwash.stagger, 0, 1.5, 0.05],
+        stain: [TUNED.morph.inkwash.stain, 0, 1, 0.05],
+        wetBloom: [TUNED.morph.inkwash.wetBloom, 0, 0.4, 0.01],
+        nib: TUNED.morph.inkwash.nib,
       },
       elastic: {
         _collapsed: true,
-        squash: [0.18, 0, 0.4, 0.01],
-        wobble: [0.45, 0.2, 1, 0.05],
+        squash: [TUNED.morph.elastic.squash, 0, 0.4, 0.01],
+        wobble: [TUNED.morph.elastic.wobble, 0.2, 1, 0.05],
       },
     },
     { persist: persistKey("morph") },
@@ -278,7 +281,7 @@ function StreamPanel() {
           { value: "batch", label: "Batch (today)" },
           { value: "stream", label: "Stream (A+B)" },
         ],
-        default: "stream",
+        default: TUNED.stream.mode,
       },
       pace: {
         type: "select",
@@ -286,12 +289,12 @@ function StreamPanel() {
           { value: "steady", label: "Steady pen" },
           { value: "bursts", label: "Bursts" },
         ],
-        default: "bursts",
+        default: TUNED.stream.pace,
       },
-      bufferMs: [1500, 0, 4000, 100],
-      outlineMs: [1500, 0, 6000, 100],
-      frame1Ms: [2000, 0, 9000, 100],
-      frame2Ms: [5500, 0, 9000, 100],
+      bufferMs: [TUNED.stream.bufferMs, 0, 4000, 100],
+      outlineMs: [TUNED.stream.outlineMs, 0, 6000, 100],
+      frame1Ms: [TUNED.stream.frame1Ms, 0, 9000, 100],
+      frame2Ms: [TUNED.stream.frame2Ms, 0, 9000, 100],
     },
     { persist: persistKey("stream") },
   );
@@ -332,8 +335,10 @@ function StreamPanel() {
     return handle.engine.onStatusChange((status) => {
       const c = controllerRef.current;
       const live = c.getValues();
-      if (status.streamMode !== live.mode) c.setValue("mode", status.streamMode);
-      if (status.streamPace !== live.pace) c.setValue("pace", status.streamPace);
+      if (status.streamMode !== live.mode)
+        c.setValue("mode", status.streamMode);
+      if (status.streamPace !== live.pace)
+        c.setValue("pace", status.streamPace);
     });
   }, [handle]);
 
@@ -418,12 +423,12 @@ function TogglesPanel() {
           { value: "center", label: "Center" },
           { value: "right", label: "Right" },
         ],
-        default: "center",
+        default: TUNED.toggles.origin,
       },
-      centerCircle: false,
-      onsetRings: false,
-      cinders: true,
-      showFrames: true,
+      centerCircle: TUNED.toggles.centerCircle,
+      onsetRings: TUNED.toggles.onsetRings,
+      cinders: TUNED.toggles.cinders,
+      showFrames: TUNED.toggles.showFrames,
       realMic: false,
       reducedMotion: false,
     },
@@ -484,12 +489,12 @@ function GlowPanel() {
   const raw = useDialKit(
     "Glow",
     {
-      ambientGlow: true,
-      strength: [GLOW_DEFAULT_STRENGTH, 0, 3, 0.1],
-      size: [GLOW_DEFAULT_SIZE, 0.5, 2, 0.05],
-      height: [GLOW_DEFAULT_HEIGHT, 60, 130, 5],
-      colorMix: [GLOW_DEFAULT_COLOR_MIX, 0, 1, 0.01],
-      edgeSoftness: [GLOW_DEFAULT_EDGE_SOFTNESS, 0.3, 2, 0.1],
+      ambientGlow: TUNED.glow.ambientGlow,
+      strength: [TUNED.glow.strength, 0, 3, 0.1],
+      size: [TUNED.glow.size, 0.5, 2, 0.05],
+      height: [TUNED.glow.height, 60, 130, 5],
+      colorMix: [TUNED.glow.colorMix, 0, 1, 0.01],
+      edgeSoftness: [TUNED.glow.edgeSoftness, 0.3, 2, 0.1],
       // Fluid "shader" glow (ask 1) — new fields appended after the
       // existing classic ones so persisted values for those never move or
       // reset; DialKit reconciles missing keys against these defaults.
@@ -505,22 +510,22 @@ function GlowPanel() {
           { value: "both", label: "Both" },
           { value: "classic", label: "Classic" },
         ],
-        default: "both",
+        default: TUNED.glow.style,
       },
-      fluidHumanColor: "#2F6FED",
-      fluidRiffColor: "#F5C518",
-      fluidMixSoftness: [0.85, 0, 1, 0.05],
-      fluidFlowSpeed: [1.5, 0, 2, 0.05],
-      fluidBlobScale: [1.6, 0.5, 2, 0.05],
-      fluidBlobCount: [3, 1, 4, 1],
+      fluidHumanColor: TUNED.glow.fluidHumanColor,
+      fluidRiffColor: TUNED.glow.fluidRiffColor,
+      fluidMixSoftness: [TUNED.glow.fluidMixSoftness, 0, 1, 0.05],
+      fluidFlowSpeed: [TUNED.glow.fluidFlowSpeed, 0, 2, 0.05],
+      fluidBlobScale: [TUNED.glow.fluidBlobScale, 0.5, 2, 0.05],
+      fluidBlobCount: [TUNED.glow.fluidBlobCount, 1, 4, 1],
       // Ink-and-wash dials (addendum §4).
-      fluidEdge: [0.7, 0, 1, 0.05],
-      fluidGrain: [0.3, 0, 1, 0.05],
-      fluidLayers: [3, 1, 3, 1],
+      fluidEdge: [TUNED.glow.fluidEdge, 0, 1, 0.05],
+      fluidGrain: [TUNED.glow.fluidGrain, 0, 1, 0.05],
+      fluidLayers: [TUNED.glow.fluidLayers, 1, 3, 1],
       // Role-color dominance (addendum §3).
-      roleColor: [0.75, 0, 1, 0.05],
+      roleColor: [TUNED.glow.roleColor, 0, 1, 0.05],
       // Stroke-bleed (addendum §4 "ties to the drawing elements").
-      bleedAmount: [0.9, 0, 1, 0.05],
+      bleedAmount: [TUNED.glow.bleedAmount, 0, 1, 0.05],
     },
     { id: "glow", persist: persistKey("glow") },
   );
@@ -643,10 +648,10 @@ function PaperPanel() {
   const raw = useDialKit(
     "Paper",
     {
-      paperOn: true,
-      pitch: [12, 12, 24, 1],
-      dotSize: [1, 0.6, 1.6, 0.05],
-      baseOpacity: [0.3, 0.1, 1, 0.05],
+      paperOn: TUNED.paper.paperOn,
+      pitch: [TUNED.paper.pitch, 12, 24, 1],
+      dotSize: [TUNED.paper.dotSize, 0.6, 1.6, 0.05],
+      baseOpacity: [TUNED.paper.baseOpacity, 0.1, 1, 0.05],
     },
     { persist: persistKey("paper") },
   );
@@ -677,9 +682,9 @@ function DiscPanel() {
   const raw = useDialKit(
     "Disc squash & stretch",
     {
-      stretchAmount: [0.35, 0, 1, 0.05],
-      squishBounce: [0.35, 0, 0.9, 0.05],
-      wobble: [0.15, 0, 1, 0.05],
+      stretchAmount: [TUNED.disc.stretchAmount, 0, 1, 0.05],
+      squishBounce: [TUNED.disc.squishBounce, 0, 0.9, 0.05],
+      wobble: [TUNED.disc.wobble, 0, 1, 0.05],
     },
     { persist: persistKey("disc") },
   );
@@ -788,11 +793,11 @@ function CinderPanel() {
   const raw = useDialKit(
     "Cinders & land",
     {
-      cinderCap: [800, 100, 800, 25],
-      windStrength: [3, 0, 3, 0.1],
-      burstSize: [120, 0, 120, 5],
-      landDurationMs: [600, 400, 1800, 50],
-      tipSparkRate: [1, 0, 1, 0.05],
+      cinderCap: [TUNED.cinders.cinderCap, 100, 800, 25],
+      windStrength: [TUNED.cinders.windStrength, 0, 3, 0.1],
+      burstSize: [TUNED.cinders.burstSize, 0, 120, 5],
+      landDurationMs: [TUNED.cinders.landDurationMs, 400, 1800, 50],
+      tipSparkRate: [TUNED.cinders.tipSparkRate, 0, 1, 0.05],
     },
     { persist: persistKey("cinders") },
   );
@@ -819,12 +824,12 @@ function BuildPanel() {
   const raw = useDialKit(
     "Build",
     {
-      flightSpeed: [1, 0.5, 2, 0.05],
-      arc: [0.27, 0, 0.5, 0.01],
-      densityFrame: [3, 0.5, 6, 0.1],
-      densityBlocks: [3, 0.5, 6, 0.1],
-      densityDetails: [3, 0.5, 6, 0.1],
-      tierGapMs: [120, -200, 300, 10],
+      flightSpeed: [TUNED.build.flightSpeed, 0.5, 2, 0.05],
+      arc: [TUNED.build.arc, 0, 0.5, 0.01],
+      densityFrame: [TUNED.build.densityFrame, 0.5, 6, 0.1],
+      densityBlocks: [TUNED.build.densityBlocks, 0.5, 6, 0.1],
+      densityDetails: [TUNED.build.densityDetails, 0.5, 6, 0.1],
+      tierGapMs: [TUNED.build.tierGapMs, -200, 300, 10],
       speculativeFrame: {
         type: "select",
         options: [
@@ -832,7 +837,7 @@ function BuildPanel() {
           { value: "construction", label: "Construction" },
           { value: "full", label: "Full ink" },
         ],
-        default: "construction",
+        default: TUNED.build.speculativeFrame,
       },
       guideDots: {
         type: "select",
@@ -841,7 +846,7 @@ function BuildPanel() {
           { value: "dots", label: "Lit dots" },
           { value: "dotsLines", label: "Lit dots + faint lines" },
         ],
-        default: "dots",
+        default: TUNED.build.guideDots,
       },
       arrival: {
         type: "select",
@@ -849,11 +854,11 @@ function BuildPanel() {
           { value: "dotsLead", label: "Dots lead" },
           { value: "comet", label: "Comet" },
         ],
-        default: "comet",
+        default: TUNED.build.arrival,
       },
-      snapToGrid: true,
-      dotPop: [0.8, 0, 1, 0.05],
-      waitEmberRate: [8, 4, 24, 1],
+      snapToGrid: TUNED.build.snapToGrid,
+      dotPop: [TUNED.build.dotPop, 0, 1, 0.05],
+      waitEmberRate: [TUNED.build.waitEmberRate, 4, 24, 1],
     },
     { persist: persistKey("build") },
   );
@@ -893,14 +898,14 @@ export default function VoiceLabPanels() {
       <RoleVoicePanel
         role="human"
         title="Human voice"
-        defaultMarkId="amoeba"
-        defaultColor={HUMAN_VOICE_COLOR}
+        defaultMarkId={TUNED.voiceRoles.human.mark}
+        defaultColor={TUNED.voiceRoles.human.color}
       />
       <RoleVoicePanel
         role="riff"
         title="Riff voice"
-        defaultMarkId="burst"
-        defaultColor={RIFF_VOICE_COLOR}
+        defaultMarkId={TUNED.voiceRoles.riff.mark}
+        defaultColor={TUNED.voiceRoles.riff.color}
       />
       <CinderPanel />
       <BuildPanel />

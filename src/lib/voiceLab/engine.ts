@@ -17,13 +17,6 @@ import {
   W,
   H,
   INK,
-  HUMAN_VOICE_COLOR,
-  RIFF_VOICE_COLOR,
-  GLOW_DEFAULT_STRENGTH,
-  GLOW_DEFAULT_SIZE,
-  GLOW_DEFAULT_HEIGHT,
-  GLOW_DEFAULT_COLOR_MIX,
-  GLOW_DEFAULT_EDGE_SOFTNESS,
   synthesizeLevelData,
   computeBands,
   BAR_ORDER,
@@ -117,6 +110,7 @@ import {
   type RolePose,
   type SpringSpec,
 } from "./morph";
+import { TUNED, calibrateLevels, hasLevels } from "./tuning";
 
 function hexToRgbTuple(hex: string): [number, number, number] {
   const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex.trim());
@@ -124,94 +118,75 @@ function hexToRgbTuple(hex: string): [number, number, number] {
   return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
 }
 
+// Lab defaults: Sean's tuned values (tuning.ts), fresh objects every call
+// (panels mutate some of them in place).
 export function defaultEngineConfig(): EngineConfig {
+  const t = TUNED;
   return {
     voiceState: "idle",
     jobState: "none",
-    originSide: "center",
-    centerCircleOn: false,
-    onsetRingsOn: true,
-    ambientGlowOn: true,
-    glowStrength: GLOW_DEFAULT_STRENGTH,
-    glowSize: GLOW_DEFAULT_SIZE,
-    glowHeight: GLOW_DEFAULT_HEIGHT,
-    glowColorMix: GLOW_DEFAULT_COLOR_MIX,
-    glowEdgeSoftness: GLOW_DEFAULT_EDGE_SOFTNESS,
-    cindersOn: true,
-    showFramesOn: true,
+    originSide: t.toggles.origin,
+    centerCircleOn: t.toggles.centerCircle,
+    onsetRingsOn: t.toggles.onsetRings,
+    ambientGlowOn: t.glow.ambientGlow,
+    glowStrength: t.glow.strength,
+    glowSize: t.glow.size,
+    glowHeight: t.glow.height,
+    glowColorMix: t.glow.colorMix,
+    glowEdgeSoftness: t.glow.edgeSoftness,
+    cindersOn: t.toggles.cinders,
+    showFramesOn: t.toggles.showFrames,
     // Speaker -> mark assignment: Riff = Burst (green), Human = Amoeba (violet).
-    humanMarkId: "amoeba",
-    riffMarkId: "burst",
-    humanColor: HUMAN_VOICE_COLOR,
-    riffColor: RIFF_VOICE_COLOR,
+    humanMarkId: t.voiceRoles.human.mark,
+    riffMarkId: t.voiceRoles.riff.mark,
+    humanColor: t.voiceRoles.human.color,
+    riffColor: t.voiceRoles.riff.color,
     markConfigsByRole: {
       human: defaultMarkConfigs(),
       riff: defaultMarkConfigs(),
     },
-    cinderConfig: {
-      cinderCap: 500,
-      windStrength: 1.0,
-      burstSize: 40,
-      landDurationMs: 900,
-      tipSparkRate: 0.8,
-    },
+    cinderConfig: { ...t.cinders },
     reducedMotion: false,
     realMicEnabled: false,
-    glowStyle: "both",
-    glowHumanColor: "#2F6FED",
-    glowRiffColor: "#F5C518",
-    glowMixSoftness: 0.85,
-    glowFlowSpeed: 1.5,
-    glowBlobScale: 1.6,
-    glowBlobCount: 3,
-    glowEdgeAmount: 0.35,
-    glowGrainAmount: 0.3,
-    glowLayers: 2,
-    glowRoleColor: 0.8,
-    glowBleedAmount: 0.9,
-    paperOn: true,
-    paperPitch: 12,
-    paperDotSize: 1,
-    paperBaseOpacity: 0.3,
-    buildConfig: {
-      flightSpeed: 1,
-      arc: 0.18,
-      densityFrame: 3,
-      densityBlocks: 3,
-      densityDetails: 3,
-      tierGapMs: 120,
-      speculativeFrame: "construction",
-      guideDots: "dots",
-      arrival: "comet",
-      snapToGrid: true,
-      dotPop: 0.6,
-      waitEmberRate: 8,
-    },
-    discStretchAmount: 0.35,
-    discSquishBounce: 0.35,
-    discWobble: 0.15,
+    glowStyle: t.glow.style,
+    glowHumanColor: t.glow.fluidHumanColor,
+    glowRiffColor: t.glow.fluidRiffColor,
+    glowMixSoftness: t.glow.fluidMixSoftness,
+    glowFlowSpeed: t.glow.fluidFlowSpeed,
+    glowBlobScale: t.glow.fluidBlobScale,
+    glowBlobCount: t.glow.fluidBlobCount,
+    glowEdgeAmount: t.glow.fluidEdge,
+    glowGrainAmount: t.glow.fluidGrain,
+    glowLayers: t.glow.fluidLayers,
+    glowRoleColor: t.glow.roleColor,
+    glowBleedAmount: t.glow.bleedAmount,
+    paperOn: t.paper.paperOn,
+    paperPitch: t.paper.pitch,
+    paperDotSize: t.paper.dotSize,
+    paperBaseOpacity: t.paper.baseOpacity,
+    buildConfig: { ...t.build },
+    discStretchAmount: t.disc.stretchAmount,
+    discSquishBounce: t.disc.squishBounce,
+    discWobble: t.disc.wobble,
     morph: {
-      speed: 0.9,
-      intensity: 1,
-      breath: { scale: 1 },
-      shapeshift: { sproutDelay: 0.1, backchannelSprout: 0.18 },
-      relay: {
-        gatherMs: 140,
-        holdMs: 60,
-        releasePunch: 0.6,
-        landingBead: true,
-      },
-      inkwash: { stagger: 0.15, stain: 0.6, wetBloom: 0.28, nib: true },
-      elastic: { squash: 0.18, wobble: 0.45 },
+      speed: t.morph.speed,
+      intensity: t.morph.intensity,
+      breath: { ...t.morph.breath },
+      shapeshift: { ...t.morph.shapeshift },
+      relay: { ...t.morph.relay },
+      inkwash: { ...t.morph.inkwash },
+      elastic: { ...t.morph.elastic },
     },
-    // Sean 2026-09-13: stream (A+B) with a bursts pen is the default; batch
-    // stays selectable as the A/B baseline.
     stream: {
-      mode: "stream",
-      pace: "bursts",
-      bufferMs: 1500,
-      outlineMs: 1500,
-      arriveMs: [2000, 5500],
+      mode: t.stream.mode,
+      pace: t.stream.pace,
+      bufferMs: t.stream.bufferMs,
+      outlineMs: t.stream.outlineMs,
+      arriveMs: [t.stream.frame1Ms, t.stream.frame2Ms],
+    },
+    levelCalibration: {
+      human: { ...t.calibration.human },
+      riff: { ...t.calibration.riff },
     },
   };
 }
@@ -300,7 +275,7 @@ export class VoiceLabEngine implements SequenceHost {
   // ---- Choreography state ----
   // Blend is the base choreography (Sean 2026-09-13), matching the Sequence
   // panel's default.
-  private activeSequence: SequencePreset = SEQUENCE_BY_ID["blend"];
+  private activeSequence: SequencePreset = SEQUENCE_BY_ID[TUNED.sequence];
   private prevSequenceId: string = this.activeSequence.id;
   private timeScale = 1; // Z = 0.25x slow motion
   player: SequencePlayer = new SequencePlayer(this);
@@ -364,7 +339,7 @@ export class VoiceLabEngine implements SequenceHost {
   // Default on fresh install is Ink & Wash (spec §5) — persisted overrides
   // (DialKit's "voiceLab.morph" key) restore Sean's last pick, same pattern
   // as every other lab control.
-  private morphId: MorphId = "inkwash";
+  private morphId: MorphId = TUNED.morph.style;
   private motion: MotionState;
   private lastVoiceStateForMorph: VoiceState = "idle";
   // Last pose applied per role (a reference to morph.ts's per-role scratch

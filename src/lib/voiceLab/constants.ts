@@ -10,27 +10,15 @@ export const SKETCH_LINE_ROUGHNESS = 0.55;
 export const INK = "#3f3f46";
 export const RIFF_GREEN = "#3FBA6A";
 
-// Per-role voice mark colors (Human voice / Riff voice panels + engine
-// config), Sean's 2026-09-13 DialKit pass.
-export const HUMAN_VOICE_COLOR = "#542dc3";
-export const RIFF_VOICE_COLOR = "#2e8f50";
+// Tuned dial defaults (role colors, glow tuners, everything DialKit exposes)
+// live in tuning.ts.
 
-// Ambient-glow tuner defaults, all consumed by Stage's buildGlow(). Values
-// are Sean's 2026-09-13 DialKit pass.
 // Base alphas (at strength 1) for the two gradient hues, and their combined
 // total — colorMix (0-1) weights this total between them instead of driving
 // two independent sliders, so it can't fall out of sync with strength.
 export const GLOW_CYAN_BASE = 0.35;
 export const GLOW_GREEN_BASE = 0.28;
 export const GLOW_TOTAL_BASE = GLOW_CYAN_BASE + GLOW_GREEN_BASE;
-export const GLOW_DEFAULT_COLOR_MIX = 1;
-// The mask (Stage.tsx) fades the glow out near the card's edges — including
-// the band where the disc itself sits — so this multiplier boosts the
-// gradients' color alphas back up to roughly the pre-mask visual weight.
-export const GLOW_DEFAULT_STRENGTH = 1.5;
-export const GLOW_DEFAULT_SIZE = 1;
-export const GLOW_DEFAULT_HEIGHT = 100;
-export const GLOW_DEFAULT_EDGE_SOFTNESS = 1.5;
 
 export function hashSeed(input: string): number {
   let hash = 5381;
