@@ -1,6 +1,15 @@
 "use client";
 
-import { cloneElement, isValidElement, useId, useRef, useState } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+
+const VIEWPORT_MARGIN = 8;
 
 // Shared in-app tooltip: replaces native `title` (which a Chromium-based
 // non-stock browser can place relative to the viewport instead of the
@@ -21,8 +30,39 @@ export function Tooltip({
   }>;
 }) {
   const [open, setOpen] = useState(false);
+  const [shift, setShift] = useState(0);
   const showTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
   const tooltipId = useId();
+
+  // Pure CSS centering (`left-1/2 -translate-x-1/2`) can push the tooltip
+  // past the viewport edge for triggers near the left/right edge (e.g. the
+  // header pill). Once open, measure and add a corrective horizontal shift
+  // on top of the centering transform so the tooltip always stays within an
+  // 8px margin, on either edge.
+  useLayoutEffect(() => {
+    if (!open) {
+      setShift(0);
+      return;
+    }
+    const wrapperRect = wrapperRef.current?.getBoundingClientRect();
+    const tooltipRect = tooltipRef.current?.getBoundingClientRect();
+    if (!wrapperRect || !tooltipRect) return;
+
+    const center = wrapperRect.left + wrapperRect.width / 2;
+    const left = center - tooltipRect.width / 2;
+    const right = center + tooltipRect.width / 2;
+    const viewportWidth = window.innerWidth;
+
+    let correction = 0;
+    if (left < VIEWPORT_MARGIN) {
+      correction = VIEWPORT_MARGIN - left;
+    } else if (right > viewportWidth - VIEWPORT_MARGIN) {
+      correction = viewportWidth - VIEWPORT_MARGIN - right;
+    }
+    setShift(correction);
+  }, [open, label]);
 
   function clearShowTimeout() {
     if (showTimeout.current) {
@@ -64,12 +104,14 @@ export function Tooltip({
     : children;
 
   return (
-    <div className="relative inline-flex">
+    <div ref={wrapperRef} className="relative inline-flex">
       {trigger}
       <div
+        ref={tooltipRef}
         id={tooltipId}
         role="tooltip"
-        className={`pointer-events-none absolute left-1/2 z-30 w-max -translate-x-1/2 rounded-lg border border-zinc-200 bg-white/95 px-2 py-1 text-[13px]/[16px] text-zinc-700 shadow-lg backdrop-blur-sm transition-opacity duration-150 ease-out motion-reduce:transition-none ${
+        style={{ transform: `translateX(calc(-50% + ${shift}px))` }}
+        className={`pointer-events-none absolute left-1/2 z-30 w-max rounded-lg border border-zinc-200 bg-white/95 px-2 py-1 text-[13px]/[16px] text-zinc-700 shadow-lg backdrop-blur-sm transition-opacity duration-150 ease-out motion-reduce:transition-none ${
           side === "top" ? "bottom-full mb-2" : "top-full mt-2"
         } ${open ? "opacity-100" : "opacity-0"}`}
       >
