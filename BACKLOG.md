@@ -116,10 +116,16 @@
 
 - [x] **Sean confirms the plan and 4 calls.** (1) Marks placement A: bar → marks → caption. Pill bar kept for now; Sean may revisit whether it's needed. (2) Wash UNDER the sketch: a background layer with the dot grid, drawing sits on top. The plan assumed "over", so Phase 2/3 briefs must put the wash behind React Flow nodes, not the z-10 overlay. Sub-fork still open: frames stay opaque white vs see-through frames so ink sits on dots + wash. (3) `/voice-lab` stays public on prod, for now. (4) Typed sketches keep the thinking glow.
 - [x] Phase 0: worktree `feat-voice-real` (port 3330) off `feat/stream`; merge `feat/voice-lab` (BACKLOG.md conflict only) and `origin/main` (clean, adds `51051bf` `e39b54f`); symlink `node_modules` to feat-voice-lab's real install. Done on `feat/voice-real` (`a52da1a`).
-- [ ] Phase 1: tooltip. Native `title` out of VoiceBar icon buttons and Header; shared app tooltip.
-- [ ] Phase 2: voice layer on real audio. Engine host mode first (`levelFor(role)` at every `drawRole` branch, cleared transparent canvas, job channel off, `tuning.ts` single source, calibration dials), then real-app mount. Sean live mic review.
-- [ ] Phase 3: paper. React Flow `<Background>` retuned to Sean's values plus a tint layer inside React Flow. Sean review.
+- [x] Phase 1: tooltip. Native `title` out of VoiceBar icon buttons and Header; shared app tooltip. Done: `408c013` `3e171bf` `a53b5f4`; reviewed; Sean confirmed in his browser (2026-09-13).
+- [x] Phase 2: voice layer on real audio. Engine host mode first (`levelFor(role)` at every `drawRole` branch, cleared transparent canvas, job channel off, `tuning.ts` single source, calibration dials), then real-app mount. Sean live mic review. Built and reviewed: engine host mode `7b0c0f7..d20a1d7` (merged `92d330f`), mount `28af166..90a39ae`, typed-only thinking glow `2daec5d` (adds `source` to Job; one-line `sketch-job.ts` change). Marks only exercised with synthetic/injected audio in headless; Sean's live mic calibration pass not confirmed before ship.
+- [ ] Phase 3: paper. React Flow `<Background>` retuned to Sean's values plus a tint layer inside React Flow. Sean review. Skipped for the first ship (Sean 2026-09-13: "lets ship to vercel").
 - [ ] Phase 4: ship on Sean's nod (fast-forward push, curl prod, one live session).
+- [ ] Sean call: size voice placement for normal speech (loud Burst currently overlaps the empty-state links "or type it · See an example"; caption sits 316px above the bar at 1440).
+- [ ] Sean call: hide the idle squiggle until a session starts.
+- [ ] Sean call: sketch frame fill: 1 white / 2 see-through / 3 60% white (mocks in orchestrator scratchpad `frames-mock/`; rec 3).
+- [ ] Sean call: onset pulse never reaches marks under Ink & Wash (lab too, morph.ts:525); judge in live mic pass.
+- [ ] Yield squash is invisible because Sean's tuning has the mic disc off.
+- [ ] Live mic calibration pass with `?dials=1`, then bake values into `tuning.ts`.
 - [ ] Riff logo overlaps the first frame's top-left on a fitted sketch (seen in replay captures). Parked.
 - [ ] v2 bridges after ship: Pen nib bleeds paper, Burst nod at first ink, tip sparks on screen close. Parked.
 
