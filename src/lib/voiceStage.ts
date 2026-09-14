@@ -1,9 +1,11 @@
 // Pure helpers for the real app's voice layer (VoiceStage.tsx): where the
 // lab's 1440x900 stage sits over the bar, how the session's state maps to
-// the engine's, and the listening gate. Type-only imports, so `node --test`
-// loads this file directly.
+// the engine's, the listening gate, and a synthetic speech-like feed for dev
+// evidence. Type-only imports, so `node --test` loads this file directly.
 import type { VoiceState as EngineVoiceState } from "./voiceLab/types";
 import type { VoiceState as AppVoiceState } from "../components/VoiceBar";
+
+export const LEVEL_BINS = 1024;
 
 // The marks' reach around the engine's origin, in stage px at scale 1,
 // measured from ink pixels at 1440x900 (2026-09-13): Burst at full level
@@ -106,3 +108,96 @@ export function inputLevel(buf: ArrayLike<number> | null | undefined): number {
   for (let i = 0; i < buf.length; i++) sum += buf[i];
   return Math.max(0, Math.min(1, (sum / buf.length) * unit));
 }
+
+// Any array of levels as a 1024-bin byte frame (Float32Array reads as 0-1).
+export function toLevelFrame(src: ArrayLike<number>): Uint8Array {
+  const out = new Uint8Array(LEVEL_BINS);
+  const scale = src instanceof Float32Array ? 255 : 1;
+  const n = Math.min(src.length, LEVEL_BINS);
+  for (let i = 0; i < n; i++)
+    out[i] = Math.round(Math.max(0, Math.min(255, src[i] * scale)));
+  return out;
+}
+
+export function percentile(sorted: number[], p: number): number {
+  if (sorted.length === 0) return 0;
+  const i = Math.ceil(p * sorted.length) - 1;
+  return sorted[Math.max(0, Math.min(sorted.length - 1, i))];
+}
+
+function mulberry32(seed: number) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), s | 1);
+    t = (t + Math.imul(t ^ (t >>> 7), t | 61)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function bump(i: number, center: number, width: number): number {
+  const d = (i - center) / width;
+  return Math.exp(-d * d);
+}
+
+// SYNTHETIC speech-like frequency frames: no recording of the SDK's data
+// exists yet. 1024 bins shaped like its resampled 100-8000 Hz output, energy
+// falling with frequency plus three formant bumps that move per syllable,
+// under a syllable envelope (~0.14-0.32s) with pauses. Deterministic per seed.
+export function syntheticSpeechFrames(
+  seconds: number,
+  fps = 60,
+  seed = 1,
+): Uint8Array[] {
+  const rnd = mulberry32(seed);
+  const count = Math.max(0, Math.round(seconds * fps));
+  const frames: Uint8Array[] = [];
+  let start = 0;
+  let dur = 0;
+  let amp = 0;
+  let f1 = 0;
+  let f2 = 0;
+  let f3 = 0;
+  for (let k = 0; k < count; k++) {
+    const t = k / fps;
+    if (t >= start + dur) {
+      const pause = rnd() < 0.2;
+      start = t;
+      dur = pause ? 0.18 + rnd() * 0.3 : 0.14 + rnd() * 0.18;
+      amp = pause ? 0 : 0.5 + rnd() * 0.5;
+      f1 = 30 + rnd() * 50;
+      f2 = 120 + rnd() * 110;
+      f3 = 300 + rnd() * 140;
+    }
+    const env = amp * Math.sin(Math.PI * Math.min(1, (t - start) / dur));
+    const frame = new Uint8Array(LEVEL_BINS);
+    for (let i = 0; i < LEVEL_BINS; i++) {
+      const tilt = Math.exp(-i / 240);
+      const voice =
+        (0.35 * tilt +
+          0.75 * bump(i, f1, 22) +
+          0.5 * bump(i, f2, 38) +
+          0.3 * bump(i, f3, 60)) *
+        env;
+      const noise = (0.03 + rnd() * 0.04) * tilt;
+      frame[i] = Math.round(Math.min(1, voice + noise) * 255);
+    }
+    frames.push(frame);
+  }
+  return frames;
+}
+
+// Dev readout: what the engine last read for a role, after calibration.
+export type RoleReadout = {
+  live: boolean;
+  input: number;
+  level: number;
+  bands: number[];
+};
+
+export type VoiceReadout = {
+  human: RoleReadout;
+  riff: RoleReadout;
+  talking: boolean;
+  state: string;
+};

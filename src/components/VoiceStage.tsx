@@ -11,6 +11,7 @@ import {
   SEQUENCE_BY_ID,
 } from "@/lib/voiceLab/sequences";
 import { TUNED } from "@/lib/voiceLab/tuning";
+import type { Role } from "@/lib/voiceLab/types";
 import {
   MARKS_ABOVE,
   MARKS_BELOW,
@@ -22,6 +23,18 @@ import {
   type TalkGate,
 } from "@/lib/voiceStage";
 import type { VoiceState } from "./VoiceBar";
+import { VoiceDials } from "./VoiceDials";
+import {
+  createDevState,
+  feedFrame,
+  installDevTools,
+  readVoice,
+  updateReadout,
+} from "./voiceStageDev";
+
+// Every dev tool below sits behind this: `?dials=1`, the window hooks, feeds
+// and the readout never run in a production build.
+const DEV = process.env.NODE_ENV !== "production";
 
 // The bar's chat-open slide (VoiceBar.tsx, 260ms) plus a frame of margin.
 const SLIDE_FOLLOW_MS = 320;
@@ -75,6 +88,7 @@ export function VoiceStage({
   const engineRef = useRef<VoiceLabEngine | null>(null);
   const followRef = useRef<(ms: number) => void>(() => {});
   const gateRef = useRef<TalkGate>({ talking: false, lastAboveAt: 0 });
+  const devRef = useRef(createDevState());
 
   // Latest session inputs, read inside the engine frame and the gate timer.
   const inputs = useRef({ voiceState, getInputData, getOutputData });
@@ -85,17 +99,35 @@ export function VoiceStage({
   });
 
   const [washSlot, setWashSlot] = useState<HTMLElement | null>(null);
+  const [dialsEngine, setDialsEngine] = useState<VoiceLabEngine | null>(null);
 
   function humanData(): LevelBuffer | null {
-    return inputs.current.getInputData();
+    return (
+      (DEV && feedFrame(devRef.current, "human")) ||
+      inputs.current.getInputData()
+    );
   }
 
   function riffData(): LevelBuffer | null {
+    const fed = DEV && feedFrame(devRef.current, "riff");
+    if (fed) return fed;
     // Riff's level follows the session's speaking mode, not the audio: the
     // SDK fades interrupted speech out over 2s, and the mark shouldn't.
     return inputs.current.voiceState === "speaking"
       ? inputs.current.getOutputData()
       : null;
+  }
+
+  function tap(role: Role, buf: LevelBuffer | null): LevelBuffer | null {
+    const engine = engineRef.current;
+    if (DEV && engine)
+      updateReadout(
+        devRef.current,
+        role,
+        buf,
+        engine.config.levelCalibration[role],
+      );
+    return buf;
   }
 
   useEffect(() => {
@@ -114,8 +146,8 @@ export function VoiceStage({
     const engine = new VoiceLabEngine(marks, undefined, { host: true });
     engineRef.current = engine;
     engine.attachGlowFluid(wash);
-    engine.setLevelSource("human", () => humanData());
-    engine.setLevelSource("riff", () => riffData());
+    engine.setLevelSource("human", () => tap("human", humanData()));
+    engine.setLevelSource("riff", () => tap("riff", riffData()));
 
     // The anchor is read on resize and during the chat slide only, never
     // blind every frame; the stages move by transform.
@@ -164,15 +196,23 @@ export function VoiceStage({
     window.addEventListener("resize", place);
     engine.scheduleLoop();
 
+    const removeDevTools = DEV
+      ? installDevTools(engine, devRef.current, gateRef.current)
+      : () => {};
+    if (DEV && new URLSearchParams(window.location.search).get("dials") === "1")
+      setDialsEngine(engine);
+
     return () => {
+      removeDevTools();
       ro.disconnect();
       window.removeEventListener("resize", place);
       if (followId !== null) cancelAnimationFrame(followId);
       followRef.current = () => {};
       engine.destroy();
       engineRef.current = null;
+      setDialsEngine(null);
     };
-    // humanData/riffData only read refs, so the first closures stay current.
+    // humanData/riffData/tap only read refs, so the first closures stay current.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [washSlot, barRef]);
 
@@ -268,6 +308,12 @@ export function VoiceStage({
           </div>,
           washSlot,
         )}
+      {DEV && dialsEngine && (
+        <VoiceDials
+          engine={dialsEngine}
+          read={() => readVoice(dialsEngine, devRef.current, gateRef.current)}
+        />
+      )}
     </>
   );
 }

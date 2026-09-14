@@ -8,6 +8,7 @@ import {
   inputLevel,
   stageLayout,
   stepTalkGate,
+  syntheticSpeechFrames,
   type TalkGate,
 } from "../src/lib/voiceStage.ts";
 
@@ -78,4 +79,20 @@ test("input level is the buffer mean, empty is silence", () => {
   assert.equal(inputLevel(null), 0);
   assert.equal(inputLevel(new Uint8Array(1024).fill(255)), 1);
   assert.equal(inputLevel(new Float32Array([0.5, 0.5])), 0.5);
+});
+
+test("synthetic speech has syllables above the gate and pauses below it", () => {
+  const frames = syntheticSpeechFrames(4, 60, 1);
+  assert.equal(frames.length, 240);
+  assert.ok(frames.every((f) => f.length === 1024));
+  assert.deepEqual(syntheticSpeechFrames(4, 60, 1)[100], frames[100]);
+  const levels = frames.map((f) => inputLevel(f));
+  assert.ok(
+    levels.some((l) => l >= 0.06),
+    "some frames open the gate",
+  );
+  assert.ok(
+    levels.some((l) => l < 0.02),
+    "some frames are pauses",
+  );
 });
