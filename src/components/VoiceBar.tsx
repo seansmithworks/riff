@@ -21,6 +21,8 @@ export type JobChip = {
   id: number;
   status: "sketching" | "done" | "failed";
   label: string;
+  // Who started the sketch. Untagged (dev fixtures) counts as voice.
+  source?: "voice" | "text";
 };
 
 const LABEL: Record<VoiceState, string> = {
@@ -228,9 +230,9 @@ export function VoiceBar({
   const showX = layout !== "idle";
   const showCaptionSlot = !chatOpen && (hintKind !== null || caption !== null);
 
-  // Listening and speaking light the voice layer's wash (VoiceStage.tsx);
-  // this glow only keeps the thinking state for typed sketches.
-  const glowClass = job ? "riff-glow-thinking" : "opacity-5";
+  // The voice layer (VoiceStage.tsx) is the feedback for anything voice
+  // started; this glow only keeps the thinking state for typed sketches.
+  const glowClass = job?.source === "text" ? "riff-glow-thinking" : "opacity-5";
 
   return (
     <>

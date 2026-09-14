@@ -5,6 +5,7 @@ import {
   type StreamEvent,
   type StreamHead,
 } from "./artifact-stream";
+import type { SketchSource } from "./sketch-job";
 
 export type Message = { role: "user" | "assistant"; text: string };
 export type Status = "idle" | "listening" | "thinking" | "speaking";
@@ -15,6 +16,8 @@ export type Job = {
   status: JobStatus;
   /** The job started over an existing artifact. */
   isEvolve: boolean;
+  /** Who started it: the voice session or the typed chat. */
+  source: SketchSource;
 };
 
 // Shared across the voice (useVoice.ts) and text (CopilotPanel.tsx)

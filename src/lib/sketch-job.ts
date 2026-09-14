@@ -122,6 +122,7 @@ export function startSketchJob({
     label: jobLabel(brief),
     status: "sketching",
     isEvolve: base !== null,
+    source,
   });
 
   const done = run(job, {

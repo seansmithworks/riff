@@ -108,6 +108,7 @@ function ConversationPanelInner({
       ? {
           id: lastJob.id,
           status: lastJob.status,
+          source: lastJob.source,
           // "done" keeps showing the same Sketching…/Revising… text through
           // its brief snap-to-1-then-linger — SketchChipSegment in
           // VoiceBar.tsx only swaps in different copy for "failed".
