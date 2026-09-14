@@ -243,6 +243,12 @@ export type EngineStatus = {
   streamPace: StreamPace;
 };
 
+// One role's frequency data, read once per drawn frame: a Uint8Array of
+// 0-255 bytes (the ElevenLabs SDK's get*ByteFrequencyData) or a Float32Array
+// of 0-1 values. Null or an empty array means no source this frame.
+export type LevelBuffer = Uint8Array | Float32Array;
+export type LevelSource = () => LevelBuffer | null | undefined;
+
 const ZERO_TWEEN: Tween = {
   ms: 0,
   ease: { kind: "bezier", p: [0.25, 0.1, 0.25, 1] },
@@ -261,10 +267,10 @@ export class VoiceLabEngine implements SequenceHost {
   private rings: { x: number; y: number; born: number; rot: number }[] = [];
   private onsetPulse = 0;
   private lastOnsetAt = 0;
-  private prevUserAvg = 0;
   private nextSyntheticOnsetAt = 0;
-  // Riff gets its own onset pulse — it has no real-mic input, so it's
-  // always the synthetic-schedule path, analogous to the human one above.
+  // Riff gets its own onset pulse, detected the same way as the human one:
+  // from its level source when one is live, else (lab only) on a synthetic
+  // schedule.
   private riffOnsetPulse = 0;
   private lastRiffOnsetAt = 0;
   private nextRiffOnsetAt = 0;
@@ -282,9 +288,22 @@ export class VoiceLabEngine implements SequenceHost {
   private rafId: number | null = null;
   private staticIntervalId: ReturnType<typeof setInterval> | null = null;
   private lastT = 0;
-  private analyser: AnalyserNode | null = null;
-  private micDataArray: Uint8Array | null = null;
   private audioCtx: AudioContext | null = null;
+  // ---- Level sources: the one data path every mark branch reads ----
+  private levelSources: Record<Role, LevelSource | null> = {
+    human: null,
+    riff: null,
+  };
+  // Per-role copy of injected data (the SDK reuses its own buffer).
+  private levelScratch: Record<Role, Uint8Array> = {
+    human: new Uint8Array(1024),
+    riff: new Uint8Array(1024),
+  };
+  // Whether this frame's data for a role came from a live source.
+  private sourceLive: Record<Role, boolean> = { human: false, riff: false };
+  private prevLevelAvg: Record<Role, number> = { human: 0, riff: 0 };
+  // The lab's Real mic toggle installs its analyser as the human source.
+  private micSource: LevelSource | null = null;
   private dotGrid: DotGrid;
   private lastPaperParams = { pitch: 16, dotSize: 0.9, baseOpacity: 0.5 };
   private buildPlan: BuildPlan | null = null;
@@ -1205,7 +1224,17 @@ export class VoiceLabEngine implements SequenceHost {
     );
   }
 
-  // ---- Real mic ----
+  // ---- Level sources ----
+  // Feeds one role's marks from real frequency data instead of the lab's
+  // synthetic levels. The getter is read inside the engine frame, never from
+  // React. Null clears it.
+  setLevelSource(role: Role, source: LevelSource | null) {
+    this.levelSources[role] = source;
+  }
+
+  // ---- Real mic (lab toggle) ----
+  // Installs the analyser as the human level source, so the lab mic runs the
+  // same path as injected data.
   async enableRealMic(): Promise<boolean> {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1215,10 +1244,15 @@ export class VoiceLabEngine implements SequenceHost {
           .webkitAudioContext
       )();
       const source = this.audioCtx.createMediaStreamSource(stream);
-      this.analyser = this.audioCtx.createAnalyser();
-      this.analyser.fftSize = 2048;
-      this.micDataArray = new Uint8Array(this.analyser.frequencyBinCount);
-      source.connect(this.analyser);
+      const analyser = this.audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      source.connect(analyser);
+      this.micSource = () => {
+        analyser.getByteFrequencyData(data);
+        return data;
+      };
+      this.setLevelSource("human", this.micSource);
       this.config.realMicEnabled = true;
       this.emitStatus();
       return true;
@@ -1238,38 +1272,41 @@ export class VoiceLabEngine implements SequenceHost {
       this.audioCtx.close().catch(() => {});
       this.audioCtx = null;
     }
-    this.analyser = null;
+    if (this.micSource && this.levelSources.human === this.micSource)
+      this.setLevelSource("human", null);
+    this.micSource = null;
     this.emitStatus();
   }
 
-  private levelDataForState(t: number, s: VoiceState): Uint8Array {
-    if (
-      this.config.realMicEnabled &&
-      this.analyser &&
-      this.micDataArray &&
-      (s === "you-talking" || s === "silence")
-    ) {
-      this.analyser.getByteFrequencyData(
-        this.micDataArray as Uint8Array<ArrayBuffer>,
+  // The one level path every mark branch reads (human, Riff, and the
+  // Shapeshift body). A live source is copied and calibrated; with none, the
+  // lab synthesizes today's levels and host mode reads silence, so the real
+  // app never animates marks on a fake signal. The talk blend runs on top
+  // either way.
+  private levelFor(role: Role, t: number, talk: number): Uint8Array {
+    const buf = this.levelSources[role]?.();
+    if (hasLevels(buf)) {
+      this.sourceLive[role] = true;
+      const cal = this.config.levelCalibration[role];
+      return this.blendTalk(
+        calibrateLevels(buf, this.levelScratch[role], cal),
+        talk,
       );
-      return this.micDataArray;
     }
-    if (s === "dead-mic") return new Uint8Array(1024);
-    if (s === "you-talking") return synthesizeLevelData(t);
-    if (s === "riff-talking") return synthesizeLevelData(t * 0.8 + 4000);
-    if (s === "silence") {
-      const d = synthesizeLevelData(t);
-      for (let i = 0; i < d.length; i++) d[i] = Math.min(d[i], 18);
-      return d;
-    }
-    return new Uint8Array(1024);
+    this.sourceLive[role] = false;
+    if (this.host) return this.levelScratch[role].fill(0);
+    return this.blendTalk(
+      synthesizeLevelData(role === "human" ? t : t * 0.8 + 4000),
+      talk,
+    );
   }
 
   // F2 (morph spec §2): bands = lerp(silence, talking, talk) before
   // computeBands' 0.6/0.4 smoothing. The silence clamp (≤18) eases in and out
   // with the style's talk spring instead of switching the frame the voice
   // state flips (which collapsed Amoeba bulges and Burst rays in ~4 frames).
-  // Mutates the freshly synthesized buffer in place.
+  // With Morph Off, talk is 1 for the active role and 0 otherwise. Mutates
+  // the buffer in place (a fresh synthesized one, or the role's scratch copy).
   private blendTalk(d: Uint8Array, talk: number): Uint8Array {
     const k = Math.max(0, Math.min(1, talk));
     for (let i = 0; i < d.length; i++) {
@@ -1279,20 +1316,19 @@ export class VoiceLabEngine implements SequenceHost {
     return d;
   }
 
-  private riffLevelData(t: number, active: boolean): Uint8Array {
-    const d = synthesizeLevelData(t * 0.8 + 4000);
-    if (!active) for (let i = 0; i < d.length; i++) d[i] = Math.min(d[i], 18);
-    return d;
+  // Onset from a live source: a jump in the smoothed level.
+  private levelOnset(role: Role, t: number, avg: number, lastAt: number) {
+    const delta = avg - this.prevLevelAvg[role];
+    this.prevLevelAvg[role] = avg;
+    return delta > 0.1 && t - lastAt > 120;
   }
 
   private maybeDetectOnset(t: number, avg: number) {
     if (this.config.voiceState !== "you-talking") return;
     let fired = false;
-    if (this.config.realMicEnabled) {
-      const delta = avg - this.prevUserAvg;
-      if (delta > 0.1 && t - this.lastOnsetAt > 120) fired = true;
-      this.prevUserAvg = avg;
-    } else {
+    if (this.sourceLive.human) {
+      fired = this.levelOnset("human", t, avg, this.lastOnsetAt);
+    } else if (!this.host) {
       if (this.nextSyntheticOnsetAt === 0) this.nextSyntheticOnsetAt = t + 200;
       if (t >= this.nextSyntheticOnsetAt) {
         fired = true;
@@ -1314,15 +1350,23 @@ export class VoiceLabEngine implements SequenceHost {
     }
   }
 
-  // Riff has no real-mic input, so its onset pulse is always the synthetic
-  // schedule — the same shape as the human path's synthetic branch above.
-  private maybeDetectRiffOnset(t: number) {
+  // Same shape as the human path: level jumps from a live source, else (lab
+  // only) the synthetic schedule.
+  private maybeDetectRiffOnset(t: number, avg: number) {
     if (this.config.voiceState !== "riff-talking") return;
-    if (this.nextRiffOnsetAt === 0) this.nextRiffOnsetAt = t + 300;
-    if (t >= this.nextRiffOnsetAt) {
+    let fired = false;
+    if (this.sourceLive.riff) {
+      fired = this.levelOnset("riff", t, avg, this.lastRiffOnsetAt);
+    } else if (!this.host) {
+      if (this.nextRiffOnsetAt === 0) this.nextRiffOnsetAt = t + 300;
+      if (t >= this.nextRiffOnsetAt) {
+        fired = true;
+        this.nextRiffOnsetAt = t + 500 + Math.random() * 400;
+      }
+    }
+    if (fired) {
       this.lastRiffOnsetAt = t;
       this.riffOnsetPulse = 1;
-      this.nextRiffOnsetAt = t + 500 + Math.random() * 400;
     }
   }
 
@@ -1486,24 +1530,21 @@ export class VoiceLabEngine implements SequenceHost {
     let bands: number[];
     let level: number;
     let onsetPulse: number;
+    // Morph blends on the style's talk spring; Off on who holds the floor.
+    const talkBlend = morphOn ? talk! : active ? 1 : 0;
     if (role === "human") {
-      const data =
-        morphOn && !(this.config.realMicEnabled && this.analyser)
-          ? this.blendTalk(synthesizeLevelData(t), talk!)
-          : this.levelDataForState(t, active ? "you-talking" : "silence");
+      const data = this.levelFor("human", t, talkBlend);
       this.smoothedUser = computeBands(data, this.smoothedUser);
       bands = BAR_ORDER.map((i) => this.smoothedUser[i]);
       level = bands.reduce((a, b) => a + b, 0) / bands.length;
       if (active) this.maybeDetectOnset(t, level);
       onsetPulse = morphOn ? this.motion.onset.human.value : this.onsetPulse;
     } else {
-      const data = morphOn
-        ? this.blendTalk(synthesizeLevelData(t * 0.8 + 4000), talk!)
-        : this.riffLevelData(t, active);
+      const data = this.levelFor("riff", t, talkBlend);
       this.smoothedAgent = computeBands(data, this.smoothedAgent);
       bands = BAR_ORDER.map((i) => this.smoothedAgent[i]);
       level = bands.reduce((a, b) => a + b, 0) / bands.length;
-      if (active) this.maybeDetectRiffOnset(t);
+      if (active) this.maybeDetectRiffOnset(t, level);
       onsetPulse = morphOn ? this.motion.onset.riff.value : this.riffOnsetPulse;
     }
     this.lastLevel[role] = level;
@@ -1532,15 +1573,12 @@ export class VoiceLabEngine implements SequenceHost {
     if (shapeshiftBody && role === "human") {
       // The shared body replaces both roles' ordinary mark.draw() calls —
       // built here so it has both roles' live band data in the same frame.
-      const riffData = this.blendTalk(
-        synthesizeLevelData(t * 0.8 + 4000),
-        this.motion.talk.riff.value,
-      );
+      const riffData = this.levelFor("riff", t, this.motion.talk.riff.value);
       this.smoothedAgent = computeBands(riffData, this.smoothedAgent);
       const riffBands = BAR_ORDER.map((i) => this.smoothedAgent[i]);
       const riffLevel = riffBands.reduce((a, b) => a + b, 0) / riffBands.length;
       this.lastLevel.riff = riffLevel;
-      if (activeRole === "riff") this.maybeDetectRiffOnset(t);
+      if (activeRole === "riff") this.maybeDetectRiffOnset(t, riffLevel);
       const gRiff: MarkDrawArgs = {
         o,
         t: this.markT,
