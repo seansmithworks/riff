@@ -1,0 +1,144 @@
+// Sketch-rendering constants, matched to the standalone prototype and to
+// DESIGN.md (`wireframeInk` / `accentDecorative`).
+
+export const W = 1440;
+export const H = 900;
+
+export const SKETCH_ROUGHNESS = 0.6;
+export const SKETCH_STROKE_WIDTH = 1.25;
+export const SKETCH_LINE_ROUGHNESS = 0.55;
+export const INK = "#3f3f46";
+export const RIFF_GREEN = "#3FBA6A";
+
+// Per-role voice mark colors (Human voice / Riff voice panels + engine
+// config), Sean's 2026-09-13 DialKit pass.
+export const HUMAN_VOICE_COLOR = "#542dc3";
+export const RIFF_VOICE_COLOR = "#2e8f50";
+
+// Ambient-glow tuner defaults, all consumed by Stage's buildGlow(). Values
+// are Sean's 2026-09-13 DialKit pass.
+// Base alphas (at strength 1) for the two gradient hues, and their combined
+// total — colorMix (0-1) weights this total between them instead of driving
+// two independent sliders, so it can't fall out of sync with strength.
+export const GLOW_CYAN_BASE = 0.35;
+export const GLOW_GREEN_BASE = 0.28;
+export const GLOW_TOTAL_BASE = GLOW_CYAN_BASE + GLOW_GREEN_BASE;
+export const GLOW_DEFAULT_COLOR_MIX = 1;
+// The mask (Stage.tsx) fades the glow out near the card's edges — including
+// the band where the disc itself sits — so this multiplier boosts the
+// gradients' color alphas back up to roughly the pre-mask visual weight.
+export const GLOW_DEFAULT_STRENGTH = 1.5;
+export const GLOW_DEFAULT_SIZE = 1;
+export const GLOW_DEFAULT_HEIGHT = 100;
+export const GLOW_DEFAULT_EDGE_SOFTNESS = 1.5;
+
+export function hashSeed(input: string): number {
+  let hash = 5381;
+  for (let i = 0; i < input.length; i++)
+    hash = (hash * 33) ^ input.charCodeAt(i);
+  return hash >>> 0;
+}
+
+export function firstStroke(doubledPath: string): string {
+  const secondMoveIndex = doubledPath.indexOf("M", 1);
+  return secondMoveIndex === -1
+    ? doubledPath
+    : doubledPath.slice(0, secondMoveIndex);
+}
+
+// Complement of firstStroke: everything from the path's second subpath
+// onward (drawably's own "second hand pass" over the same shape). Empty
+// string when there is no second subpath (e.g. an already-trimmed line).
+export function secondStroke(doubledPath: string): string {
+  const secondMoveIndex = doubledPath.indexOf("M", 1);
+  return secondMoveIndex === -1 ? "" : doubledPath.slice(secondMoveIndex);
+}
+
+export function synthesizeLevelData(t: number): Uint8Array {
+  const data = new Uint8Array(1024);
+  for (let i = 0; i < 410; i++) {
+    const v = 50 + 40 * Math.sin(t / 220 + i * 0.15);
+    data[i] = Math.max(0, Math.min(255, Math.round(v)));
+  }
+  return data;
+}
+
+export const GAIN = 2.5;
+export const BIN_COUNT = 410;
+export const SLICE_COUNT = 5;
+export const SLICE_LEN = Math.floor(BIN_COUNT / SLICE_COUNT);
+export const BAR_ORDER = [3, 1, 0, 2, 4];
+
+export function computeBands(
+  data: Uint8Array | null,
+  prevSmoothed: number[],
+): number[] {
+  if (!data || data.length === 0) return prevSmoothed.map(() => 0.2);
+  const next: number[] = [];
+  for (let i = 0; i < SLICE_COUNT; i++) {
+    let sum = 0;
+    const start = i * SLICE_LEN;
+    for (let j = start; j < start + SLICE_LEN; j++) sum += data[j] ?? 0;
+    const v = Math.min(1, Math.max(0, (sum / SLICE_LEN / 255) * GAIN));
+    next.push(v);
+  }
+  return prevSmoothed.map((prev, i) => prev * 0.6 + next[i] * 0.4);
+}
+
+export function polar(
+  cx: number,
+  cy: number,
+  r: number,
+  a: number,
+): [number, number] {
+  return [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
+}
+
+export function arcPts(
+  cx: number,
+  cy: number,
+  r: number,
+  a0: number,
+  a1: number,
+  segs: number,
+): [number, number][] {
+  const pts: [number, number][] = [];
+  for (let i = 0; i <= segs; i++)
+    pts.push(polar(cx, cy, r, a0 + (a1 - a0) * (i / segs)));
+  return pts;
+}
+
+export function wavePoints(
+  cx: number,
+  cy: number,
+  r: number,
+  amp: number,
+  freq: number,
+  phase: number,
+  n: number,
+): [number, number][] {
+  const pts: [number, number][] = [];
+  for (let i = 0; i <= n; i++) {
+    const a = -Math.PI * 0.85 + (i / n) * Math.PI * 0.7;
+    const wob = Math.sin(i * freq + phase) * amp;
+    pts.push([cx + (r + wob) * Math.cos(a), cy + (r + wob) * Math.sin(a)]);
+  }
+  return pts;
+}
+
+export function roundRectPath(
+  c: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}

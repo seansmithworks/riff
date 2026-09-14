@@ -114,7 +114,7 @@
 
 **Done since the late-night checkpoint:** integration plan drafted, attacked by 2 independent reviewers (generalist + canvas/SDK), revised; `docs/plans/riff-voice-real.html` with mocks and findings ledger.
 
-- [ ] **Sean confirms the plan and 4 calls.** Strawman recs to apply or redline: (1) marks sit bar → marks → caption (option A); (2) wash over the sketch; (3) `/voice-lab` stays public on prod; (4) typed sketches keep the "thinking" glow.
+- [x] **Sean confirms the plan and 4 calls.** (1) Marks placement A: bar → marks → caption. Pill bar kept for now; Sean may revisit whether it's needed. (2) Wash UNDER the sketch: a background layer with the dot grid, drawing sits on top. The plan assumed "over", so Phase 2/3 briefs must put the wash behind React Flow nodes, not the z-10 overlay. Sub-fork still open: frames stay opaque white vs see-through frames so ink sits on dots + wash. (3) `/voice-lab` stays public on prod, for now. (4) Typed sketches keep the thinking glow.
 - [ ] Phase 0: worktree `feat-voice-real` (port 3330) off `feat/stream`; merge `feat/voice-lab` (BACKLOG.md conflict only) and `origin/main` (clean, adds `51051bf` `e39b54f`); symlink `node_modules` to feat-voice-lab's real install.
 - [ ] Phase 1: tooltip. Native `title` out of VoiceBar icon buttons and Header; shared app tooltip.
 - [ ] Phase 2: voice layer on real audio. Engine host mode first (`levelFor(role)` at every `drawRole` branch, cleared transparent canvas, job channel off, `tuning.ts` single source, calibration dials), then real-app mount. Sean live mic review.
@@ -122,3 +122,115 @@
 - [ ] Phase 4: ship on Sean's nod (fast-forward push, curl prod, one live session).
 - [ ] Riff logo overlaps the first frame's top-left on a fitted sketch (seen in replay captures). Parked.
 - [ ] v2 bridges after ship: Pen nib bleeds paper, Burst nod at first ink, tip sparks on screen close. Parked.
+
+## 2026-09-11 (voice lab session, wrap-continue)
+
+**Carried (on-objective, `feat/voice-lab` @ `c230553`, pushed, preview Ready):**
+
+- [x] **Glow hard edge:** the ambient glow still ends in a hard line at the stage card bottom (`tips-closeup.png`, `resp-800x600.png`). Make it fade out inside the canvas bounds. Done: mask fade `f403a3e`.
+- [x] **Riff Arcs over-wrap into scribble loops** (`arcs-flex-a/b.png`) and lose the three separate wavy lines Sean liked. Strawman: default sweep ~200°, 3 distinct arcs with a visible gap. Sean redlines in DialKit. Done: strawman `8ec175e`.
+- [ ] **DECIDE OR KILL: merge `feat/voice-lab` → main** (= prod deploy of `/voice-lab`). Preview: https://riff-git-feat-voice-lab-seansmithworks.vercel.app/voice-lab. Sean (2026-09-11 late): yes, after his dial pass; still needs the per-deploy nod.
+- [ ] **DECIDE OR KILL: origin + controls forks.** Voice-mark origin bottom-center (built default) vs bottom-right; white pill (default) vs V10 disc. Canvas thread `7b739fff` stays open.
+- [ ] **Phases 1–3: bring the winning voice FX into the real voice UI.** Voice × job are concurrent channels. The plan lived in the session-06199eed scratchpad (`sketch-shader-research.md`, tmp); re-derive from the `/voice-lab` engine if it's gone.
+- [ ] **DECIDE OR KILL: `feat/load-logo` @ `0f52726`**, carried 4× since 2026-09-10.
+
+**Parked (off-objective):**
+
+- [ ] Human marks 04 Hatch EQ, 05 Speech Balloon, 07 Stipple Spray and 09 Orbit Ticks read thin. Sean's taste call.
+- [ ] Voice Marks Lab artifact `42d1b072` and canvas board 15 still use the old exclusive-sketching model. Superseded by `/voice-lab`.
+- [ ] Root `layout.tsx` wraps every route in `<CopilotKit>`, so `/api/copilotkit` 500s on `/voice-lab` without keys and masks real errors while tuning.
+- [ ] `feat/voice-ui` Conversation Bar (`cdd7ddd`) is a baseline, unmerged.
+- [ ] Sean records the 60–90s cut from `docs/SHOT-LIST-90s.md` (original refresh objective).
+
+## 2026-09-11 (voice lab tuning session, wrap-continue)
+
+**Carried (on-objective, `feat/voice-lab` @ `6d9f8be`, pushed):**
+
+- [ ] **DialKit panel separation.** Sean: "the sparks/glow panel needs to be a bit better separated with…" (message cut off). Strawman: more space and bolder headings between panels, plus one Sparks panel directly under Glow (Cinders on/off, tip spark rate, cinder cap). Moving controls changes persist keys, so carry his saved values over.
+- [ ] **Bake Sean's dial pass in as defaults.** He pastes DialKit values. Saved localStorage values override code defaults, so check the new defaults in a clean browser.
+- [ ] **Riff Arcs 200° strawman** (`8ec175e`): no reaction yet. Sean redlines it in DialKit.
+
+Done this session: glow hard edge via mask (`f403a3e`), Glow slider set (Strength/Size/Height/Color Mix/Edge Softness) + working Ambient Glow toggle (`1065ab9`, `6d9f8be`), DialKit persist on every lab panel.
+
+## 2026-09-12 (sequence exploration)
+
+- [x] 10 sequence presets built
+- [x] recording of all 10 sent to Sean
+- [ ] Sean picks a preset direction
+- [x] Fluid "shader" gradient glow (blue/green, tied to voice activity) (`e9c2b94`, `83cff90`)
+- [x] Color semantics: human = blue, Riff = yellow, overlap = green (`88638d5` role-color dial)
+- [x] New Amoeba mark, single wobbly loop (shipped as default human mark per Sean's correction; Riff keeps Burst) (`e9c2b94`, `ee70469`)
+- [x] Center disc squash & stretch (vertical for human, horizontal for Riff) (`e9c2b94`)
+
+**Parked (off-objective):**
+
+- [ ] DialKit panel separation — Sean's cut-off point ("sparks/glow panel needs to be better separated with…"), he no longer recalls it; revisit if it resurfaces.
+
+### 2026-09-12 (ink-and-wash sketchbook, Phase A)
+
+- [x] Dot-grid paper: `DotGrid` addressable buffer, dirty-dot redraws, new Paper panel (Pitch/Dot size/Base opacity/on-off)
+- [x] Glow as texture: density field tints/brightens dot-grid paper (Style: Wash/Dots/Both)
+- [x] Watercolor treatment: wet edge, granulation, 2-3 glazes, wet-in-wet boundary warp
+- [x] Role-color dominance fix: "Role color" dial + `hueBiasExplicit` so presets 1/4 read blue/yellow/green by default
+- [x] Stroke bleed primitive: `bleedAlongPath` + single ink-advance callback hook in `frames.ts`
+- [x] Reviewer nit: Amoeba's smear now widens outline reach like Burst's rays
+- [x] **Phase B: sparks build the sketch on the grid** — particle landing snaps to nearest grid dot, speculative tiers draw as lit-dot skeletons, dots fade to paper under finished ink (voice-lab-dotgrid-addendum.md §3). `src/lib/voiceLab/build.ts` (new) + `frames.ts`/`engine.ts` integration; docs/voice-lab-sequences.md §9.
+- [x] Phase B deferred: no full acceptance-evidence capture (perf ms/frame profiling, per-preset build-vs-clear-beat log, before/after video recordings) — only spot-checked via screenshots and `tsc --noEmit`. Revisit if Sean wants the full evidence pass before shipping. (evidence pass done: build-vs-clear margins logged for 6 presets, 3.4ms avg/5.6ms max per frame at Juice, recordings in the orchestrator scratchpad)
+- [ ] Phase B deferred: build particles and drift cinders both render in plain ink color as short line segments — visually similar at a glance; a distinct spark color/shape would read the "sparks become the sketch" narrative more clearly.
+- [ ] Phase B deferred: nib highlight on tier 0/1 arrival (width ×1.6, 120ms fade) not implemented — heads currently draw with no extra highlight on arrival.
+- [ ] Phase B deferred: React Flow real-app integration (plan §6 risk 3) — Canvas2D build layer doesn't yet track live node screen coords through a `fitView` animation.
+
+### wrap-continue (2026-09-12 afternoon)
+
+**Carried (on-objective):**
+
+- [ ] Sean picks a base choreography — strawman in place: preset "B · Blend" (Mm-hm turn-taking + Catch sparks, `32b61be`, default on fresh installs). Next thread: apply his redlines, don't re-ask.
+- [x] Sean's dial pass → bake DialKit values as code defaults (verify in a clean browser; saved localStorage overrides defaults). `6771c2c`
+- [ ] Merge feat/voice-lab → main (= prod deploy; per-deploy nod), then Phases 1–3: bring the winning system into the real voice UI. Known blocker: React Flow node coords move during fitView; evolve = diff re-ink, not rebuild.
+- [ ] DECIDE OR KILL (carried 2× since 2026-09-11): voice-mark origin bottom-center (built default) vs bottom-right; white pill vs disc. Disc squash assumes the disc.
+- [ ] DECIDE OR KILL (carried 5× since 2026-09-10): feat/load-logo @ 0f52726 — clean SVG export, draw-in intro only, or kill.
+
+**Parked (off-objective):** see the Phase B deferred items above and the panel-separation item; not duplicated here.
+
+### voice-lab morph transition system (2026-09-12, feat/voice-lab)
+
+Build order from `docs/voice-lab-morph-spec.md`, one commit per step:
+
+- [x] Step 1: F0 fixes (landing white-card flash, landing timestamp ownership, construction dots after clear) `723f60a`
+- [x] Step 2: `morph.ts` motion primitives + F2–F7 engine/marks/fluidGlow/frames integration `8c8f388` (combined with Step 3 below — MORPH_STYLES' Record type needs all 5 styles to exist for the engine wiring to compile)
+- [x] Step 3: 5 Morph styles `8c8f388` — Shapeshift is a simplified crossfade of the outgoing loop against the incoming ray fan (drawShapeshiftBody), not the spec's literal shared-topology K-slot resample
+- [x] Step 4: MorphPanel, `M`/`Shift+M` hotkey, caption label `b254698`
+- [x] Step 5: Evidence recordings + ffmpeg acceptance checks in `docs/evidence/morph/` (mobile only, untracked; desktop 1440px skipped, time)
+- [x] Fix wave after reviewer rejection (2026-09-12): prod-gated engine hook + spec committed `6284fee`; live Morph dials `88a3332`; Shapeshift as one K-slot shared-topology body `5ec6899`; Relay gather/hold/release timeline + disc pivot + landing bead `115772a`; spring period clamp (every spring ran ≥1s) `02f4c44`; F2 talk-blended bands `a01de94`; onset pulses stuck at 1 under Morph (cinder flood) `8d4d4b5`
+- [ ] Morph F5 not wired: every style defines `wash.overlap`, but nothing in `engine.ts`/`fluidGlow.ts` reads it, so riff blob anchors never lerp toward human (spec §2 F5) — found in review of `c7c02ae..a4966b0`
+- [ ] Elastic wind-up→settle uses `setTimeout` (`morph.ts` ~665), off the frame clock; a backgrounded tab can flip the target mid-freeze and jump on refocus — move it onto `now()`
+- [ ] Sean's design call: barge-in transitions (T6/T9) are specced ≤150ms, so Shapeshift/Relay/Ink & Wash still show one visible step on interrupt — slow them for smoothness, or keep them snappy?
+- [ ] Sean picks a Morph style (strawman default: Ink & Wash; fork: one creature [Shapeshift/Elastic] vs two speakers [Relay/Ink & Wash])
+- [ ] Fresh load comes up paused (VoicePanel mount stops autoplay) — awaiting Sean's nod, not fixed
+- [ ] Landing particle and ink-bleed color follows the wrong role (`activeRoleAndMarkId` reports human during silence) — noticed, not fixed
+- [ ] `burstUnderlay` is dead (typed and set by presets but never read) — noticed, not fixed
+- [ ] Burst boil runs at ~11Hz, above the reduced-motion 3Hz guidance — noticed, not fixed
+- [x] Lab: Stream prototype (A+B, steady pen default, batch baseline) `f17f7f1`
+- [ ] Sean feels stream vs batch in lab → go/no-go on real pipeline A+B (generate.ts streaming, outline head, draft artifact, draw-in)
+- [ ] Option D pencil guesses: held (Sean 2026-09-13: not yet)
+- [x] Pen pace: steady (Sean 2026-09-13) — superseded by **bursts** (his saved Stream panel; baked as default 2026-09-13)
+
+### wrap-continue (2026-09-13 night)
+
+**Done since the 2026-09-12 checkpoint:** dial pass baked `6771c2c`; Morph system + fix wave (`723f60a`…`180828f`); Stream prototype `f17f7f1`/`c4fe466` + review fixes `730e8c4` (clear never cuts ink, hit-stop once per job). Research doc committed: `docs/riff-progressive-sketch-options.md` (also artifact 278d5f70).
+
+- [x] Sean feels stream vs batch → go/no-go on the real pipeline: **GO** (Sean 2026-09-13: "trying for real is a good next step").
+
+**Carried (on-objective), each with a strawman to apply unless Sean redlines:**
+
+- [x] Bake Sean's 2026-09-13 DialKit pass into `/voice-lab` defaults. Values: project memory `dialkit-pass-2026-09-13.json` (read from desktop Chrome on the Vercel preview origin). Verify in a clean browser. **Baked (panels + engine agree), clean-browser verified; evidence untracked in `docs/evidence/defaults/2026-09-13/`.**
+- [x] DECIDE OR KILL, pen pace: he accepted "steady" on 2026-09-13 but his saved Stream panel says `bursts`. **Decided: bursts (Sean 2026-09-13), baked as default.**
+- [x] Morph style (carried 1×): strawman **Ink & Wash** (kept selected and tuned in his 2026-09-13 pass: stagger 0.15, wetBloom 0.28), which implies two speakers. **Applied: Ink & Wash default (Sean 2026-09-13).**
+- [x] Base choreography (carried 2× since 2026-09-12): strawman **Blend**, his saved sequence in both passes. **Applied: Blend default, panel + engine (Sean 2026-09-13).**
+- [ ] Barge-in speed: strawman keep snappy (spec ≤150ms). Apply unless redlined.
+- [x] Fresh load comes up paused: strawman fix it in the bake commit (VoicePanel mount stops autoplay). **Fixed: VoicePanel's mount push no longer stops autoplay; only a changed voice pick pauses.**
+- [ ] Real pipeline A+B ("the stream"): plan it (adversarial-plan), then build in the real app. Fireworks `stream: true` + closed-object tracker, NDJSON route, `outline` head (keep/changed/new) before `screens`, `platform` first, growing draft artifact, stable screen keys + frame the camera once, draw-in ported from the lab, flows held until all nodes land, abort superseded streams. First spike: confirm streaming with `response_format` json_schema still gives a first chunk at ~1.3s. Base-branch call belongs to the plan: `feat/voice-lab` is 47 ahead / 0 behind main; `feat/voice-ui` is 10 ahead / 2 behind.
+- [ ] Merge feat/voice-lab → main (= prod, per-deploy nod), then Phases 1–3 into the real voice UI (carried 2× since 2026-09-12). React Flow fitView coords remain the Phase-3 blocker.
+- [x] DECIDE OR KILL (carried 3× since 2026-09-11): origin center vs right, pill vs disc. **Closed: center; no pill, no disc (Sean 2026-09-13).** Defaults: `origin: center`, `centerCircle` off (panel + engine).
+
+**Parked (off-objective):** feat/load-logo @ `0f52726` (carried 6× since 2026-09-10; kill at the next wrap if still untouched); Option D pencil guesses (held by Sean); options C fan-out and E edit-ops (skipped, cost and consistency); Morph F5 overlap, Elastic timer, and the noticed-not-fixed items above (not duplicated).
