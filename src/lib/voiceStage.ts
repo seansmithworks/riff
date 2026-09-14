@@ -1,6 +1,9 @@
 // Pure helpers for the real app's voice layer (VoiceStage.tsx): where the
-// lab's 1440x900 stage sits over the bar. No imports, so `node --test` loads
-// this file directly.
+// lab's 1440x900 stage sits over the bar, how the session's state maps to
+// the engine's, and the listening gate. Type-only imports, so `node --test`
+// loads this file directly.
+import type { VoiceState as EngineVoiceState } from "./voiceLab/types";
+import type { VoiceState as AppVoiceState } from "../components/VoiceBar";
 
 // The marks' reach around the engine's origin, in stage px at scale 1,
 // measured from ink pixels at 1440x900 (2026-09-13): Burst at full level
@@ -52,4 +55,54 @@ export function stageLayout(p: {
     height: Math.round(p.stageH * scale),
     captionLift: Math.round((p.marksBelow + p.marksAbove) * scale + 2 * p.gap),
   };
+}
+
+// Riff speaking -> Burst. Listening -> Amoeba while the gate hears input,
+// silence otherwise. Mic blocked -> dead mic. Everything else -> idle. A dev
+// fixture has no audio to gate on, so its listening state shows Amoeba.
+export function engineVoiceState(
+  app: AppVoiceState,
+  o: { fixture: boolean; talking: boolean },
+): EngineVoiceState {
+  switch (app) {
+    case "speaking":
+      return "riff-talking";
+    case "listening":
+    case "silence":
+      if (o.fixture) return app === "listening" ? "you-talking" : "silence";
+      return o.talking ? "you-talking" : "silence";
+    case "mic-blocked":
+      return "dead-mic";
+    default:
+      return "idle";
+  }
+}
+
+export type TalkGate = { talking: boolean; lastAboveAt: number };
+
+// Opens the moment the level reaches threshold; closes once it has stayed
+// below for releaseMs.
+export function stepTalkGate(
+  gate: TalkGate,
+  level: number,
+  now: number,
+  cfg: { threshold: number; releaseMs: number },
+): boolean {
+  if (level >= cfg.threshold) {
+    gate.lastAboveAt = now;
+    gate.talking = true;
+  } else if (gate.talking && now - gate.lastAboveAt >= cfg.releaseMs) {
+    gate.talking = false;
+  }
+  return gate.talking;
+}
+
+// Mean of a frequency buffer, 0-1 (the SDK's getVolume math). Bytes are
+// 0-255; a Float32Array is already 0-1.
+export function inputLevel(buf: ArrayLike<number> | null | undefined): number {
+  if (!buf || buf.length === 0) return 0;
+  const unit = buf instanceof Float32Array ? 1 : 1 / 255;
+  let sum = 0;
+  for (let i = 0; i < buf.length; i++) sum += buf[i];
+  return Math.max(0, Math.min(1, (sum / buf.length) * unit));
 }

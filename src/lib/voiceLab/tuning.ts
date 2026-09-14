@@ -85,6 +85,11 @@ export const TUNED: {
   // Real-audio calibration, applied only to injected level data (never the
   // lab's synthetic levels). Neutral until Sean tunes it on a live session.
   calibration: Record<Role, LevelCalibration>;
+  // Real-app listening gate (VoiceStage.tsx): Amoeba shows while the input
+  // level (inputLevel in voiceStage.ts: the mean of the SDK's frequency
+  // bins, 0-1) is at or above threshold, and holds releaseMs after it drops
+  // so it doesn't flicker between syllables. Starting values, uncalibrated.
+  listening: { threshold: number; releaseMs: number };
 } = {
   // Amoeba = the human mark, Burst = Riff.
   voiceRoles: {
@@ -169,6 +174,7 @@ export const TUNED: {
     human: { gain: 1, floor: 0, curve: 1 },
     riff: { gain: 1, floor: 0, curve: 1 },
   },
+  listening: { threshold: 0.06, releaseMs: 350 },
 };
 
 // A level buffer counts as a source only when it holds data: the SDK hands

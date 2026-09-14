@@ -2,21 +2,31 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { VoiceLabEngine } from "@/lib/voiceLab/engine";
+import { VoiceLabEngine, type LevelBuffer } from "@/lib/voiceLab/engine";
 import { W, H } from "@/lib/voiceLab/constants";
 import { FLUID_W, FLUID_H } from "@/lib/voiceLab/fluidGlow";
 import { buildGlow } from "@/lib/voiceLab/glowMask";
+import {
+  REDUCED_MOTION_PRESET,
+  SEQUENCE_BY_ID,
+} from "@/lib/voiceLab/sequences";
 import { TUNED } from "@/lib/voiceLab/tuning";
 import {
   MARKS_ABOVE,
   MARKS_BELOW,
   MARKS_GAP,
+  engineVoiceState,
+  inputLevel,
   stageLayout,
+  stepTalkGate,
+  type TalkGate,
 } from "@/lib/voiceStage";
 import type { VoiceState } from "./VoiceBar";
 
 // The bar's chat-open slide (VoiceBar.tsx, 260ms) plus a frame of margin.
 const SLIDE_FOLLOW_MS = 320;
+// How often the listening gate samples the input level.
+const GATE_SAMPLE_MS = 50;
 
 // The lab's edge mask, so the wash fades out before the stage's bounds.
 const WASH_MASK = buildGlow(
@@ -30,16 +40,20 @@ const WASH_MASK = buildGlow(
   },
 ).mask;
 
-// The real app's voice layer: the lab engine in host mode. The engine runs
-// in the lab's fixed 1440x900 stage, anchored so its mark origin sits over
-// the bar and scaled to the viewport width. Two layers, neither taking
-// pointer events: the wash is portaled into page.tsx's slot under the
-// canvas content (React Flow's dot grid paints over it), and the marks sit
-// above the sketch, below the bar and caption. Everything per-frame happens
-// inside the engine; React only forwards changes.
+// The real app's voice layer: the lab engine in host mode, driven by the
+// live ElevenLabs session. The engine runs in the lab's fixed 1440x900 stage,
+// anchored so its mark origin sits over the bar and scaled to the viewport
+// width. Two layers, neither taking pointer events: the wash is portaled
+// into page.tsx's slot under the canvas content (React Flow's dot grid
+// paints over it), and the marks sit above the sketch, below the bar and
+// caption. Everything per-frame happens inside the engine; React only
+// forwards state changes.
 export function VoiceStage({
+  voiceState,
+  fixture,
   getInputData,
   getOutputData,
+  userTurnCount,
   barRef,
   rightInset,
   onCaptionLift,
@@ -58,17 +72,31 @@ export function VoiceStage({
   const marksRef = useRef<HTMLCanvasElement | null>(null);
   const washStageRef = useRef<HTMLDivElement | null>(null);
   const washRef = useRef<HTMLCanvasElement | null>(null);
+  const engineRef = useRef<VoiceLabEngine | null>(null);
   const followRef = useRef<(ms: number) => void>(() => {});
+  const gateRef = useRef<TalkGate>({ talking: false, lastAboveAt: 0 });
 
-  // Latest session inputs, read inside the engine frame.
-  const inputs = useRef({ getInputData, getOutputData });
+  // Latest session inputs, read inside the engine frame and the gate timer.
+  const inputs = useRef({ voiceState, getInputData, getOutputData });
   const onCaptionLiftRef = useRef(onCaptionLift);
   useEffect(() => {
-    inputs.current = { getInputData, getOutputData };
+    inputs.current = { voiceState, getInputData, getOutputData };
     onCaptionLiftRef.current = onCaptionLift;
   });
 
   const [washSlot, setWashSlot] = useState<HTMLElement | null>(null);
+
+  function humanData(): LevelBuffer | null {
+    return inputs.current.getInputData();
+  }
+
+  function riffData(): LevelBuffer | null {
+    // Riff's level follows the session's speaking mode, not the audio: the
+    // SDK fades interrupted speech out over 2s, and the mark shouldn't.
+    return inputs.current.voiceState === "speaking"
+      ? inputs.current.getOutputData()
+      : null;
+  }
 
   useEffect(() => {
     setWashSlot(document.getElementById("riff-voice-wash-slot"));
@@ -84,9 +112,10 @@ export function VoiceStage({
       return;
 
     const engine = new VoiceLabEngine(marks, undefined, { host: true });
+    engineRef.current = engine;
     engine.attachGlowFluid(wash);
-    engine.setLevelSource("human", () => inputs.current.getInputData());
-    engine.setLevelSource("riff", () => inputs.current.getOutputData());
+    engine.setLevelSource("human", () => humanData());
+    engine.setLevelSource("riff", () => riffData());
 
     // The anchor is read on resize and during the chat slide only, never
     // blind every frame; the stages move by transform.
@@ -141,13 +170,64 @@ export function VoiceStage({
       if (followId !== null) cancelAnimationFrame(followId);
       followRef.current = () => {};
       engine.destroy();
+      engineRef.current = null;
     };
+    // humanData/riffData only read refs, so the first closures stay current.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [washSlot, barRef]);
 
   // The bar slides when the chat panel opens or closes.
   useEffect(() => {
     followRef.current(SLIDE_FOLLOW_MS);
   }, [rightInset]);
+
+  // Session state -> engine state. While listening, a timer gates Amoeba on
+  // the input level; every other state sets the engine once.
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    const gate = gateRef.current;
+    const apply = () =>
+      engine.setVoiceState(
+        engineVoiceState(voiceState, { fixture, talking: gate.talking }),
+      );
+    const gated =
+      !fixture && (voiceState === "listening" || voiceState === "silence");
+    if (!gated) {
+      gate.talking = false;
+      apply();
+      return;
+    }
+    const id = setInterval(() => {
+      stepTalkGate(
+        gate,
+        inputLevel(humanData()),
+        performance.now(),
+        TUNED.listening,
+      );
+      apply();
+    }, GATE_SAMPLE_MS);
+    apply();
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceState, fixture, washSlot]);
+
+  // The yield squash fires on the server's end of the user's turn (a new
+  // user transcript), not on every pause in speech.
+  const turnsRef = useRef(userTurnCount);
+  useEffect(() => {
+    if (userTurnCount === turnsRef.current) return;
+    turnsRef.current = userTurnCount;
+    const engine = engineRef.current;
+    if (!engine) return;
+    const preset = engine.reducedMotionActive()
+      ? REDUCED_MOTION_PRESET
+      : SEQUENCE_BY_ID[engine.getActiveSequenceId()];
+    engine.triggerAnticipation(
+      preset.anticipation.depth,
+      preset.anticipation.ms,
+    );
+  }, [userTurnCount]);
 
   return (
     <>
