@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/store";
 import { SAMPLE_WIREFRAME, SAMPLE_FLOW } from "@/lib/samples";
+import { Tooltip } from "./Tooltip";
 
 // Shared "has the session started" flag: mic tap, sent text, or a loaded
 // artifact all dock the logo (and, once docked, keep the empty-state canvas
@@ -37,22 +38,23 @@ function IconButton({
   children: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={label}
-      title={label}
-      className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
-        disabled
-          ? "cursor-not-allowed text-zinc-300"
-          : active
-            ? "text-[#3FBA6A] hover:bg-zinc-100"
-            : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
-      }`}
-    >
-      {children}
-    </button>
+    <Tooltip label={label} side="bottom">
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        aria-label={label}
+        className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
+          disabled
+            ? "cursor-not-allowed text-zinc-300"
+            : active
+              ? "text-[#3FBA6A] hover:bg-zinc-100"
+              : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+        }`}
+      >
+        {children}
+      </button>
+    </Tooltip>
   );
 }
 

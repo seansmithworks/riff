@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Keyboard, Mic, PencilLine, X } from "lucide-react";
 import { LevelMeter } from "./LevelMeter";
+import { Tooltip } from "./Tooltip";
 import { VoiceHint, type HintKind } from "./VoiceHint";
 
 export type VoiceState =
@@ -88,17 +89,18 @@ function IconButton({
   children: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1F7A4D] focus-visible:outline-none ${
-        active ? "bg-zinc-100 text-[#1F7A4D]" : "text-zinc-600"
-      }`}
-    >
-      {children}
-    </button>
+    <Tooltip label={label} side="top">
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={label}
+        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1F7A4D] focus-visible:outline-none ${
+          active ? "bg-zinc-100 text-[#1F7A4D]" : "text-zinc-600"
+        }`}
+      >
+        {children}
+      </button>
+    </Tooltip>
   );
 }
 
