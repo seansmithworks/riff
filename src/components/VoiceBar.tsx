@@ -228,13 +228,9 @@ export function VoiceBar({
   const showX = layout !== "idle";
   const showCaptionSlot = !chatOpen && (hintKind !== null || caption !== null);
 
-  const glowClass = job
-    ? "riff-glow-thinking"
-    : voiceState === "listening" || voiceState === "silence"
-      ? "riff-glow-listening"
-      : voiceState === "speaking"
-        ? "riff-glow-speaking"
-        : "opacity-5";
+  // Listening and speaking light the voice layer's wash (VoiceStage.tsx);
+  // this glow only keeps the thinking state for typed sketches.
+  const glowClass = job ? "riff-glow-thinking" : "opacity-5";
 
   return (
     <>
