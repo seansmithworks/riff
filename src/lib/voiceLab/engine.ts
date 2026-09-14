@@ -306,6 +306,11 @@ export class VoiceLabEngine implements SequenceHost {
     human: null,
     riff: null,
   };
+  // Sources that skip the talk-gate clamp (only the lab's Real mic).
+  private levelBypassTalkGate: Record<Role, boolean> = {
+    human: false,
+    riff: false,
+  };
   // Per-role copy of injected data (the SDK reuses its own buffer).
   private levelScratch: Record<Role, Uint8Array> = {
     human: new Uint8Array(1024),
@@ -1257,8 +1262,13 @@ export class VoiceLabEngine implements SequenceHost {
   // Feeds one role's marks from real frequency data instead of the lab's
   // synthetic levels. The getter is read inside the engine frame, never from
   // React. Null clears it.
-  setLevelSource(role: Role, source: LevelSource | null) {
+  setLevelSource(
+    role: Role,
+    source: LevelSource | null,
+    options: { bypassTalkGate?: boolean } = {},
+  ) {
     this.levelSources[role] = source;
+    this.levelBypassTalkGate[role] = !!source && !!options.bypassTalkGate;
     this.wake();
   }
 
@@ -1282,7 +1292,8 @@ export class VoiceLabEngine implements SequenceHost {
         analyser.getByteFrequencyData(data);
         return data;
       };
-      this.setLevelSource("human", this.micSource);
+      // Raw live levels in every voice state, as the toggle always gave.
+      this.setLevelSource("human", this.micSource, { bypassTalkGate: true });
       this.config.realMicEnabled = true;
       this.emitStatus();
       return true;
@@ -1318,10 +1329,8 @@ export class VoiceLabEngine implements SequenceHost {
     if (hasLevels(buf)) {
       this.sourceLive[role] = true;
       const cal = this.config.levelCalibration[role];
-      return this.blendTalk(
-        calibrateLevels(buf, this.levelScratch[role], cal),
-        talk,
-      );
+      const data = calibrateLevels(buf, this.levelScratch[role], cal);
+      return this.levelBypassTalkGate[role] ? data : this.blendTalk(data, talk);
     }
     this.sourceLive[role] = false;
     if (this.host) return this.levelScratch[role].fill(0);
