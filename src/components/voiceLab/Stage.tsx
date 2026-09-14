@@ -1,12 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { VoiceLabEngine, type EngineStatus } from "@/lib/voiceLab/engine";
+import {
+  VoiceLabEngine,
+  type EngineStatus,
+  type LevelBuffer,
+} from "@/lib/voiceLab/engine";
 import { Autoplay } from "@/lib/voiceLab/autoplay";
 import { W, H, GLOW_TOTAL_BASE } from "@/lib/voiceLab/constants";
 import { FLUID_W, FLUID_H } from "@/lib/voiceLab/fluidGlow";
 import { EngineContext, type EngineHandle } from "./EngineContext";
-import { VOICE_STATES, VOICE_STATE_LABELS } from "@/lib/voiceLab/types";
+import {
+  VOICE_STATES,
+  VOICE_STATE_LABELS,
+  type Role,
+} from "@/lib/voiceLab/types";
 
 type GlowOrigin = "center" | "right";
 
@@ -99,10 +107,17 @@ export default function Stage({ children }: { children: React.ReactNode }) {
     // Evidence-capture hook (spec §5 acceptance: "eval output of getMorph()").
     // Dev builds only — /voice-lab is public on Vercel, so production builds
     // never expose the engine on window.
+    // __riffLabLevel(role, data | null) pushes a fixed frequency buffer
+    // (Uint8Array 0-255 or Float32Array 0-1) through the engine's level
+    // source, so headless evidence can drive the marks without a mic.
     if (process.env.NODE_ENV !== "production") {
-      (
-        window as unknown as { __voiceLabEngine?: VoiceLabEngine }
-      ).__voiceLabEngine = engine;
+      const w = window as unknown as {
+        __voiceLabEngine?: VoiceLabEngine;
+        __riffLabLevel?: (role: Role, data: LevelBuffer | null) => void;
+      };
+      w.__voiceLabEngine = engine;
+      w.__riffLabLevel = (role, data) =>
+        engine.setLevelSource(role, data ? () => data : null);
     }
     const autoplay = new Autoplay(engine);
     engine.onStatusChange(setStatus);

@@ -17,13 +17,6 @@ import {
   W,
   H,
   INK,
-  HUMAN_VOICE_COLOR,
-  RIFF_VOICE_COLOR,
-  GLOW_DEFAULT_STRENGTH,
-  GLOW_DEFAULT_SIZE,
-  GLOW_DEFAULT_HEIGHT,
-  GLOW_DEFAULT_COLOR_MIX,
-  GLOW_DEFAULT_EDGE_SOFTNESS,
   synthesizeLevelData,
   computeBands,
   BAR_ORDER,
@@ -117,6 +110,7 @@ import {
   type RolePose,
   type SpringSpec,
 } from "./morph";
+import { TUNED, calibrateLevels, hasLevels } from "./tuning";
 
 function hexToRgbTuple(hex: string): [number, number, number] {
   const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex.trim());
@@ -124,97 +118,98 @@ function hexToRgbTuple(hex: string): [number, number, number] {
   return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
 }
 
+// Lab defaults: Sean's tuned values (tuning.ts), fresh objects every call
+// (panels mutate some of them in place).
 export function defaultEngineConfig(): EngineConfig {
+  const t = TUNED;
   return {
     voiceState: "idle",
     jobState: "none",
-    originSide: "center",
-    centerCircleOn: false,
-    onsetRingsOn: true,
-    ambientGlowOn: true,
-    glowStrength: GLOW_DEFAULT_STRENGTH,
-    glowSize: GLOW_DEFAULT_SIZE,
-    glowHeight: GLOW_DEFAULT_HEIGHT,
-    glowColorMix: GLOW_DEFAULT_COLOR_MIX,
-    glowEdgeSoftness: GLOW_DEFAULT_EDGE_SOFTNESS,
-    cindersOn: true,
-    showFramesOn: true,
+    originSide: t.toggles.origin,
+    centerCircleOn: t.toggles.centerCircle,
+    onsetRingsOn: t.toggles.onsetRings,
+    ambientGlowOn: t.glow.ambientGlow,
+    glowStrength: t.glow.strength,
+    glowSize: t.glow.size,
+    glowHeight: t.glow.height,
+    glowColorMix: t.glow.colorMix,
+    glowEdgeSoftness: t.glow.edgeSoftness,
+    cindersOn: t.toggles.cinders,
+    showFramesOn: t.toggles.showFrames,
     // Speaker -> mark assignment: Riff = Burst (green), Human = Amoeba (violet).
-    humanMarkId: "amoeba",
-    riffMarkId: "burst",
-    humanColor: HUMAN_VOICE_COLOR,
-    riffColor: RIFF_VOICE_COLOR,
+    humanMarkId: t.voiceRoles.human.mark,
+    riffMarkId: t.voiceRoles.riff.mark,
+    humanColor: t.voiceRoles.human.color,
+    riffColor: t.voiceRoles.riff.color,
     markConfigsByRole: {
       human: defaultMarkConfigs(),
       riff: defaultMarkConfigs(),
     },
-    cinderConfig: {
-      cinderCap: 500,
-      windStrength: 1.0,
-      burstSize: 40,
-      landDurationMs: 900,
-      tipSparkRate: 0.8,
-    },
+    cinderConfig: { ...t.cinders },
     reducedMotion: false,
     realMicEnabled: false,
-    glowStyle: "both",
-    glowHumanColor: "#2F6FED",
-    glowRiffColor: "#F5C518",
-    glowMixSoftness: 0.85,
-    glowFlowSpeed: 1.5,
-    glowBlobScale: 1.6,
-    glowBlobCount: 3,
-    glowEdgeAmount: 0.35,
-    glowGrainAmount: 0.3,
-    glowLayers: 2,
-    glowRoleColor: 0.8,
-    glowBleedAmount: 0.9,
-    paperOn: true,
-    paperPitch: 12,
-    paperDotSize: 1,
-    paperBaseOpacity: 0.3,
-    buildConfig: {
-      flightSpeed: 1,
-      arc: 0.18,
-      densityFrame: 3,
-      densityBlocks: 3,
-      densityDetails: 3,
-      tierGapMs: 120,
-      speculativeFrame: "construction",
-      guideDots: "dots",
-      arrival: "comet",
-      snapToGrid: true,
-      dotPop: 0.6,
-      waitEmberRate: 8,
-    },
-    discStretchAmount: 0.35,
-    discSquishBounce: 0.35,
-    discWobble: 0.15,
+    glowStyle: t.glow.style,
+    glowHumanColor: t.glow.fluidHumanColor,
+    glowRiffColor: t.glow.fluidRiffColor,
+    glowMixSoftness: t.glow.fluidMixSoftness,
+    glowFlowSpeed: t.glow.fluidFlowSpeed,
+    glowBlobScale: t.glow.fluidBlobScale,
+    glowBlobCount: t.glow.fluidBlobCount,
+    glowEdgeAmount: t.glow.fluidEdge,
+    glowGrainAmount: t.glow.fluidGrain,
+    glowLayers: t.glow.fluidLayers,
+    glowRoleColor: t.glow.roleColor,
+    glowBleedAmount: t.glow.bleedAmount,
+    paperOn: t.paper.paperOn,
+    paperPitch: t.paper.pitch,
+    paperDotSize: t.paper.dotSize,
+    paperBaseOpacity: t.paper.baseOpacity,
+    buildConfig: { ...t.build },
+    discStretchAmount: t.disc.stretchAmount,
+    discSquishBounce: t.disc.squishBounce,
+    discWobble: t.disc.wobble,
     morph: {
-      speed: 0.9,
-      intensity: 1,
-      breath: { scale: 1 },
-      shapeshift: { sproutDelay: 0.1, backchannelSprout: 0.18 },
-      relay: {
-        gatherMs: 140,
-        holdMs: 60,
-        releasePunch: 0.6,
-        landingBead: true,
-      },
-      inkwash: { stagger: 0.15, stain: 0.6, wetBloom: 0.28, nib: true },
-      elastic: { squash: 0.18, wobble: 0.45 },
+      speed: t.morph.speed,
+      intensity: t.morph.intensity,
+      breath: { ...t.morph.breath },
+      shapeshift: { ...t.morph.shapeshift },
+      relay: { ...t.morph.relay },
+      inkwash: { ...t.morph.inkwash },
+      elastic: { ...t.morph.elastic },
     },
-    // Sean 2026-09-13: stream (A+B) with a bursts pen is the default; batch
-    // stays selectable as the A/B baseline.
     stream: {
-      mode: "stream",
-      pace: "bursts",
-      bufferMs: 1500,
-      outlineMs: 1500,
-      arriveMs: [2000, 5500],
+      mode: t.stream.mode,
+      pace: t.stream.pace,
+      bufferMs: t.stream.bufferMs,
+      outlineMs: t.stream.outlineMs,
+      arriveMs: [t.stream.frame1Ms, t.stream.frame2Ms],
+    },
+    levelCalibration: {
+      human: { ...t.calibration.human },
+      riff: { ...t.calibration.riff },
     },
   };
 }
+
+// Production (host-mode) config: the same tuned values with the job channel
+// and paper off. Host mode also gates the job channel structurally (no
+// frames built, job calls ignored, player never ticks, so no stream or
+// scripted beats); these flags keep the config truthful for anything reading
+// it. Ink & Wash and Blend come from tuning.ts, as in the lab.
+export function createProductionConfig(): EngineConfig {
+  const config = defaultEngineConfig();
+  config.cindersOn = false;
+  config.showFramesOn = false;
+  // React Flow's <Background> is the app's lattice; host mode paints none.
+  config.paperOn = false;
+  return config;
+}
+
+export type EngineOptions = {
+  // Host mode: a transparent marks canvas cleared every frame, no paper, no
+  // job channel, and a loop that sleeps once voice is idle and settled.
+  host?: boolean;
+};
 
 export type EngineStatus = {
   voiceState: VoiceState;
@@ -248,26 +243,46 @@ export type EngineStatus = {
   streamPace: StreamPace;
 };
 
+// One role's frequency data, read once per drawn frame: a Uint8Array of
+// 0-255 bytes (the ElevenLabs SDK's get*ByteFrequencyData) or a Float32Array
+// of 0-1 values. Null or an empty array means no source this frame.
+export type LevelBuffer = Uint8Array | Float32Array;
+export type LevelSource = () => LevelBuffer | null | undefined;
+
 const ZERO_TWEEN: Tween = {
   ms: 0,
   ease: { kind: "bezier", p: [0.25, 0.1, 0.25, 1] },
 };
 
+const ROLES: Role[] = ["human", "riff"];
+
+// Host-mode sleep threshold for springs, envelopes and followers.
+const SETTLE_EPS = 5e-4;
+
+function springAtRest(s: { value: number; velocity: number; target: number }) {
+  return (
+    Math.abs(s.value - s.target) < SETTLE_EPS &&
+    Math.abs(s.velocity) < SETTLE_EPS * 10
+  );
+}
+
 export class VoiceLabEngine implements SequenceHost {
   config: EngineConfig;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  private measurePath: SVGPathElement;
+  private readonly host: boolean;
+  // Hidden SVG the sketch-frame fixtures measure paths on (lab only).
+  private measureSvg: SVGSVGElement | null = null;
   private frames: Frame[];
   private cinders: Cinder[] = [];
   private dustPuffs: DustPuff[] = [];
   private rings: { x: number; y: number; born: number; rot: number }[] = [];
   private onsetPulse = 0;
   private lastOnsetAt = 0;
-  private prevUserAvg = 0;
   private nextSyntheticOnsetAt = 0;
-  // Riff gets its own onset pulse — it has no real-mic input, so it's
-  // always the synthetic-schedule path, analogous to the human one above.
+  // Riff gets its own onset pulse, detected the same way as the human one:
+  // from its level source when one is live, else (lab only) on a synthetic
+  // schedule.
   private riffOnsetPulse = 0;
   private lastRiffOnsetAt = 0;
   private nextRiffOnsetAt = 0;
@@ -285,22 +300,44 @@ export class VoiceLabEngine implements SequenceHost {
   private rafId: number | null = null;
   private staticIntervalId: ReturnType<typeof setInterval> | null = null;
   private lastT = 0;
-  private analyser: AnalyserNode | null = null;
-  private micDataArray: Uint8Array | null = null;
   private audioCtx: AudioContext | null = null;
+  // ---- Level sources: the one data path every mark branch reads ----
+  private levelSources: Record<Role, LevelSource | null> = {
+    human: null,
+    riff: null,
+  };
+  // Sources that skip the talk-gate clamp (only the lab's Real mic).
+  private levelBypassTalkGate: Record<Role, boolean> = {
+    human: false,
+    riff: false,
+  };
+  // Per-role copy of injected data (the SDK reuses its own buffer).
+  private levelScratch: Record<Role, Uint8Array> = {
+    human: new Uint8Array(1024),
+    riff: new Uint8Array(1024),
+  };
+  // Whether this frame's data for a role came from a live source.
+  private sourceLive: Record<Role, boolean> = { human: false, riff: false };
+  private prevLevelAvg: Record<Role, number> = { human: 0, riff: 0 };
+  // The lab's Real mic toggle installs its analyser as the human source.
+  private micSource: LevelSource | null = null;
   private dotGrid: DotGrid;
   private lastPaperParams = { pitch: 16, dotSize: 0.9, baseOpacity: 0.5 };
   private buildPlan: BuildPlan | null = null;
   private mql: MediaQueryList;
   private statusListeners: Set<(s: EngineStatus) => void> = new Set();
   private destroyed = false;
+  // ---- Host-mode lifecycle ----
+  private sleeping = false;
+  private glowTarget = 0;
+  private timers = new Set<ReturnType<typeof setTimeout>>();
   private onMqlChange = () => this.scheduleLoop();
   private onVisibilityChange = () => this.scheduleLoop();
 
   // ---- Choreography state ----
   // Blend is the base choreography (Sean 2026-09-13), matching the Sequence
   // panel's default.
-  private activeSequence: SequencePreset = SEQUENCE_BY_ID["blend"];
+  private activeSequence: SequencePreset = SEQUENCE_BY_ID[TUNED.sequence];
   private prevSequenceId: string = this.activeSequence.id;
   private timeScale = 1; // Z = 0.25x slow motion
   player: SequencePlayer = new SequencePlayer(this);
@@ -364,7 +401,7 @@ export class VoiceLabEngine implements SequenceHost {
   // Default on fresh install is Ink & Wash (spec §5) — persisted overrides
   // (DialKit's "voiceLab.morph" key) restore Sean's last pick, same pattern
   // as every other lab control.
-  private morphId: MorphId = "inkwash";
+  private morphId: MorphId = TUNED.morph.style;
   private motion: MotionState;
   private lastVoiceStateForMorph: VoiceState = "idle";
   // Last pose applied per role (a reference to morph.ts's per-role scratch
@@ -395,9 +432,15 @@ export class VoiceLabEngine implements SequenceHost {
   // Frames in schema order (x), the order planBuild inks them.
   private streamOrder: Frame[];
 
-  constructor(canvas: HTMLCanvasElement, config?: EngineConfig) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    config?: EngineConfig,
+    options: EngineOptions = {},
+  ) {
     this.canvas = canvas;
-    this.config = config ?? defaultEngineConfig();
+    this.host = options.host ?? false;
+    this.config =
+      config ?? (this.host ? createProductionConfig() : defaultEngineConfig());
     // The motion layer reads dials straight off this config object every
     // frame (MorphPanel replaces config.morph on each drag), so they're live.
     this.motion = createMotionState(this.config);
@@ -411,17 +454,23 @@ export class VoiceLabEngine implements SequenceHost {
     canvas.width = W;
     canvas.height = H;
 
-    const svgNS = "http://www.w3.org/2000/svg";
-    const measureSvg = document.createElementNS(svgNS, "svg");
-    measureSvg.setAttribute(
-      "style",
-      "position:absolute;width:0;height:0;overflow:hidden;visibility:hidden",
-    );
-    this.measurePath = document.createElementNS(svgNS, "path");
-    measureSvg.appendChild(this.measurePath);
-    document.body.appendChild(measureSvg);
-
-    this.frames = createFrames(this.measurePath);
+    // The sketch-frame fixtures measure their paths on a hidden SVG. Host
+    // mode has no job channel, so it builds neither; destroy() removes it.
+    if (this.host) {
+      this.frames = [];
+    } else {
+      const svgNS = "http://www.w3.org/2000/svg";
+      const measureSvg = document.createElementNS(svgNS, "svg");
+      measureSvg.setAttribute(
+        "style",
+        "position:absolute;width:0;height:0;overflow:hidden;visibility:hidden",
+      );
+      const measurePath = document.createElementNS(svgNS, "path");
+      measureSvg.appendChild(measurePath);
+      document.body.appendChild(measureSvg);
+      this.measureSvg = measureSvg;
+      this.frames = createFrames(measurePath);
+    }
     this.streamOrder = [...this.frames].sort((a, b) => a.x - b.x);
 
     this.dotGrid = new DotGrid(
@@ -630,6 +679,7 @@ export class VoiceLabEngine implements SequenceHost {
     }
     this.pendingLandSparks = 0;
     this.emitStatus();
+    this.wake();
   }
 
   cycleMorph(dir: 1 | -1) {
@@ -705,6 +755,7 @@ export class VoiceLabEngine implements SequenceHost {
     this.anticipationStart = this.now();
     this.anticipationMs = ms;
     this.anticipationDepth = depth;
+    this.wake();
   }
 
   // Riff "mm-hm": bumps Riff's presence briefly without taking the floor
@@ -734,11 +785,21 @@ export class VoiceLabEngine implements SequenceHost {
         this.motion.presence.riff.value,
       );
       style.onBackchannel?.(this.motion, presence, ms, t);
-      setTimeout(() => {
+      this.later(() => {
         this.motion.presenceSpec.riff = style.riffOut;
         this.motion.presence.riff.target = this.silenceRiffFloor();
       }, ms);
     }
+    this.wake();
+  }
+
+  // setTimeout that destroy() cancels.
+  private later(fn: () => void, ms: number) {
+    const id = setTimeout(() => {
+      this.timers.delete(id);
+      fn();
+    }, ms);
+    this.timers.add(id);
   }
 
   private silenceRiffFloor(): number {
@@ -759,6 +820,7 @@ export class VoiceLabEngine implements SequenceHost {
     this.retargetPresenceForState(next);
     if (this.morphId !== "off") this.retargetMotionForState(next, this.now());
     this.emitStatus();
+    this.wake();
   }
 
   // Morph-layer counterpart to retargetPresenceForState: same target rules
@@ -883,6 +945,8 @@ export class VoiceLabEngine implements SequenceHost {
 
   // ---- Job channel (independent of voice) ----
   setJobState(next: JobState) {
+    // Host mode has no job channel: the app's own sketch pipeline draws.
+    if (this.host) return;
     // Stream prototype: a clear waits for arrived frames to finish inking.
     if (next === "none" && this.streamJob) {
       this.deferStreamClear();
@@ -950,6 +1014,7 @@ export class VoiceLabEngine implements SequenceHost {
   }
 
   landNow() {
+    if (this.host) return;
     // Stream: landing means every part that hasn't arrived arrives now.
     if (this.streamJob) {
       this.streamLandRemaining();
@@ -1193,7 +1258,23 @@ export class VoiceLabEngine implements SequenceHost {
     );
   }
 
-  // ---- Real mic ----
+  // ---- Level sources ----
+  // Feeds one role's marks from real frequency data instead of the lab's
+  // synthetic levels. The getter is read inside the engine frame, never from
+  // React. Null clears it.
+  setLevelSource(
+    role: Role,
+    source: LevelSource | null,
+    options: { bypassTalkGate?: boolean } = {},
+  ) {
+    this.levelSources[role] = source;
+    this.levelBypassTalkGate[role] = !!source && !!options.bypassTalkGate;
+    this.wake();
+  }
+
+  // ---- Real mic (lab toggle) ----
+  // Installs the analyser as the human level source, so the lab mic runs the
+  // same path as injected data.
   async enableRealMic(): Promise<boolean> {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1203,10 +1284,16 @@ export class VoiceLabEngine implements SequenceHost {
           .webkitAudioContext
       )();
       const source = this.audioCtx.createMediaStreamSource(stream);
-      this.analyser = this.audioCtx.createAnalyser();
-      this.analyser.fftSize = 2048;
-      this.micDataArray = new Uint8Array(this.analyser.frequencyBinCount);
-      source.connect(this.analyser);
+      const analyser = this.audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      source.connect(analyser);
+      this.micSource = () => {
+        analyser.getByteFrequencyData(data);
+        return data;
+      };
+      // Raw live levels in every voice state, as the toggle always gave.
+      this.setLevelSource("human", this.micSource, { bypassTalkGate: true });
       this.config.realMicEnabled = true;
       this.emitStatus();
       return true;
@@ -1226,38 +1313,39 @@ export class VoiceLabEngine implements SequenceHost {
       this.audioCtx.close().catch(() => {});
       this.audioCtx = null;
     }
-    this.analyser = null;
+    if (this.micSource && this.levelSources.human === this.micSource)
+      this.setLevelSource("human", null);
+    this.micSource = null;
     this.emitStatus();
   }
 
-  private levelDataForState(t: number, s: VoiceState): Uint8Array {
-    if (
-      this.config.realMicEnabled &&
-      this.analyser &&
-      this.micDataArray &&
-      (s === "you-talking" || s === "silence")
-    ) {
-      this.analyser.getByteFrequencyData(
-        this.micDataArray as Uint8Array<ArrayBuffer>,
-      );
-      return this.micDataArray;
+  // The one level path every mark branch reads (human, Riff, and the
+  // Shapeshift body). A live source is copied and calibrated; with none, the
+  // lab synthesizes today's levels and host mode reads silence, so the real
+  // app never animates marks on a fake signal. The talk blend runs on top
+  // either way.
+  private levelFor(role: Role, t: number, talk: number): Uint8Array {
+    const buf = this.levelSources[role]?.();
+    if (hasLevels(buf)) {
+      this.sourceLive[role] = true;
+      const cal = this.config.levelCalibration[role];
+      const data = calibrateLevels(buf, this.levelScratch[role], cal);
+      return this.levelBypassTalkGate[role] ? data : this.blendTalk(data, talk);
     }
-    if (s === "dead-mic") return new Uint8Array(1024);
-    if (s === "you-talking") return synthesizeLevelData(t);
-    if (s === "riff-talking") return synthesizeLevelData(t * 0.8 + 4000);
-    if (s === "silence") {
-      const d = synthesizeLevelData(t);
-      for (let i = 0; i < d.length; i++) d[i] = Math.min(d[i], 18);
-      return d;
-    }
-    return new Uint8Array(1024);
+    this.sourceLive[role] = false;
+    if (this.host) return this.levelScratch[role].fill(0);
+    return this.blendTalk(
+      synthesizeLevelData(role === "human" ? t : t * 0.8 + 4000),
+      talk,
+    );
   }
 
   // F2 (morph spec §2): bands = lerp(silence, talking, talk) before
   // computeBands' 0.6/0.4 smoothing. The silence clamp (≤18) eases in and out
   // with the style's talk spring instead of switching the frame the voice
   // state flips (which collapsed Amoeba bulges and Burst rays in ~4 frames).
-  // Mutates the freshly synthesized buffer in place.
+  // With Morph Off, talk is 1 for the active role and 0 otherwise. Mutates
+  // the buffer in place (a fresh synthesized one, or the role's scratch copy).
   private blendTalk(d: Uint8Array, talk: number): Uint8Array {
     const k = Math.max(0, Math.min(1, talk));
     for (let i = 0; i < d.length; i++) {
@@ -1267,20 +1355,19 @@ export class VoiceLabEngine implements SequenceHost {
     return d;
   }
 
-  private riffLevelData(t: number, active: boolean): Uint8Array {
-    const d = synthesizeLevelData(t * 0.8 + 4000);
-    if (!active) for (let i = 0; i < d.length; i++) d[i] = Math.min(d[i], 18);
-    return d;
+  // Onset from a live source: a jump in the smoothed level.
+  private levelOnset(role: Role, t: number, avg: number, lastAt: number) {
+    const delta = avg - this.prevLevelAvg[role];
+    this.prevLevelAvg[role] = avg;
+    return delta > 0.1 && t - lastAt > 120;
   }
 
   private maybeDetectOnset(t: number, avg: number) {
     if (this.config.voiceState !== "you-talking") return;
     let fired = false;
-    if (this.config.realMicEnabled) {
-      const delta = avg - this.prevUserAvg;
-      if (delta > 0.1 && t - this.lastOnsetAt > 120) fired = true;
-      this.prevUserAvg = avg;
-    } else {
+    if (this.sourceLive.human) {
+      fired = this.levelOnset("human", t, avg, this.lastOnsetAt);
+    } else if (!this.host) {
       if (this.nextSyntheticOnsetAt === 0) this.nextSyntheticOnsetAt = t + 200;
       if (t >= this.nextSyntheticOnsetAt) {
         fired = true;
@@ -1302,15 +1389,23 @@ export class VoiceLabEngine implements SequenceHost {
     }
   }
 
-  // Riff has no real-mic input, so its onset pulse is always the synthetic
-  // schedule — the same shape as the human path's synthetic branch above.
-  private maybeDetectRiffOnset(t: number) {
+  // Same shape as the human path: level jumps from a live source, else (lab
+  // only) the synthetic schedule.
+  private maybeDetectRiffOnset(t: number, avg: number) {
     if (this.config.voiceState !== "riff-talking") return;
-    if (this.nextRiffOnsetAt === 0) this.nextRiffOnsetAt = t + 300;
-    if (t >= this.nextRiffOnsetAt) {
+    let fired = false;
+    if (this.sourceLive.riff) {
+      fired = this.levelOnset("riff", t, avg, this.lastRiffOnsetAt);
+    } else if (!this.host) {
+      if (this.nextRiffOnsetAt === 0) this.nextRiffOnsetAt = t + 300;
+      if (t >= this.nextRiffOnsetAt) {
+        fired = true;
+        this.nextRiffOnsetAt = t + 500 + Math.random() * 400;
+      }
+    }
+    if (fired) {
       this.lastRiffOnsetAt = t;
       this.riffOnsetPulse = 1;
-      this.nextRiffOnsetAt = t + 500 + Math.random() * 400;
     }
   }
 
@@ -1474,24 +1569,21 @@ export class VoiceLabEngine implements SequenceHost {
     let bands: number[];
     let level: number;
     let onsetPulse: number;
+    // Morph blends on the style's talk spring; Off on who holds the floor.
+    const talkBlend = morphOn ? talk! : active ? 1 : 0;
     if (role === "human") {
-      const data =
-        morphOn && !(this.config.realMicEnabled && this.analyser)
-          ? this.blendTalk(synthesizeLevelData(t), talk!)
-          : this.levelDataForState(t, active ? "you-talking" : "silence");
+      const data = this.levelFor("human", t, talkBlend);
       this.smoothedUser = computeBands(data, this.smoothedUser);
       bands = BAR_ORDER.map((i) => this.smoothedUser[i]);
       level = bands.reduce((a, b) => a + b, 0) / bands.length;
       if (active) this.maybeDetectOnset(t, level);
       onsetPulse = morphOn ? this.motion.onset.human.value : this.onsetPulse;
     } else {
-      const data = morphOn
-        ? this.blendTalk(synthesizeLevelData(t * 0.8 + 4000), talk!)
-        : this.riffLevelData(t, active);
+      const data = this.levelFor("riff", t, talkBlend);
       this.smoothedAgent = computeBands(data, this.smoothedAgent);
       bands = BAR_ORDER.map((i) => this.smoothedAgent[i]);
       level = bands.reduce((a, b) => a + b, 0) / bands.length;
-      if (active) this.maybeDetectRiffOnset(t);
+      if (active) this.maybeDetectRiffOnset(t, level);
       onsetPulse = morphOn ? this.motion.onset.riff.value : this.riffOnsetPulse;
     }
     this.lastLevel[role] = level;
@@ -1520,15 +1612,12 @@ export class VoiceLabEngine implements SequenceHost {
     if (shapeshiftBody && role === "human") {
       // The shared body replaces both roles' ordinary mark.draw() calls —
       // built here so it has both roles' live band data in the same frame.
-      const riffData = this.blendTalk(
-        synthesizeLevelData(t * 0.8 + 4000),
-        this.motion.talk.riff.value,
-      );
+      const riffData = this.levelFor("riff", t, this.motion.talk.riff.value);
       this.smoothedAgent = computeBands(riffData, this.smoothedAgent);
       const riffBands = BAR_ORDER.map((i) => this.smoothedAgent[i]);
       const riffLevel = riffBands.reduce((a, b) => a + b, 0) / riffBands.length;
       this.lastLevel.riff = riffLevel;
-      if (activeRole === "riff") this.maybeDetectRiffOnset(t);
+      if (activeRole === "riff") this.maybeDetectRiffOnset(t, riffLevel);
       const gRiff: MarkDrawArgs = {
         o,
         t: this.markT,
@@ -1821,6 +1910,15 @@ export class VoiceLabEngine implements SequenceHost {
     }
   }
 
+  // Host mode's per-frame wipe: the canvas stays transparent so the app's
+  // own content shows through.
+  private clearCanvas() {
+    this.ctx.save();
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.restore();
+  }
+
   private drawBackground(dt: number) {
     this.ctx.fillStyle = "#f4f4f5";
     this.ctx.fillRect(0, 0, W, H);
@@ -1949,15 +2047,24 @@ export class VoiceLabEngine implements SequenceHost {
   attachGlow(els: { cyan: HTMLElement; green: HTMLElement }) {
     this.glowCyanEl = els.cyan;
     this.glowGreenEl = els.green;
+    this.wake();
   }
 
   // Fluid "shader" glow canvas (ask 1) — lives inside the same never-
   // animating mask wrapper as the two classic gradient divs; the engine
   // writes pixels + opacity/transform onto it directly, same imperative
   // pattern as attachGlow above.
+  //
+  // Wash and marks are separate layers: marks draw on the constructor's
+  // canvas, the wash on this one, so a host stacks each at its own z-level
+  // (the real app puts the wash under the sketch and the marks above it).
+  // Both must cover the same stage rect, since the wash anchors to the
+  // marks' origin in stage-normalized coordinates. The engine owns this
+  // element's opacity and transform, so a host positions it via a wrapper.
   attachGlowFluid(canvas: HTMLCanvasElement) {
     this.glowFluidCanvas = canvas;
     this.glowFluidCtx = canvas.getContext("2d");
+    this.wake();
   }
 
   // Loop progress bar, driven the same way as glow: written directly onto a
@@ -1975,6 +2082,7 @@ export class VoiceLabEngine implements SequenceHost {
     const target =
       preset.glow.level[this.config.voiceState] *
       (1 - preset.glow.follow + preset.glow.follow * voiceLevel);
+    this.glowTarget = target;
     const tc =
       target > this.glowFollower
         ? preset.envelope.attackMs
@@ -2112,15 +2220,51 @@ export class VoiceLabEngine implements SequenceHost {
     // effect runs this frame, so this.now() below reads the same instant
     // this frame is drawing at, not a later performance.now().
     this.frameT = t;
-    this.drawBackground(dt);
+    // Host mode: a transparent canvas the app layers over its own content,
+    // cleared every frame. The lab paints its opaque paper instead.
+    if (this.host) this.clearCanvas();
+    else this.drawBackground(dt);
 
     const preset = this.effectivePreset();
     this.updateMarkClock(t, dt, preset);
-    this.player.tick(t, this.timeScale);
+    // Host mode never ticks the player (the app owns voice state and no
+    // scripted beat fires) and has no job channel.
+    if (!this.host) this.player.tick(t, this.timeScale);
     if (this.morphId !== "off") this.stepMotion(t, dt);
-    if (this.streamJob) this.tickStream(t);
+    if (!this.host) this.renderJobLayer(t, dt, preset);
 
-    // Job channel — cinders + landing frames render independent of voice.
+    // Voice channel — always renders, regardless of job state.
+    this.drawVoiceLayer(t, dt, preset);
+
+    const voiceLevel =
+      Math.max(this.presence.human, this.presence.riff) > 0.01
+        ? Math.max(
+            this.presence.human > 0.01 ? this.presence.human : 0,
+            this.presence.riff > 0.01 ? this.presence.riff : 0,
+          )
+        : 0;
+    this.updateGlow(t, dt, preset, voiceLevel);
+
+    if (this.host) {
+      if (this.settled(t, preset)) this.sleeping = true;
+      return;
+    }
+
+    // Progress bar: written directly, every frame, never through setState.
+    // Everything else in EngineStatus only changes on real beats/state
+    // transitions, each of which already calls emitStatus() itself (voice
+    // and job state, preset select, play/pause, slow-mo) — no blanket
+    // per-frame emit needed.
+    if (this.progressEl) {
+      const progress = this.player.progress(t, this.timeScale);
+      this.progressEl.style.transform = `scaleX(${progress})`;
+    }
+  }
+
+  // Job channel (lab only): stream arrivals, cinders, landing frames and
+  // build particles, independent of voice.
+  private renderJobLayer(t: number, dt: number, preset: SequencePreset) {
+    if (this.streamJob) this.tickStream(t);
     if (this.buildPlan) {
       updateBuild(
         this.buildPlan,
@@ -2203,32 +2347,11 @@ export class VoiceLabEngine implements SequenceHost {
         );
       }
     }
-
-    // Voice channel — always renders, regardless of job state.
-    this.drawVoiceLayer(t, dt, preset);
-
-    const voiceLevel =
-      Math.max(this.presence.human, this.presence.riff) > 0.01
-        ? Math.max(
-            this.presence.human > 0.01 ? this.presence.human : 0,
-            this.presence.riff > 0.01 ? this.presence.riff : 0,
-          )
-        : 0;
-    this.updateGlow(t, dt, preset, voiceLevel);
-
-    // Progress bar: written directly, every frame, never through setState.
-    // Everything else in EngineStatus only changes on real beats/state
-    // transitions, each of which already calls emitStatus() itself (voice
-    // and job state, preset select, play/pause, slow-mo) — no blanket
-    // per-frame emit needed.
-    if (this.progressEl) {
-      const progress = this.player.progress(t, this.timeScale);
-      this.progressEl.style.transform = `scaleX(${progress})`;
-    }
   }
 
   scheduleLoop() {
     if (this.destroyed) return;
+    this.sleeping = false;
     this.emitStatus();
     if (this.rafId) {
       cancelAnimationFrame(this.rafId);
@@ -2244,20 +2367,99 @@ export class VoiceLabEngine implements SequenceHost {
       this.renderFrame(performance.now());
       return;
     }
+    // A frame that settles a host loop sets `sleeping`; the loop then stops
+    // requesting frames until wake().
     if (this.reducedMotionActive()) {
-      this.staticIntervalId = setInterval(
-        () => this.renderFrame(performance.now()),
-        100,
-      );
-      this.renderFrame(performance.now());
+      const tick = () => {
+        this.renderFrame(performance.now());
+        if (this.sleeping && this.staticIntervalId) {
+          clearInterval(this.staticIntervalId);
+          this.staticIntervalId = null;
+        }
+      };
+      this.staticIntervalId = setInterval(tick, 100);
+      tick();
     } else {
       this.lastT = performance.now();
       const loop = (t: number) => {
         this.renderFrame(t);
-        this.rafId = requestAnimationFrame(loop);
+        this.rafId = this.sleeping ? null : requestAnimationFrame(loop);
       };
       this.rafId = requestAnimationFrame(loop);
     }
+  }
+
+  // Restarts a sleeping host loop. Engine setters call it; a host that writes
+  // engine.config directly calls it afterwards.
+  wake() {
+    if (this.sleeping) this.scheduleLoop();
+  }
+
+  get isSleeping(): boolean {
+    return this.sleeping;
+  }
+
+  // Host mode sleeps only when nothing on screen can change without new
+  // input: voice idle, no pending timer or anticipation, and every spring,
+  // envelope and pulse the active style draws from at rest (the wash faded
+  // out, the glow follower at its target).
+  private settled(t: number, preset: SequencePreset): boolean {
+    if (this.config.voiceState !== "idle") return false;
+    if (this.timers.size > 0 || this.backchannelTimer) return false;
+    if (this.rings.length > 0) return false;
+    if (t < this.anticipationStart + this.anticipationMs) return false;
+    if (Math.abs(this.glowTarget - this.glowFollower) > SETTLE_EPS)
+      return false;
+    if (
+      this.config.centerCircleOn &&
+      (preset.breathe.periodMs > 0 ||
+        Math.abs(this.discSx - 1) > SETTLE_EPS ||
+        Math.abs(this.discSy - 1) > SETTLE_EPS ||
+        Math.abs(this.discVx) > SETTLE_EPS ||
+        Math.abs(this.discVy) > SETTLE_EPS)
+    )
+      return false;
+    if (this.morphId === "off") {
+      for (const role of ROLES) {
+        const pt = this.presenceTween[role];
+        if (t - pt.start < pt.tween.ms || this.presence[role] > SETTLE_EPS)
+          return false;
+      }
+      return true;
+    }
+    const m = this.motion;
+    for (const role of ROLES) {
+      if (!springAtRest(m.presence[role]) || !springAtRest(m.talk[role]))
+        return false;
+      // Wash activity is wash × energy, so a faded wash settles the field.
+      if (m.wash[role].value > SETTLE_EPS || m.onset[role].value > 0)
+        return false;
+    }
+    const speed = dialSpeed(m);
+    // Ink & Wash reveal and wet-bloom windows run on the handoff clock.
+    if ((t - m.handoff.at) * speed < 300) return false;
+    if (m.bloom.value > SETTLE_EPS) return false;
+    if (m.backchannel.amount > 0 && t < m.backchannel.until + 300 / speed)
+      return false;
+    if (this.morphId === "relay") {
+      if (!springAtRest(m.bead) || !springAtRest(m.relay.bc)) return false;
+      for (const role of ROLES)
+        if (
+          !springAtRest(m.relay.scale[role]) ||
+          m.relay.alpha[role].value > SETTLE_EPS
+        )
+          return false;
+    }
+    if (this.morphId === "shapeshift" && !springAtRest(m.morph)) return false;
+    if (
+      this.morphId === "elastic" &&
+      (m.body.releaseAt > 0 ||
+        !springAtRest(m.body.aspect) ||
+        !springAtRest(m.body.radial) ||
+        !springAtRest(m.body.scale))
+    )
+      return false;
+    return true;
   }
 
   setReducedMotion(on: boolean) {
@@ -2314,6 +2516,8 @@ export class VoiceLabEngine implements SequenceHost {
       this.canvas.height = backingHeight;
     const scale = backingWidth / W;
     this.ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    // A resized backing store is blank; a sleeping host redraws once.
+    this.wake();
   }
 
   destroy() {
@@ -2322,9 +2526,15 @@ export class VoiceLabEngine implements SequenceHost {
     if (this.staticIntervalId) clearInterval(this.staticIntervalId);
     if (this.autoLandTimer) clearTimeout(this.autoLandTimer);
     if (this.backchannelTimer) clearTimeout(this.backchannelTimer);
+    for (const id of this.timers) clearTimeout(id);
+    this.timers.clear();
     this.mql.removeEventListener("change", this.onMqlChange);
     document.removeEventListener("visibilitychange", this.onVisibilityChange);
+    this.levelSources = { human: null, riff: null };
     this.disableRealMic();
+    this.statusListeners.clear();
+    this.measureSvg?.remove();
+    this.measureSvg = null;
   }
 }
 

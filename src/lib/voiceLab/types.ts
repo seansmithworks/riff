@@ -1,6 +1,7 @@
 // Framework-agnostic types for the voice-lab Canvas2D engine.
 
 import type { StreamConfig } from "./stream";
+import type { LevelCalibration } from "./tuning";
 
 export type VoiceState =
   "idle" | "you-talking" | "riff-talking" | "silence" | "dead-mic";
@@ -148,6 +149,8 @@ export type EngineConfig = {
   cinderConfig: CinderConfig;
   reducedMotion: boolean;
   realMicEnabled: boolean;
+  // Per-role gain/floor/curve applied to injected level data (tuning.ts).
+  levelCalibration: Record<Role, LevelCalibration>;
   // Fluid "shader" glow (Canvas2D, no WebGL) — a CPU density field per role,
   // pigment-mixed (not additive) so overlap reads green. "classic" keeps the
   // original two-gradient wash. "fluid" (labeled "Wash" in Panels.tsx) paints

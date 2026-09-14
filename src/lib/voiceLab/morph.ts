@@ -155,7 +155,9 @@ export type MotionState = {
   talk: Record<Role, Spring>; // talk: 0 silence-mode .. 1 talking-mode
   morph: Spring; // 0 human form .. 1 riff form (Shapeshift)
   morphRest: number; // Shapeshift's form outside a backchannel window
-  body: { aspect: Spring; radial: Spring; scale: Spring }; // one shared body (Elastic, Breath scale)
+  // One shared body (Elastic, Breath scale). releaseAt: when Elastic's
+  // handoff wind-up lets go, on the frame clock (0 = none pending).
+  body: { aspect: Spring; radial: Spring; scale: Spring; releaseAt: number };
   bead: Spring; // Relay
   wash: Record<Role, Envelope>;
   energy: Record<Role, Envelope>;
@@ -204,7 +206,12 @@ export function createMotionState(host: MorphHost): MotionState {
     talk: { human: new Spring(), riff: new Spring() },
     morph: new Spring(),
     morphRest: 0,
-    body: { aspect: new Spring(), radial: new Spring(), scale: new Spring() },
+    body: {
+      aspect: new Spring(),
+      radial: new Spring(),
+      scale: new Spring(),
+      releaseAt: 0,
+    },
     bead: new Spring(),
     wash: { human: new Envelope(), riff: new Envelope() },
     energy: { human: new Envelope(), riff: new Envelope() },
@@ -650,7 +657,12 @@ const elastic: MorphStyle = {
     );
   },
   step(m, now, dt) {
-    void now;
+    // Wind-up release on the frame clock, so no timer outlives the engine.
+    if (m.body.releaseAt > 0 && now >= m.body.releaseAt) {
+      m.body.aspect.target = 0;
+      m.body.radial.target = 1;
+      m.body.releaseAt = 0;
+    }
     ELASTIC_BODY.damping = m.host.morph.elastic.wobble;
     m.body.aspect.step(dt, ELASTIC_BODY);
     m.body.radial.step(dt, ELASTIC_BODY);
@@ -662,10 +674,7 @@ const elastic: MorphStyle = {
     const squash = m.host.morph.elastic.squash * dialIntensity(m);
     if (from === "human") m.body.aspect.target = -squash;
     else if (from === "riff") m.body.radial.target = 1 - 1.4 * squash;
-    setTimeout(() => {
-      m.body.aspect.target = 0;
-      m.body.radial.target = 1;
-    }, windupMs);
+    m.body.releaseAt = now + windupMs;
   },
   onBackchannel(m, amount, ms, now) {
     m.backchannel = { at: now, until: now + ms, amount };
