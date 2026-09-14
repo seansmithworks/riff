@@ -115,7 +115,7 @@
 **Done since the late-night checkpoint:** integration plan drafted, attacked by 2 independent reviewers (generalist + canvas/SDK), revised; `docs/plans/riff-voice-real.html` with mocks and findings ledger.
 
 - [x] **Sean confirms the plan and 4 calls.** (1) Marks placement A: bar → marks → caption. Pill bar kept for now; Sean may revisit whether it's needed. (2) Wash UNDER the sketch: a background layer with the dot grid, drawing sits on top. The plan assumed "over", so Phase 2/3 briefs must put the wash behind React Flow nodes, not the z-10 overlay. Sub-fork still open: frames stay opaque white vs see-through frames so ink sits on dots + wash. (3) `/voice-lab` stays public on prod, for now. (4) Typed sketches keep the thinking glow.
-- [ ] Phase 0: worktree `feat-voice-real` (port 3330) off `feat/stream`; merge `feat/voice-lab` (BACKLOG.md conflict only) and `origin/main` (clean, adds `51051bf` `e39b54f`); symlink `node_modules` to feat-voice-lab's real install.
+- [x] Phase 0: worktree `feat-voice-real` (port 3330) off `feat/stream`; merge `feat/voice-lab` (BACKLOG.md conflict only) and `origin/main` (clean, adds `51051bf` `e39b54f`); symlink `node_modules` to feat-voice-lab's real install. Done on `feat/voice-real` (`a52da1a`).
 - [ ] Phase 1: tooltip. Native `title` out of VoiceBar icon buttons and Header; shared app tooltip.
 - [ ] Phase 2: voice layer on real audio. Engine host mode first (`levelFor(role)` at every `drawRole` branch, cleared transparent canvas, job channel off, `tuning.ts` single source, calibration dials), then real-app mount. Sean live mic review.
 - [ ] Phase 3: paper. React Flow `<Background>` retuned to Sean's values plus a tint layer inside React Flow. Sean review.
