@@ -3,6 +3,7 @@
 import {
   cloneElement,
   isValidElement,
+  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -71,6 +72,8 @@ export function Tooltip({
     }
   }
 
+  useEffect(() => clearShowTimeout, []);
+
   function showDelayed() {
     clearShowTimeout();
     showTimeout.current = setTimeout(() => setOpen(true), 300);
@@ -94,7 +97,11 @@ export function Tooltip({
           showDelayed();
         },
         onPointerLeave: hide,
-        onFocus: showNow,
+        onFocus: (e: React.FocusEvent) => {
+          if ((e.currentTarget as Element).matches(":focus-visible")) {
+            showNow();
+          }
+        },
         onBlur: hide,
         onKeyDown: (e: React.KeyboardEvent) => {
           if (e.key === "Escape") hide();
