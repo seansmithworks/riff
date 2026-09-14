@@ -191,6 +191,26 @@ export function defaultEngineConfig(): EngineConfig {
   };
 }
 
+// Production (host-mode) config: the same tuned values with the job channel
+// and paper off. Host mode also gates the job channel structurally (no
+// frames built, job calls ignored, player never ticks, so no stream or
+// scripted beats); these flags keep the config truthful for anything reading
+// it. Ink & Wash and Blend come from tuning.ts, as in the lab.
+export function createProductionConfig(): EngineConfig {
+  const config = defaultEngineConfig();
+  config.cindersOn = false;
+  config.showFramesOn = false;
+  // React Flow's <Background> is the app's lattice; host mode paints none.
+  config.paperOn = false;
+  return config;
+}
+
+export type EngineOptions = {
+  // Host mode: a transparent marks canvas cleared every frame, no paper, no
+  // job channel, and a loop that sleeps once voice is idle and settled.
+  host?: boolean;
+};
+
 export type EngineStatus = {
   voiceState: VoiceState;
   jobState: JobState;
@@ -232,7 +252,9 @@ export class VoiceLabEngine implements SequenceHost {
   config: EngineConfig;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  private measurePath: SVGPathElement;
+  private readonly host: boolean;
+  // Hidden SVG the sketch-frame fixtures measure paths on (lab only).
+  private measureSvg: SVGSVGElement | null = null;
   private frames: Frame[];
   private cinders: Cinder[] = [];
   private dustPuffs: DustPuff[] = [];
@@ -370,9 +392,15 @@ export class VoiceLabEngine implements SequenceHost {
   // Frames in schema order (x), the order planBuild inks them.
   private streamOrder: Frame[];
 
-  constructor(canvas: HTMLCanvasElement, config?: EngineConfig) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    config?: EngineConfig,
+    options: EngineOptions = {},
+  ) {
     this.canvas = canvas;
-    this.config = config ?? defaultEngineConfig();
+    this.host = options.host ?? false;
+    this.config =
+      config ?? (this.host ? createProductionConfig() : defaultEngineConfig());
     // The motion layer reads dials straight off this config object every
     // frame (MorphPanel replaces config.morph on each drag), so they're live.
     this.motion = createMotionState(this.config);
@@ -386,17 +414,23 @@ export class VoiceLabEngine implements SequenceHost {
     canvas.width = W;
     canvas.height = H;
 
-    const svgNS = "http://www.w3.org/2000/svg";
-    const measureSvg = document.createElementNS(svgNS, "svg");
-    measureSvg.setAttribute(
-      "style",
-      "position:absolute;width:0;height:0;overflow:hidden;visibility:hidden",
-    );
-    this.measurePath = document.createElementNS(svgNS, "path");
-    measureSvg.appendChild(this.measurePath);
-    document.body.appendChild(measureSvg);
-
-    this.frames = createFrames(this.measurePath);
+    // The sketch-frame fixtures measure their paths on a hidden SVG. Host
+    // mode has no job channel, so it builds neither; destroy() removes it.
+    if (this.host) {
+      this.frames = [];
+    } else {
+      const svgNS = "http://www.w3.org/2000/svg";
+      const measureSvg = document.createElementNS(svgNS, "svg");
+      measureSvg.setAttribute(
+        "style",
+        "position:absolute;width:0;height:0;overflow:hidden;visibility:hidden",
+      );
+      const measurePath = document.createElementNS(svgNS, "path");
+      measureSvg.appendChild(measurePath);
+      document.body.appendChild(measureSvg);
+      this.measureSvg = measureSvg;
+      this.frames = createFrames(measurePath);
+    }
     this.streamOrder = [...this.frames].sort((a, b) => a.x - b.x);
 
     this.dotGrid = new DotGrid(
@@ -858,6 +892,8 @@ export class VoiceLabEngine implements SequenceHost {
 
   // ---- Job channel (independent of voice) ----
   setJobState(next: JobState) {
+    // Host mode has no job channel: the app's own sketch pipeline draws.
+    if (this.host) return;
     // Stream prototype: a clear waits for arrived frames to finish inking.
     if (next === "none" && this.streamJob) {
       this.deferStreamClear();
@@ -925,6 +961,7 @@ export class VoiceLabEngine implements SequenceHost {
   }
 
   landNow() {
+    if (this.host) return;
     // Stream: landing means every part that hasn't arrived arrives now.
     if (this.streamJob) {
       this.streamLandRemaining();
@@ -1796,6 +1833,15 @@ export class VoiceLabEngine implements SequenceHost {
     }
   }
 
+  // Host mode's per-frame wipe: the canvas stays transparent so the app's
+  // own content shows through.
+  private clearCanvas() {
+    this.ctx.save();
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.restore();
+  }
+
   private drawBackground(dt: number) {
     this.ctx.fillStyle = "#f4f4f5";
     this.ctx.fillRect(0, 0, W, H);
@@ -1930,6 +1976,13 @@ export class VoiceLabEngine implements SequenceHost {
   // animating mask wrapper as the two classic gradient divs; the engine
   // writes pixels + opacity/transform onto it directly, same imperative
   // pattern as attachGlow above.
+  //
+  // Wash and marks are separate layers: marks draw on the constructor's
+  // canvas, the wash on this one, so a host stacks each at its own z-level
+  // (the real app puts the wash under the sketch and the marks above it).
+  // Both must cover the same stage rect, since the wash anchors to the
+  // marks' origin in stage-normalized coordinates. The engine owns this
+  // element's opacity and transform, so a host positions it via a wrapper.
   attachGlowFluid(canvas: HTMLCanvasElement) {
     this.glowFluidCanvas = canvas;
     this.glowFluidCtx = canvas.getContext("2d");
@@ -2087,15 +2140,48 @@ export class VoiceLabEngine implements SequenceHost {
     // effect runs this frame, so this.now() below reads the same instant
     // this frame is drawing at, not a later performance.now().
     this.frameT = t;
-    this.drawBackground(dt);
+    // Host mode: a transparent canvas the app layers over its own content,
+    // cleared every frame. The lab paints its opaque paper instead.
+    if (this.host) this.clearCanvas();
+    else this.drawBackground(dt);
 
     const preset = this.effectivePreset();
     this.updateMarkClock(t, dt, preset);
-    this.player.tick(t, this.timeScale);
+    // Host mode never ticks the player (the app owns voice state and no
+    // scripted beat fires) and has no job channel.
+    if (!this.host) this.player.tick(t, this.timeScale);
     if (this.morphId !== "off") this.stepMotion(t, dt);
-    if (this.streamJob) this.tickStream(t);
+    if (!this.host) this.renderJobLayer(t, dt, preset);
 
-    // Job channel — cinders + landing frames render independent of voice.
+    // Voice channel — always renders, regardless of job state.
+    this.drawVoiceLayer(t, dt, preset);
+
+    const voiceLevel =
+      Math.max(this.presence.human, this.presence.riff) > 0.01
+        ? Math.max(
+            this.presence.human > 0.01 ? this.presence.human : 0,
+            this.presence.riff > 0.01 ? this.presence.riff : 0,
+          )
+        : 0;
+    this.updateGlow(t, dt, preset, voiceLevel);
+
+    if (this.host) return;
+
+    // Progress bar: written directly, every frame, never through setState.
+    // Everything else in EngineStatus only changes on real beats/state
+    // transitions, each of which already calls emitStatus() itself (voice
+    // and job state, preset select, play/pause, slow-mo) — no blanket
+    // per-frame emit needed.
+    if (this.progressEl) {
+      const progress = this.player.progress(t, this.timeScale);
+      this.progressEl.style.transform = `scaleX(${progress})`;
+    }
+  }
+
+  // Job channel (lab only): stream arrivals, cinders, landing frames and
+  // build particles, independent of voice.
+  private renderJobLayer(t: number, dt: number, preset: SequencePreset) {
+    if (this.streamJob) this.tickStream(t);
     if (this.buildPlan) {
       updateBuild(
         this.buildPlan,
@@ -2177,28 +2263,6 @@ export class VoiceLabEngine implements SequenceHost {
           this.jobDuckEnvelope(preset),
         );
       }
-    }
-
-    // Voice channel — always renders, regardless of job state.
-    this.drawVoiceLayer(t, dt, preset);
-
-    const voiceLevel =
-      Math.max(this.presence.human, this.presence.riff) > 0.01
-        ? Math.max(
-            this.presence.human > 0.01 ? this.presence.human : 0,
-            this.presence.riff > 0.01 ? this.presence.riff : 0,
-          )
-        : 0;
-    this.updateGlow(t, dt, preset, voiceLevel);
-
-    // Progress bar: written directly, every frame, never through setState.
-    // Everything else in EngineStatus only changes on real beats/state
-    // transitions, each of which already calls emitStatus() itself (voice
-    // and job state, preset select, play/pause, slow-mo) — no blanket
-    // per-frame emit needed.
-    if (this.progressEl) {
-      const progress = this.player.progress(t, this.timeScale);
-      this.progressEl.style.transform = `scaleX(${progress})`;
     }
   }
 
