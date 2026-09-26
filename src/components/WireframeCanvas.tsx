@@ -160,7 +160,7 @@ function PhoneFrame({ slot }: { slot: CanvasSlot }) {
       <div
         data-screen-frame={slot.id}
         data-ink-frame={slot.state}
-        className="relative flex h-[640px] w-[340px] flex-col overflow-hidden rounded-[28px] border border-transparent bg-white shadow-[0_20px_50px_-15px_rgba(0,0,0,0.6)]"
+        className="relative flex h-[640px] w-[340px] flex-col overflow-hidden rounded-phone border border-transparent bg-white shadow-[0_20px_50px_-15px_rgba(0,0,0,0.6)]"
         style={frameInk(slot)}
       >
         <Sketch
