@@ -84,7 +84,7 @@ export function VoiceHint({
               onChange={(e) => {
                 if (e.target.value) onSwitchMicDevice(e.target.value);
               }}
-              className="-my-3 appearance-none rounded-sm border-0 bg-transparent px-0 py-3 font-medium text-[#1F7A4D] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1F7A4D]"
+              className="-my-3 appearance-none rounded-sm border-0 bg-transparent px-0 py-3 font-medium text-accent hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               <option value="" disabled>
                 {copy.primary}
@@ -99,7 +99,7 @@ export function VoiceHint({
             <button
               type="button"
               onClick={onPrimary}
-              className="-my-3 py-3 font-medium text-[#1F7A4D] hover:underline"
+              className="-my-3 py-3 font-medium text-accent hover:underline"
             >
               {copy.primary}
             </button>
@@ -110,7 +110,7 @@ export function VoiceHint({
           <button
             type="button"
             onClick={onTypeInstead}
-            className="-my-3 py-3 font-medium text-[#1F7A4D] hover:underline"
+            className="-my-3 py-3 font-medium text-accent hover:underline"
           >
             {copy.secondary}
           </button>

@@ -203,7 +203,7 @@ export default function Stage({ children }: { children: React.ReactNode }) {
               its bg/border/shadow bounds match the glow's bounds and there's
               no hard edge where the glow gradient would otherwise end mid-card. */}
           <div
-            className="relative overflow-hidden rounded-xl border border-[#d4d4d8] bg-[#f4f4f5] shadow-[0_1px_2px_rgba(0,0,0,0.06),0_4px_12px_rgba(0,0,0,0.06)]"
+            className="relative overflow-hidden rounded-xl border border-border-subtle bg-canvas shadow-[0_1px_2px_rgba(0,0,0,0.06),0_4px_12px_rgba(0,0,0,0.06)]"
             style={{ width: dispSize.w, height: dispSize.h }}
           >
             <canvas
@@ -246,7 +246,7 @@ export default function Stage({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </div>
-        <div className="flex min-h-[44px] shrink-0 flex-col justify-center gap-1 rounded-lg border border-[#e4e4e7] bg-white px-2.5 py-1.5 font-mono text-[11px] text-[#71717a]">
+        <div className="flex min-h-[44px] shrink-0 flex-col justify-center gap-1 rounded-lg border border-border bg-white px-2.5 py-1.5 font-mono text-[11px] text-text-secondary">
           {status ? (
             <>
               <div className="flex items-center justify-between gap-2">
@@ -255,7 +255,7 @@ export default function Stage({ children }: { children: React.ReactNode }) {
                   {status.sequenceThesis} — morph: {status.morphLabel} — stream:{" "}
                   {status.streamLabel}
                 </span>
-                <span className="shrink-0 text-[#a1a1aa]">
+                <span className="shrink-0 text-text-tertiary">
                   {status.sequencePlaying ? "▶" : "❚❚"}
                   {status.slowMo ? " 0.25×" : ""}
                 </span>
@@ -263,14 +263,14 @@ export default function Stage({ children }: { children: React.ReactNode }) {
               {/* Thin loop-progress bar with beat ticks. Written directly by
                   the engine every frame (transform: scaleX), same as the
                   glow — never through setState. */}
-              <div className="relative h-[3px] w-full overflow-hidden rounded-full bg-[#e4e4e7]">
+              <div className="relative h-[3px] w-full overflow-hidden rounded-full bg-surface-elevated">
                 <div
                   ref={progressRef}
-                  className="absolute inset-y-0 left-0 w-full origin-left rounded-full bg-[#a1a1aa]"
+                  className="absolute inset-y-0 left-0 w-full origin-left rounded-full bg-text-tertiary"
                   style={{ transform: "scaleX(0)" }}
                 />
               </div>
-              <div className="text-[#a1a1aa]">
+              <div className="text-text-tertiary">
                 voice: {VOICE_STATE_LABELS[status.voiceState]} — job:{" "}
                 {status.jobState} — mark: {status.markName} — origin:{" "}
                 {status.originSide}

@@ -44,7 +44,7 @@ export default function HostHarness() {
       style={{
         width: W,
         height: H,
-        backgroundColor: "#f4f4f5",
+        backgroundColor: "var(--color-canvas)",
         backgroundImage:
           "radial-gradient(rgba(113,113,122,0.45) 1px, transparent 1px)",
         backgroundSize: "12px 12px",
@@ -59,7 +59,7 @@ export default function HostHarness() {
       />
       <div
         id="riff-sketch-stand-in"
-        className="absolute z-10 rounded-lg border border-[#d4d4d8] bg-white"
+        className="absolute z-10 rounded-lg border border-border-subtle bg-white"
         style={{ left: 520, top: 560, width: 400, height: 200 }}
       />
       <canvas

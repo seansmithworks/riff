@@ -51,7 +51,7 @@ export function ArtifactCanvas({
           <button
             type="button"
             onClick={onOpenChat}
-            className="font-medium text-[#1F7A4D] hover:underline"
+            className="font-medium text-accent hover:underline"
           >
             or type it
           </button>

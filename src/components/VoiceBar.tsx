@@ -96,8 +96,8 @@ function IconButton({
         type="button"
         onClick={onClick}
         aria-label={label}
-        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1F7A4D] focus-visible:outline-none ${
-          active ? "bg-zinc-100 text-[#1F7A4D]" : "text-zinc-600"
+        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent focus-visible:outline-none ${
+          active ? "bg-zinc-100 text-accent" : "text-zinc-600"
         }`}
       >
         {children}
@@ -152,7 +152,7 @@ function SketchChipSegment({ job }: { job: JobChip }) {
           {job.status !== "failed" && (
             <div className="absolute inset-x-2 bottom-1 h-[2px] overflow-hidden rounded-full bg-zinc-200">
               <div
-                className={`h-full w-full origin-left rounded-full bg-[#3FBA6A] ${trackClass}`}
+                className={`h-full w-full origin-left rounded-full bg-accent-decorative ${trackClass}`}
               />
             </div>
           )}
@@ -289,9 +289,9 @@ export function VoiceBar({
                 type="button"
                 onClick={onStart}
                 aria-label={label}
-                className="flex h-11 items-center rounded-full transition-transform hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1F7A4D] focus-visible:outline-none motion-reduce:transition-none motion-reduce:hover:scale-100 motion-reduce:active:scale-100"
+                className="flex h-11 items-center rounded-full transition-transform hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent focus-visible:outline-none motion-reduce:transition-none motion-reduce:hover:scale-100 motion-reduce:active:scale-100"
               >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#3FBA6A] text-white">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent-decorative text-white">
                   <Mic
                     className="h-[18px] w-[18px]"
                     strokeWidth={2}
@@ -312,7 +312,7 @@ export function VoiceBar({
                 <div
                   ref={layout === "live" ? haloRef : undefined}
                   className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors duration-[260ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
-                    layout === "dark" ? "bg-zinc-900" : "bg-[#3FBA6A]"
+                    layout === "dark" ? "bg-zinc-900" : "bg-accent-decorative"
                   }`}
                 >
                   {layout === "connecting" ? (

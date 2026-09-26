@@ -68,7 +68,7 @@ export function HackathonFootnote() {
         onKeyDown={(e) => {
           if (e.key === "Escape") hide();
         }}
-        className="max-w-[220px] cursor-help select-none text-left text-[11px]/[14px] text-[#71717a] underline decoration-dotted underline-offset-2 hover:text-zinc-600 sm:max-w-none sm:whitespace-nowrap"
+        className="max-w-[220px] cursor-help select-none text-left text-[11px]/[14px] text-text-secondary underline decoration-dotted underline-offset-2 hover:text-zinc-600 sm:max-w-none sm:whitespace-nowrap"
       >
         Built in a 3-hour hackathon, plus some minor updates.
       </button>

@@ -65,7 +65,7 @@ function Button({
   return (
     <button
       type="button"
-      className="relative w-full rounded-full bg-[#1F7A4D] px-4 py-2 text-center text-[15px]/[19px] font-semibold text-white"
+      className="relative w-full rounded-full bg-accent px-4 py-2 text-center text-[15px]/[19px] font-semibold text-white"
     >
       <Sketch kind="rect" radius={999} seedKey={`button-primary:${label}`} />
       <span className={`whitespace-nowrap ${handFontClass}`}>{label}</span>
@@ -243,13 +243,13 @@ export function WireframeElement({ element }: { element: Element }) {
             <div key={tab} className="flex flex-col items-center gap-1">
               <Square
                 className={`h-5 w-5 ${
-                  i === element.active ? "text-[#1F7A4D]" : "text-zinc-400"
+                  i === element.active ? "text-accent" : "text-zinc-400"
                 }`}
                 strokeWidth={1.75}
               />
               <span
                 className={`text-[10px] font-medium ${handFontClass} ${
-                  i === element.active ? "text-[#1F7A4D]" : "text-zinc-400"
+                  i === element.active ? "text-accent" : "text-zinc-400"
                 }`}
               >
                 {tab}

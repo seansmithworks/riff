@@ -12,7 +12,7 @@ const FRAME_HEIGHT = 640;
 function GhostBar({ className = "" }: { className?: string }) {
   return (
     <div
-      className={`rounded-md bg-[#e4e4e7] motion-safe:animate-pulse ${className}`}
+      className={`rounded-md bg-surface-elevated motion-safe:animate-pulse ${className}`}
     />
   );
 }

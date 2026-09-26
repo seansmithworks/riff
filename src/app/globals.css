@@ -4,12 +4,43 @@
   --background: #ffffff;
   --foreground: #171717;
   --wireframe-ink: #3f3f46;
+
+  /* Riff design tokens — see DESIGN.md "Tokens" for role and usage.
+     Values are the single source of truth; DESIGN.md names roles, not hex. */
+  --canvas: #f4f4f5;
+  --surface: #ffffff;
+  --surface-elevated: #e4e4e7;
+  --text-primary: #18181b;
+  --text-secondary: #71717a;
+  --text-tertiary: #a1a1aa;
+  --text-inverse: #fafafa;
+  --accent: #1f7a4d;
+  --accent-decorative: #3fba6a;
+  --ambient-cyan: #00f5f1;
+  --ambient-lime: #b7ff00;
+  --border: #e4e4e7;
+  --border-subtle: #d4d4d8;
+  --radius-phone: 28px;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-wireframe-ink: var(--wireframe-ink);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-inverse: var(--text-inverse);
+  --color-accent: var(--accent);
+  --color-accent-decorative: var(--accent-decorative);
+  --color-ambient-cyan: var(--ambient-cyan);
+  --color-ambient-lime: var(--ambient-lime);
+  --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --radius-phone: var(--radius-phone);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }

@@ -15,13 +15,13 @@ export default function VoiceLabPage() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="flex h-dvh w-full max-w-full flex-col overflow-x-hidden bg-[#f4f4f5] text-[#18181b] min-[600px]:flex-row">
+    <div className="flex h-dvh w-full max-w-full flex-col overflow-x-hidden bg-canvas text-text-primary min-[600px]:flex-row">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-4 sm:p-6">
         <div className="flex shrink-0 flex-col gap-0.5">
           <h1 className="m-0 text-lg font-semibold tracking-tight">
             Riff Voice Marks Lab
           </h1>
-          <p className="m-0 text-xs text-[#71717a]">
+          <p className="m-0 text-xs text-text-secondary">
             Tuning bench for Riff&apos;s hand-drawn voice reactivity — voice and
             sketch-job run on independent channels, matching
             render_artifact&apos;s fire-and-forget behavior.
@@ -34,12 +34,12 @@ export default function VoiceLabPage() {
         </div>
       </div>
 
-      <aside className="flex flex-none flex-col border-t border-[#e4e4e7] bg-white min-[600px]:h-full min-[600px]:w-[320px] min-[600px]:border-l min-[600px]:border-t-0">
+      <aside className="flex flex-none flex-col border-t border-border bg-white min-[600px]:h-full min-[600px]:w-[320px] min-[600px]:border-l min-[600px]:border-t-0">
         <button
           type="button"
           onClick={() => setMobileOpen((open) => !open)}
           aria-expanded={mobileOpen}
-          className="hidden min-h-[44px] w-full shrink-0 items-center justify-between px-4 text-sm font-medium text-[#18181b] max-[599px]:flex"
+          className="hidden min-h-[44px] w-full shrink-0 items-center justify-between px-4 text-sm font-medium text-text-primary max-[599px]:flex"
         >
           DialKit tuners
           <span aria-hidden="true">{mobileOpen ? "▲" : "▼"}</span>

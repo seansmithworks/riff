@@ -132,14 +132,14 @@ export function CopilotPanel({
   });
 
   const themeVars: CopilotKitCSSProperties = {
-    "--copilot-kit-primary-color": "#1F7A4D",
-    "--copilot-kit-contrast-color": "#fafafa",
-    "--copilot-kit-background-color": "#ffffff",
-    "--copilot-kit-input-background-color": "#ffffff",
-    "--copilot-kit-secondary-color": "#e4e4e7",
-    "--copilot-kit-secondary-contrast-color": "#18181b",
-    "--copilot-kit-separator-color": "#e4e4e7",
-    "--copilot-kit-muted-color": "#71717a",
+    "--copilot-kit-primary-color": "var(--color-accent)",
+    "--copilot-kit-contrast-color": "var(--color-text-inverse)",
+    "--copilot-kit-background-color": "var(--color-surface)",
+    "--copilot-kit-input-background-color": "var(--color-surface)",
+    "--copilot-kit-secondary-color": "var(--color-surface-elevated)",
+    "--copilot-kit-secondary-contrast-color": "var(--color-text-primary)",
+    "--copilot-kit-separator-color": "var(--color-surface-elevated)",
+    "--copilot-kit-muted-color": "var(--color-text-secondary)",
   };
 
   return (
@@ -175,17 +175,17 @@ export function CopilotPanel({
       */}
       <style jsx global>{`
         .copilotKitHeader {
-          background-color: #ffffff;
+          background-color: var(--color-surface);
         }
         .copilotKitHeader > button {
-          color: #71717a;
+          color: var(--color-text-secondary);
         }
         .copilotKitInput > textarea::placeholder {
-          color: #71717a;
+          color: var(--color-text-secondary);
         }
 
         .copilotKitPopup .copilotKitWindow {
-          border: 1px solid #d4d4d8;
+          border: 1px solid var(--color-border-subtle);
           border-radius: 12px;
           box-shadow:
             0 25px 50px -12px rgba(0, 0, 0, 0.25),

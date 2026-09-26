@@ -51,7 +51,7 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="flex h-screen w-screen flex-col bg-[#f4f4f5]">
+    <div className="flex h-screen w-screen flex-col bg-canvas">
       <RiffLogo />
       <Header />
       {/* Isolated so the voice wash can sit under the canvas content: the

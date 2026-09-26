@@ -348,7 +348,7 @@ function WireframeCanvasInner({
           proOptions={{ hideAttribution: true }}
           style={{ background: "transparent" }}
         >
-          <Background color="#d4d4d8" gap={20} />
+          <Background color="var(--color-border-subtle)" gap={20} />
           <Controls />
         </ReactFlow>
       </CanvasContext.Provider>

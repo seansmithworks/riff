@@ -48,7 +48,7 @@ function IconButton({
           disabled
             ? "cursor-not-allowed text-zinc-300"
             : active
-              ? "text-[#3FBA6A] hover:bg-zinc-100"
+              ? "text-accent-decorative hover:bg-zinc-100"
               : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
         }`}
       >

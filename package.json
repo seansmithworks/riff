@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node --test tests/"
+    "test": "node --test tests/",
+    "check:design": "node scripts/check-design-tokens.mjs"
   },
   "dependencies": {
     "@copilotkit/react-core": "^1.63.2",

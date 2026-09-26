@@ -44,9 +44,9 @@ function FlowCanvasInner({
       target: e.to,
       label: e.label,
       animated: true,
-      style: { stroke: "#71717a" },
-      labelStyle: { fill: "#d4d4d8", fontSize: 11 },
-      labelBgStyle: { fill: "#18181b" },
+      style: { stroke: "var(--color-text-secondary)" },
+      labelStyle: { fill: "var(--color-border-subtle)", fontSize: 11 },
+      labelBgStyle: { fill: "var(--color-text-primary)" },
     }));
     return { layoutedNodes: layoutNodes(rfNodes, rfEdges), flowEdges: rfEdges };
   }, [nodes, edges]);
@@ -100,7 +100,7 @@ function FlowCanvasInner({
         proOptions={{ hideAttribution: true }}
         style={{ background: "transparent" }}
       >
-        <Background color="#d4d4d8" gap={20} />
+        <Background color="var(--color-border-subtle)" gap={20} />
         <Controls />
       </ReactFlow>
     </div>
