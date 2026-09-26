@@ -175,7 +175,7 @@ function Caption({ text, tone }: { text: string; tone: "user" | "agent" }) {
 }
 
 const GLOW =
-  "radial-gradient(ellipse 55% 60% at 50% 100%, rgba(0,245,241,0.35), transparent 55%), radial-gradient(ellipse 45% 50% at 60% 100%, rgba(183,255,0,0.28), transparent 60%)";
+  "radial-gradient(ellipse 55% 60% at 50% 100%, color-mix(in srgb, var(--color-ambient-cyan) 35%, transparent), transparent 55%), radial-gradient(ellipse 45% 50% at 60% 100%, color-mix(in srgb, var(--color-ambient-lime) 28%, transparent), transparent 60%)";
 
 // Presentational only — no SDK imports. The single Conversation Bar that
 // replaces the green orb, the floating chat button, and the transcript

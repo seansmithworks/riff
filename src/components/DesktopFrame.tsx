@@ -30,7 +30,7 @@ export function DesktopFrame({ slot }: { slot: CanvasSlot }) {
       <div
         data-screen-frame={slot.id}
         data-ink-frame={slot.state}
-        className="relative flex flex-col overflow-hidden rounded-[12px] border border-transparent bg-white shadow-[0_20px_50px_-15px_rgba(0,0,0,0.6)]"
+        className="relative flex flex-col overflow-hidden rounded-[12px] border border-transparent bg-white shadow-artifact"
         style={{
           width: DESKTOP_FRAME_WIDTH,
           height: DESKTOP_FRAME_HEIGHT,

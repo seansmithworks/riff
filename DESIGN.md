@@ -23,7 +23,12 @@ Source of truth: `src/app/globals.css` (`:root` custom properties, exposed via T
 | `ambient-cyan`, `ambient-lime` | Ambient glow / background wash only |
 | `border` | Standard dividers |
 | `border-subtle` | Lighter dividers (wireframe frame borders, placeholder edges) |
+| `surface-inverse` | Filled dark surface (e.g. the flow End node pill) |
 | `radius-phone` | Phone frame corner radius |
+| `shadow-artifact` | Drop shadow for phone/desktop frames and wireframe-canvas artifacts |
+| `shadow-panel` | Soft elevation shadow for floating tuning/debug panels |
+
+Transparency is derived from the base token via Tailwind opacity modifiers (`bg-accent-decorative/10`) or `color-mix()` — never a separate rgba/alpha-hex literal.
 
 Wireframe-kit surfaces reuse the same tokens as the shell (`surface`, `border-subtle`, `surface-elevated`, `text-primary`, `text-secondary`) — they happen to resolve to the same values, but must stay pinned to those roles even if the shell's own tones ever diverge.
 
@@ -45,7 +50,7 @@ A light "studio" workspace — a light gray canvas that reads well projected in 
 - **Ambient tokens:** the bottom-center voice glow and a very low-opacity background wash behind the canvas dot grid. Never text, never a button fill — the lime token especially is close to illegible on light backgrounds.
 
 ### Wireframe Kit (pure white artboards on the light gray canvas)
-Frame background is `surface`, with a `border-subtle` border and a subtle drop shadow — this is what keeps phone frames and flow nodes reading as objects sitting *on* the canvas rather than dissolving into it. Placeholder fills use `surface-elevated` with a `border-subtle` edge. Heading/body text use `text-primary`/`text-secondary`.
+Frame background is `surface`, with a `border-subtle` border and a subtle drop shadow (`shadow-artifact`) — this is what keeps phone frames and flow nodes reading as objects sitting *on* the canvas rather than dissolving into it. Placeholder fills use `surface-elevated` with a `border-subtle` edge. Heading/body text use `text-primary`/`text-secondary`.
 
 ## 3. Typography
 
@@ -59,14 +64,14 @@ Frame background is `surface`, with a `border-subtle` border and a subtle drop s
 - **Secondary button:** outline `border-subtle`, gray text, pill
 - **Image placeholder:** `surface-elevated` fill, `border-subtle` border, diagonal cross (SVG), `rounded-md`
 - **Input:** white bg, `border-subtle` border, `rounded-md`, label above in uppercase caption style
-- **Phone frame:** 340px wide, `radius-phone` corners, white bg, subtle drop shadow, screen name label above
+- **Phone frame:** 340px wide, `radius-phone` corners, white bg, `shadow-artifact` drop shadow, screen name label above
 
 ### Flow Nodes (`src/components/FlowNodes.tsx`)
 - **Screen:** solid rectangle, white bg, `border-subtle` border
 - **Action:** dashed rectangle, `canvas` bg (distinguishes from screen)
 - **Decision:** diamond (rotated square), `accent-decorative`-tinted (10% fill, 60% opacity border — no text sits on the fill itself)
 - **Start:** filled `accent` pill (text accent — carries white text)
-- **End:** filled dark (zinc-900) pill
+- **End:** filled dark (`surface-inverse`) pill
 - **Edges:** animated, `text-secondary` stroke
 
 ## 5. Layout Principles

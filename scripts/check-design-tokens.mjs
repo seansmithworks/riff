@@ -20,6 +20,7 @@ const ROOTS = ["src/components", "src/app"];
 const SCAN_EXTENSIONS = new Set([".ts", ".tsx", ".css"]);
 const EXCLUDE_PATHS = ["src/app/globals.css", "src/app/dev"];
 const HEX_PATTERN = /#[0-9a-fA-F]{3,8}\b/g;
+const ARBITRARY_SHADOW_PATTERN = /shadow-\[[^\]]*(rgba\(|#[0-9a-fA-F]{3,8})[^\]]*\]/g;
 
 function isExcluded(path) {
   return EXCLUDE_PATHS.some(
@@ -53,6 +54,12 @@ for (const file of files) {
     if (matches) {
       violations.push(
         `${relative(process.cwd(), file)}:${i + 1}: raw hex literal ${matches.join(", ")}`,
+      );
+    }
+    const shadowMatches = line.match(ARBITRARY_SHADOW_PATTERN);
+    if (shadowMatches) {
+      violations.push(
+        `${relative(process.cwd(), file)}:${i + 1}: raw shadow literal ${shadowMatches.join(", ")}`,
       );
     }
   });

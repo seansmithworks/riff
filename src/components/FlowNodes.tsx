@@ -50,7 +50,7 @@ export function TerminalNode({ data }: NodeProps) {
   return (
     <div
       className={`flex min-w-[110px] items-center justify-center rounded-full px-5 py-2.5 text-center text-sm font-semibold shadow-sm ${
-        isStart ? "bg-accent text-white" : "bg-zinc-900 text-white"
+        isStart ? "bg-accent text-white" : "bg-surface-inverse text-white"
       }`}
     >
       {handles}

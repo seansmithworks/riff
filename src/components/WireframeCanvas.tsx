@@ -160,7 +160,7 @@ function PhoneFrame({ slot }: { slot: CanvasSlot }) {
       <div
         data-screen-frame={slot.id}
         data-ink-frame={slot.state}
-        className="relative flex h-[640px] w-[340px] flex-col overflow-hidden rounded-phone border border-transparent bg-white shadow-[0_20px_50px_-15px_rgba(0,0,0,0.6)]"
+        className="relative flex h-[640px] w-[340px] flex-col overflow-hidden rounded-phone border border-transparent bg-white shadow-artifact"
         style={frameInk(slot)}
       >
         <Sketch
@@ -332,7 +332,7 @@ function WireframeCanvasInner({
       className="h-full w-full"
       style={{
         background:
-          "radial-gradient(ellipse 60% 50% at 12% 15%, rgba(0,245,241,0.08), transparent 60%), radial-gradient(ellipse 55% 45% at 88% 85%, rgba(183,255,0,0.07), transparent 60%)",
+          "radial-gradient(ellipse 60% 50% at 12% 15%, color-mix(in srgb, var(--color-ambient-cyan) 8%, transparent), transparent 60%), radial-gradient(ellipse 55% 45% at 88% 85%, color-mix(in srgb, var(--color-ambient-lime) 7%, transparent), transparent 60%)",
       }}
     >
       <CanvasContext.Provider value={canvas}>

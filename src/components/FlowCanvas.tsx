@@ -76,7 +76,7 @@ function FlowCanvasInner({
       className="h-full w-full"
       style={{
         background:
-          "radial-gradient(ellipse 60% 50% at 12% 15%, rgba(0,245,241,0.08), transparent 60%), radial-gradient(ellipse 55% 45% at 88% 85%, rgba(183,255,0,0.07), transparent 60%)",
+          "radial-gradient(ellipse 60% 50% at 12% 15%, color-mix(in srgb, var(--color-ambient-cyan) 8%, transparent), transparent 60%), radial-gradient(ellipse 55% 45% at 88% 85%, color-mix(in srgb, var(--color-ambient-lime) 7%, transparent), transparent 60%)",
       }}
     >
       <ReactFlow

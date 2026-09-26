@@ -46,7 +46,7 @@ export default function HostHarness() {
         height: H,
         backgroundColor: "var(--color-canvas)",
         backgroundImage:
-          "radial-gradient(rgba(113,113,122,0.45) 1px, transparent 1px)",
+          "radial-gradient(color-mix(in srgb, var(--color-text-secondary) 45%, transparent) 1px, transparent 1px)",
         backgroundSize: "12px 12px",
       }}
     >

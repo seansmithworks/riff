@@ -203,7 +203,7 @@ export default function Stage({ children }: { children: React.ReactNode }) {
               its bg/border/shadow bounds match the glow's bounds and there's
               no hard edge where the glow gradient would otherwise end mid-card. */}
           <div
-            className="relative overflow-hidden rounded-xl border border-border-subtle bg-canvas shadow-[0_1px_2px_rgba(0,0,0,0.06),0_4px_12px_rgba(0,0,0,0.06)]"
+            className="relative overflow-hidden rounded-xl border border-border-subtle bg-canvas shadow-panel"
             style={{ width: dispSize.w, height: dispSize.h }}
           >
             <canvas
