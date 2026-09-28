@@ -240,3 +240,12 @@ Build order from `docs/voice-lab-morph-spec.md`, one commit per step:
 - [x] DECIDE OR KILL (carried 3× since 2026-09-11): origin center vs right, pill vs disc. **Closed: center; no pill, no disc (Sean 2026-09-13).** Defaults: `origin: center`, `centerCircle` off (panel + engine).
 
 **Parked (off-objective):** feat/load-logo @ `0f52726` (carried 6× since 2026-09-10; kill at the next wrap if still untouched); Option D pencil guesses (held by Sean); options C fan-out and E edit-ops (skipped, cost and consistency); Morph F5 overlap, Elastic timer, and the noticed-not-fixed items above (not duplicated).
+
+- [ ] **[verify loop] Add a project `verify` skill** (added 2026-09-25). First time you touch this repo, paste: `/verify` — then extend the skill to match `~/Code/seansmithdesign.com/.claude/skills/verify/SKILL.md`: pass/fail checks for accessibility, DESIGN.md token rules, and CLS ≤ 0.1 via Chrome DevTools MCP (omit trace filePath). Commit it. Expect one approval prompt when it saves under `.claude/`. The global Stop hook blocks until verify runs after UI edits; opt out with `.claude/verify-skip`.
+
+## 2026-09-28 — DESIGN.md model + studio redesign (from orchestrator thread)
+
+- [x] Riff migrated to code-owns-values DESIGN.md (`cf5d52a`…`e138e5f`); `/design-md-health` audit → 0 FAIL.
+- [x] Shotfun studio variants in `Riff.pen`; **variant A (presentation-first) picked** — `.shotfun/2026-09-26-riff-studio/PICKED-A.md`.
+- [ ] *carried* — Build variant A via `/impeccable` (installed `d861602`). Strawman calls: **fallback mode** (don't run the launcher's downloaded binary), **hybrid DESIGN.md** (frontmatter generated from `globals.css`, `check:design` fails on drift), run `/impeccable init` for PRODUCT.md with Sean at desk. Apply or redline.
+- [ ] *parked* — Migrate the other 11 DESIGN.md files + Swift template (tease-capture 2026-09-26); use `/design-md-health migrate` (migrate mode never fired yet).

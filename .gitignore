@@ -44,3 +44,6 @@ next-env.d.ts
 
 # raw screen recordings (too large for git; compressed mp4 is committed)
 docs/media/*.mov
+
+# design-shotfun run scratch
+.shotfun/
