@@ -249,3 +249,12 @@ Build order from `docs/voice-lab-morph-spec.md`, one commit per step:
 - [x] Shotfun studio variants in `Riff.pen`; **variant A (presentation-first) picked** — `.shotfun/2026-09-26-riff-studio/PICKED-A.md`.
 - [ ] *carried* — Build variant A via `/impeccable` (installed `d861602`). Strawman calls: **fallback mode** (don't run the launcher's downloaded binary), **hybrid DESIGN.md** (frontmatter generated from `globals.css`, `check:design` fails on drift), run `/impeccable init` for PRODUCT.md with Sean at desk. Apply or redline.
 - [ ] *parked* — Migrate the other 11 DESIGN.md files + Swift template (tease-capture 2026-09-26); use `/design-md-health migrate` (migrate mode never fired yet).
+
+## 2026-09-29 — DESIGN.md study (cross-project; lives in `~/Code/_experiments/design-md-study`, local-only repo)
+
+- [x] Round 1 (Murmur known target) + round 2 (Sauna, no target) run, blind-scored, results committed there (`49f94de`). Results Artifact: https://claude.ai/artifact/CzucDo28BsTKpEQSej6eCr. Memory: `project_design-md-study.md`.
+- [ ] *carried* — Stage 2 "thin vs thick doc": Vercel format only, 4 content layers (tokens → +principles → +component rules → +anti-patterns), Sauna brief, 2 runs each, reuse `r2/` harness. Decides the template content.
+- [ ] *carried* — Mood board vs one-line direction: rerun round 2 with 4–6 reference images instead of the sentence; tests whether references break the cream/terracotta/Fraunces default.
+- [ ] *carried* — After Stage 2: rewrite `~/Code/code-docs/DESIGN.md.template` to the winner. Strawman on the carried "hybrid DESIGN.md" call: **reject** the Google YAML-literal frontmatter — rounds 1–2 show no quality gain and worse hygiene; keep roles-only and never let `/impeccable document` write values.
+- [ ] *parked* — Build Riff variant A via `/impeccable` (carried 1× since 2026-09-28; off the study's objective).
+- [ ] *parked* — Project-type stage (dashboard, dev tool) and annotie branded-asset extension (tease-capture 2026-09-28).
