@@ -253,8 +253,9 @@ Build order from `docs/voice-lab-morph-spec.md`, one commit per step:
 ## 2026-09-29 — DESIGN.md study (cross-project; lives in `~/Code/_experiments/design-md-study`, local-only repo)
 
 - [x] Round 1 (Murmur known target) + round 2 (Sauna, no target) run, blind-scored, results committed there (`49f94de`). Results Artifact: https://claude.ai/artifact/CzucDo28BsTKpEQSej6eCr. Memory: `project_design-md-study.md`.
-- [ ] *carried* — Stage 2 "thin vs thick doc": Vercel format only, 4 content layers (tokens → +principles → +component rules → +anti-patterns), Sauna brief, 2 runs each, reuse `r2/` harness. Decides the template content.
-- [ ] *carried* — Mood board vs one-line direction: rerun round 2 with 4–6 reference images instead of the sentence; tests whether references break the cream/terracotta/Fraunces default.
-- [ ] *carried* — After Stage 2: rewrite `~/Code/code-docs/DESIGN.md.template` to the winner. Strawman on the carried "hybrid DESIGN.md" call: **reject** the Google YAML-literal frontmatter — rounds 1–2 show no quality gain and worse hygiene; keep roles-only and never let `/impeccable document` write values.
+- [x] Stage 2 "thin vs thick doc" done. Round 3 (study commits 0aae8a8/740adb2/83aa0a1): tokens 17.5 → +principles 20 → +component rules 22 → +anti-patterns 19 (/25, n=2). All 8 held the specified non-default look with 0 hardcoded values. Working default: Vercel format = specific tokens + short principles + concrete component rules; skip anti-patterns. Results Artifact: https://claude.ai/artifact/CzucDo28BsTKpEQSej6eCr
+- [ ] *in progress* — Mood board vs one-line direction (round 4, started 2026-10-01): rerun round 2 with 4–6 reference images instead of the sentence; tests whether references break the cream/terracotta/Fraunces default.
+- [ ] *carried* — Rewrite `~/Code/code-docs/DESIGN.md.template` to the round-3 default (after round 4). Strawman on the carried "hybrid DESIGN.md" call: **reject** the Google YAML-literal frontmatter — rounds 1–2 show no quality gain and worse hygiene; keep roles-only and never let `/impeccable document` write values.
+- [ ] DESIGN.md lab — tool that lints a DESIGN.md, renders a specimen preview, and reports section-level impact (Sean approved 2026-10-01; line-level attribution judged infeasible — noise and line interactions).
 - [ ] *parked* — Build Riff variant A via `/impeccable` (carried 1× since 2026-09-28; off the study's objective).
 - [ ] *parked* — Project-type stage (dashboard, dev tool) and annotie branded-asset extension (tease-capture 2026-09-28).
