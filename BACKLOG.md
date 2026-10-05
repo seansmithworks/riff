@@ -254,8 +254,11 @@ Build order from `docs/voice-lab-morph-spec.md`, one commit per step:
 
 - [x] Round 1 (Murmur known target) + round 2 (Sauna, no target) run, blind-scored, results committed there (`49f94de`). Results Artifact: https://claude.ai/artifact/CzucDo28BsTKpEQSej6eCr. Memory: `project_design-md-study.md`.
 - [x] Stage 2 "thin vs thick doc" done. Round 3 (study commits 0aae8a8/740adb2/83aa0a1): tokens 17.5 → +principles 20 → +component rules 22 → +anti-patterns 19 (/25, n=2). All 8 held the specified non-default look with 0 hardcoded values. Working default: Vercel format = specific tokens + short principles + concrete component rules; skip anti-patterns. Results Artifact: https://claude.ai/artifact/CzucDo28BsTKpEQSej6eCr
-- [ ] *in progress* — Mood board vs one-line direction (round 4, started 2026-10-01): rerun round 2 with 4–6 reference images instead of the sentence; tests whether references break the cream/terracotta/Fraunces default.
-- [ ] *carried* — Rewrite `~/Code/code-docs/DESIGN.md.template` to the round-3 default (after round 4). Strawman on the carried "hybrid DESIGN.md" call: **reject** the Google YAML-literal frontmatter — rounds 1–2 show no quality gain and worse hygiene; keep roles-only and never let `/impeccable document` write values.
-- [ ] DESIGN.md lab — tool that lints a DESIGN.md, renders a specimen preview, and reports section-level impact (Sean approved 2026-10-01; line-level attribution judged infeasible — noise and line interactions).
+- [x] Round 4 (study c43aa0d): every line-only input → cream/terracotta/serif; every board input → sky/pastel. Doc arms 0 literals vs 6–14 without. Doc-from-line 21.5, line-only 19, board-direct 19, doc-from-board 16.5 (/25; board was cool vs 'warm' line — confound).
+- [x] DESIGN.md.template rewritten to 3 sections + required Identity block (code-docs 1c1fa22)
+- [ ] *carried* — DESIGN.md lab (~/Code/design-md-lab, local-only). Slice 1 lint done (c8b5310, 51 tests, passed independent review). Next: slice 2 specimen preview — blocked on ANTHROPIC_API_KEY in .env.local.
+- [ ] *parked* — Warm-board rerun (~0.8M tokens) to separate round 4's board/direction confound.
+- [ ] *parked* — Fix design-md-health health.mjs:277: it misses `## 1. Tokens`, and `\Z` is not a JS anchor (matches literal Z). Silent pass.
+- [ ] *parked* — Name the lab (working name design-md-lab).
 - [ ] *parked* — Build Riff variant A via `/impeccable` (carried 1× since 2026-09-28; off the study's objective).
 - [ ] *parked* — Project-type stage (dashboard, dev tool) and annotie branded-asset extension (tease-capture 2026-09-28).
